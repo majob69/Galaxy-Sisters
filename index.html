@@ -25,7 +25,7 @@
   <div id="intro-screen" class="intro-screen">
     <div class="intro-modal">
       <div class="intro-artwork-wrapper">
-        <img src="/intro.jpg" alt="Galaxy Sisters: Luna, Stella, Sol & Planeta" class="intro-artwork" onerror="this.src='./intro.jpg'">
+        <img src="public/intro.jpg" alt="Galaxy Sisters: Luna, Stella, Sol & Planeta" class="intro-artwork" onerror="if(this.dataset.tried!=='1'){this.dataset.tried='1';this.src='intro.jpg';}else if(this.dataset.tried==='1'){this.dataset.tried='2';this.src='./intro.jpg';}">
         <div class="intro-chip">🌸 Magisches Koop-Abenteuer</div>
       </div>
       <div class="intro-details">
