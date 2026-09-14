@@ -288,6 +288,9 @@ class GalaxySistersGame {
     this.treeCanopies = [];
     this.runningParticles = [];
     this.grassBlades = [];
+    this.bees = [];
+    this.butterflies = [];
+    this.lavenderStems = [];
     this.joystickDelta = { x: 0, y: 0 };
     
     // Interactive Objects in World
@@ -413,39 +416,47 @@ class GalaxySistersGame {
 
   buildGrassBlades() {
     this.grassBlades = [];
-    const bladeGeo = new THREE.PlaneGeometry(0.48, 0.65);
+    const bladeGeo = new THREE.PlaneGeometry(0.48, 0.7);
     const bladeMats = [
       new THREE.MeshLambertMaterial({ color: 0x5ebd4c, side: THREE.DoubleSide }),
       new THREE.MeshLambertMaterial({ color: 0x73d360, side: THREE.DoubleSide }),
-      new THREE.MeshLambertMaterial({ color: 0x479e39, side: THREE.DoubleSide })
+      new THREE.MeshLambertMaterial({ color: 0x479e39, side: THREE.DoubleSide }),
+      new THREE.MeshLambertMaterial({ color: 0x82e066, side: THREE.DoubleSide }),
+      new THREE.MeshLambertMaterial({ color: 0x3d8c2e, side: THREE.DoubleSide })
     ];
 
-    for (let i = 0; i < 420; i++) {
-      const x = (Math.random() - 0.5) * 85;
-      const z = (Math.random() - 0.5) * 85;
+    for (let i = 0; i < 950; i++) {
+      const x = (Math.random() - 0.5) * 110;
+      const z = (Math.random() - 0.5) * 110;
       if (Math.abs(x) < 5 && Math.abs(z) < 5) continue;
       if (x > 14 && z > 14) continue; // avoid boss center
+      // avoid temple podium footprint
+      if (x > 14 && x < 36 && z < -8 && z > -36) continue;
 
       const tuft = new THREE.Group();
       const mat = bladeMats[i % bladeMats.length];
+      const scaleY = 0.75 + Math.random() * 0.55;
 
-      // Cross planes for 3D grass tuft
+      // Cross planes for lush 3D grass tuft
       const p1 = new THREE.Mesh(bladeGeo, mat);
-      p1.position.y = 0.32;
+      p1.scale.y = scaleY;
+      p1.position.y = 0.35 * scaleY;
       tuft.add(p1);
 
       const p2 = new THREE.Mesh(bladeGeo, mat);
-      p2.position.y = 0.32;
+      p2.scale.y = scaleY;
+      p2.position.y = 0.35 * scaleY;
       p2.rotation.y = Math.PI / 2;
       tuft.add(p2);
 
       const p3 = new THREE.Mesh(bladeGeo, mat);
-      p3.position.y = 0.32;
+      p3.scale.y = scaleY;
+      p3.position.y = 0.35 * scaleY;
       p3.rotation.y = Math.PI / 4;
       tuft.add(p3);
 
       tuft.position.set(x, 0, z);
-      tuft.userData = { swayOffset: Math.random() * 10 };
+      tuft.userData = { swayOffset: Math.random() * 10, swaySpeed: 0.8 + Math.random() * 0.5 };
       this.scene.add(tuft);
       this.grassBlades.push(tuft);
     }
@@ -504,6 +515,10 @@ class GalaxySistersGame {
 
     // 4.8 Minor Slime Enemies (Bösewichte)
     this.spawnMinorSlimes();
+
+    // 4.9 20 winzige Bienen & 25 Schmetterlinge
+    this.spawnBees(20);
+    this.spawnButterflies(25);
   }
 
   buildMountains() {
@@ -685,16 +700,24 @@ class GalaxySistersGame {
     // Small Falling Lila & Rosa Particles
     this.createFallingTreePetals();
 
-    // Cute Kawaii Flowers - each flower has a bright yellow center!
-    const flowerPetalColors = [0xff4d6d, 0xff70a6, 0x3a86ff, 0xa855f7, 0xff99c8, 0x06b6d4];
+    // Cute Kawaii Flowers - 260+ bunte Blümchen über die gesamte Wiese!
+    const flowerPetalColors = [
+      0xff4d6d, 0xff70a6, 0x3a86ff, 0xa855f7, 0xff99c8, 0x06b6d4,
+      0xffb703, 0xf72585, 0x7209b7, 0x4cc9f0, 0xff5400, 0xffffff,
+      0xe0aaff, 0xff0054, 0x38b000
+    ];
     const yellowCenterMat = new THREE.MeshLambertMaterial({ color: 0xffe600 });
     const stemMat = new THREE.MeshLambertMaterial({ color: 0x388e3c });
+    const leafGeo = new THREE.SphereGeometry(0.1, 4, 4);
+    const leafMat = new THREE.MeshLambertMaterial({ color: 0x2d6a4f });
 
-    for (let i = 0; i < 90; i++) {
-      const fx = (Math.random() - 0.5) * 80;
-      const fz = (Math.random() - 0.5) * 80;
-      if (Math.abs(fx) < 6 && Math.abs(fz) < 6) continue;
+    for (let i = 0; i < 260; i++) {
+      const fx = (Math.random() - 0.5) * 105;
+      const fz = (Math.random() - 0.5) * 105;
+      if (Math.abs(fx) < 5 && Math.abs(fz) < 5) continue;
       if (fx > 15 && fz > 15) continue;
+      // avoid inside temple podium
+      if (fx > 14 && fx < 36 && fz < -8 && fz > -36) continue;
 
       const flowerGroup = new THREE.Group();
 
@@ -705,7 +728,7 @@ class GalaxySistersGame {
 
       // Surrounding colorful petals
       const petalMat = new THREE.MeshLambertMaterial({ color: flowerPetalColors[i % flowerPetalColors.length] });
-      const petalCount = 5;
+      const petalCount = 5 + (i % 2);
       for (let p = 0; p < petalCount; p++) {
         const pAng = (p / petalCount) * Math.PI * 2;
         const petal = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 6), petalMat);
@@ -718,6 +741,13 @@ class GalaxySistersGame {
       const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.24, 5), stemMat);
       stem.position.y = 0.12;
       flowerGroup.add(stem);
+
+      // Small green leaf
+      const leaf1 = new THREE.Mesh(leafGeo, leafMat);
+      leaf1.scale.set(1.4, 0.2, 0.6);
+      leaf1.position.set(0.13, 0.1, 0);
+      leaf1.rotation.z = 0.3;
+      flowerGroup.add(leaf1);
 
       flowerGroup.position.set(fx, 0, fz);
       flowerGroup.rotation.y = Math.random() * Math.PI;
@@ -852,40 +882,540 @@ class GalaxySistersGame {
     return npcGroup;
   }
 
+  createFlowerOfLifeTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 1024;
+    const ctx = canvas.getContext('2d');
+    const cx = 512;
+    const cy = 512;
+
+    // Background: Edler dunkler Amethyst-Marmor
+    const bgGrad = ctx.createRadialGradient(cx, cy, 40, cx, cy, 512);
+    bgGrad.addColorStop(0, '#2b1049');
+    bgGrad.addColorStop(0.6, '#1a082e');
+    bgGrad.addColorStop(1, '#0e0419');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, 1024, 1024);
+
+    // Zarte Marmoradern in zartem Rosa/Lila
+    ctx.strokeStyle = 'rgba(216, 180, 254, 0.09)';
+    ctx.lineWidth = 2.5;
+    for (let i = 0; i < 16; i++) {
+      ctx.beginPath();
+      ctx.moveTo(Math.random() * 1024, Math.random() * 1024);
+      ctx.bezierCurveTo(Math.random() * 1024, Math.random() * 1024, Math.random() * 1024, Math.random() * 1024, Math.random() * 1024, Math.random() * 1024);
+      ctx.stroke();
+    }
+
+    // Heilige Geometrie: Blume des Lebens (Flower of Life - 19 ineinandergreifende Kreise)
+    const R = 105; // Radius jedes Kreises
+    const circleCenters = [{ x: cx, y: cy }];
+
+    // Ring 1: 6 Kreise um das Zentrum
+    for (let i = 0; i < 6; i++) {
+      const ang = (i * Math.PI) / 3;
+      circleCenters.push({
+        x: cx + Math.cos(ang) * R,
+        y: cy + Math.sin(ang) * R
+      });
+    }
+
+    // Ring 2: 12 äußere Kreise
+    for (let i = 0; i < 6; i++) {
+      const ang = (i * Math.PI) / 3;
+      circleCenters.push({
+        x: cx + Math.cos(ang) * (2 * R),
+        y: cy + Math.sin(ang) * (2 * R)
+      });
+      const midAng = ang + Math.PI / 6;
+      const midDist = Math.sqrt(3) * R;
+      circleCenters.push({
+        x: cx + Math.cos(midAng) * midDist,
+        y: cy + Math.sin(midAng) * midDist
+      });
+    }
+
+    // Doppelte äußere Umrandung mit magischem violettem Schein
+    ctx.shadowColor = '#c77dff';
+    ctx.shadowBlur = 28;
+
+    ctx.strokeStyle = '#d8b4fe'; // zartes Flieder
+    ctx.lineWidth = 9;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 3 * R + 6, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#9d4edd'; // sattes Lila
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 3 * R + 22, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 19 Kreise der Blume des Lebens in leuchtendem Lila zeichnen
+    circleCenters.forEach((pt, idx) => {
+      ctx.shadowColor = idx === 0 ? '#ff70a6' : '#c77dff';
+      ctx.shadowBlur = idx === 0 ? 32 : 18;
+      ctx.strokeStyle = idx === 0 ? '#f3e8ff' : (idx < 7 ? '#d8b4fe' : '#c77dff');
+      ctx.lineWidth = idx === 0 ? 5.5 : 4.0;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, R, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+
+    // Zarte rosa und goldene Lichtpunkte an den Schnittpunkten
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = '#ff70a6';
+    ctx.fillStyle = '#ffb3c6';
+    circleCenters.forEach(pt => {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    const tex = new THREE.CanvasTexture(canvas);
+    return tex;
+  }
+
+  createLavenderBush() {
+    const bushGroup = new THREE.Group();
+    const stemMat = new THREE.MeshLambertMaterial({ color: 0x4a7c59 });
+    const flowerMats = [
+      new THREE.MeshLambertMaterial({ color: 0x7b2cbf }),
+      new THREE.MeshLambertMaterial({ color: 0x9d4edd }),
+      new THREE.MeshLambertMaterial({ color: 0x8338ec }),
+      new THREE.MeshLambertMaterial({ color: 0xc77dff }),
+      new THREE.MeshLambertMaterial({ color: 0x6a0dad })
+    ];
+
+    const stemCount = 14 + Math.floor(Math.random() * 6);
+    for (let i = 0; i < stemCount; i++) {
+      const stemGroup = new THREE.Group();
+      const spreadAng = Math.random() * Math.PI * 2;
+      const spreadDist = Math.random() * 0.45;
+      const stemH = 1.0 + Math.random() * 0.45;
+
+      // Grüner Stängel
+      const stem = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.02, 0.028, stemH, 4),
+        stemMat
+      );
+      stem.position.y = stemH / 2;
+      stemGroup.add(stem);
+
+      // Lavendel-Blütenähre (mehrere gestapelte lila Blütentupfer)
+      const spikeH = stemH * 0.45;
+      const tipCount = 5;
+      for (let t = 0; t < tipCount; t++) {
+        const mat = flowerMats[(i + t) % flowerMats.length];
+        const fl = new THREE.Mesh(
+          new THREE.ConeGeometry(0.08 - t * 0.009, 0.12, 5),
+          mat
+        );
+        fl.position.y = stemH - spikeH + t * (spikeH / tipCount);
+        stemGroup.add(fl);
+      }
+
+      stemGroup.position.set(
+        Math.cos(spreadAng) * spreadDist,
+        0,
+        Math.sin(spreadAng) * spreadDist
+      );
+      // Leichte Fächerung nach außen
+      stemGroup.rotation.z = (Math.random() - 0.5) * 0.25;
+      stemGroup.rotation.x = (Math.random() - 0.5) * 0.25;
+      stemGroup.userData = { phase: Math.random() * 10 };
+
+      this.lavenderStems.push(stemGroup);
+      bushGroup.add(stemGroup);
+    }
+
+    return bushGroup;
+  }
+
   buildCelestialTemple(pos) {
     const templeGroup = new THREE.Group();
     templeGroup.position.copy(pos);
 
-    // Base podium
-    const podMat = new THREE.MeshLambertMaterial({ color: 0xd8e2dc });
-    const podium = new THREE.Mesh(new THREE.CylinderGeometry(7, 7.5, 1.2, 8), podMat);
-    podium.position.y = 0.6;
-    podium.receiveShadow = true;
-    templeGroup.add(podium);
+    // Edle Römische Materialien mit Violett & Rosa Akzenten
+    const marbleMat = new THREE.MeshLambertMaterial({ color: 0xf5edf8, flatShading: true }); // Weiß-rosa römischer Marmor
+    const darkPodiumMat = new THREE.MeshLambertMaterial({ color: 0xded2e4, flatShading: true });
+    const violetTrimMat = new THREE.MeshLambertMaterial({
+      color: 0x8a2be2,
+      emissive: 0x3b0b5c,
+      emissiveIntensity: 0.35,
+      flatShading: true
+    });
+    const pinkTrimMat = new THREE.MeshLambertMaterial({
+      color: 0xff70a6,
+      emissive: 0x4a0a25,
+      emissiveIntensity: 0.3,
+      flatShading: true
+    });
+    const goldMat = new THREE.MeshLambertMaterial({
+      color: 0xffd166,
+      emissive: 0x473700,
+      emissiveIntensity: 0.4
+    });
 
-    // 4 Ancient Pillars
-    const pillarMat = new THREE.MeshLambertMaterial({ color: 0xf8edeb });
-    for (let i = 0; i < 4; i++) {
-      const angle = (i / 4) * Math.PI * 2;
-      const pil = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 5, 8), pillarMat);
-      pil.position.set(Math.cos(angle) * 4.5, 3.1, Math.sin(angle) * 4.5);
-      pil.castShadow = true;
-      templeGroup.add(pil);
+    // 1. Großes Römisches Tempel-Podium (18 x 26 x 2.2)
+    const podW = 18;
+    const podL = 26;
+    const podH = 2.2;
+
+    const basePodium = new THREE.Mesh(
+      new THREE.BoxGeometry(podW, podH, podL),
+      darkPodiumMat
+    );
+    basePodium.position.y = podH / 2;
+    basePodium.receiveShadow = true;
+    basePodium.castShadow = true;
+    templeGroup.add(basePodium);
+
+    // Umlaufende violett & rosa profilierte Zierleiste oben am Podium
+    const podTrimViolet = new THREE.Mesh(
+      new THREE.BoxGeometry(podW + 0.5, 0.22, podL + 0.5),
+      violetTrimMat
+    );
+    podTrimViolet.position.y = podH;
+    templeGroup.add(podTrimViolet);
+
+    const podTrimPink = new THREE.Mesh(
+      new THREE.BoxGeometry(podW + 0.3, 0.12, podL + 0.3),
+      pinkTrimMat
+    );
+    podTrimPink.position.y = podH + 0.12;
+    templeGroup.add(podTrimPink);
+
+    // 2. Monumentale Römische Freitreppe an der Frontseite (+Z)
+    const stepCount = 7;
+    const stairW = 13.0;
+    const stairL = 5.6;
+    for (let s = 0; s < stepCount; s++) {
+      const stepH = podH / stepCount;
+      const stepY = (s + 0.5) * stepH;
+      const stepProg = s / (stepCount - 1);
+      const stepZ = (podL / 2) + (stairL * (1 - stepProg * 0.88));
+      const stepBox = new THREE.Mesh(
+        new THREE.BoxGeometry(stairW, stepH, stairL / stepCount + 0.2),
+        marbleMat
+      );
+      stepBox.position.set(0, stepY, (podL / 2) + stairL - s * (stairL / stepCount));
+      stepBox.receiveShadow = true;
+      templeGroup.add(stepBox);
+
+      // Begehbare Stufen
+      this.platforms.push({
+        box: new THREE.Box3().setFromObject(stepBox),
+        topY: pos.y + (s + 1) * stepH,
+        radius: 6.5
+      });
     }
 
-    // Floating Crystal Altar
-    const crystalGeo = new THREE.OctahedronGeometry(1.6, 0);
+    // Hauptboden als Plattform für Kollision
+    this.platforms.push({
+      box: new THREE.Box3().setFromObject(basePodium),
+      topY: pos.y + podH + 0.15,
+      radius: 12.0
+    });
+
+    // Treppenwangen (Balustraden) links und rechts
+    const balustradeMat = new THREE.MeshLambertMaterial({ color: 0xede0f2 });
+    [-stairW / 2 - 0.45, stairW / 2 + 0.45].forEach(bx => {
+      const bal = new THREE.Mesh(
+        new THREE.BoxGeometry(0.8, podH + 0.6, stairL + 0.8),
+        balustradeMat
+      );
+      bal.position.set(bx, (podH + 0.6) / 2, (podL / 2) + stairL / 2);
+      bal.castShadow = true;
+      templeGroup.add(bal);
+
+      // Sockel-Urne mit üppigem Lavendel am Treppenaufgang
+      const urn = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.45, 0.35, 0.7, 8),
+        pinkTrimMat
+      );
+      urn.position.set(bx, podH + 0.75, (podL / 2) + stairL);
+      templeGroup.add(urn);
+
+      const lavUrn = this.createLavenderBush();
+      lavUrn.position.set(bx, podH + 1.1, (podL / 2) + stairL);
+      templeGroup.add(lavUrn);
+    });
+
+    // 3. Stattliche Römische Säulenhalle (20 flutete Säulen)
+    const colH = 7.4;
+    const colR = 0.52;
+    const colPlinthMat = new THREE.MeshLambertMaterial({ color: 0xf3e8f7 });
+
+    const columnPositions = [];
+    const colXHalf = (podW / 2) - 1.5;
+    const colZHalf = (podL / 2) - 1.5;
+
+    // Front (6) und Heck (6)
+    for (let c = 0; c < 6; c++) {
+      const cx = -colXHalf + (c / 5) * (colXHalf * 2);
+      columnPositions.push({ x: cx, z: colZHalf });  // Front
+      columnPositions.push({ x: cx, z: -colZHalf }); // Back
+    }
+    // Seiten (je 4 Säulen zwischen den Ecken)
+    for (let s = 1; s <= 4; s++) {
+      const cz = -colZHalf + (s / 5) * (colZHalf * 2);
+      columnPositions.push({ x: -colXHalf, z: cz }); // Links
+      columnPositions.push({ x: colXHalf, z: cz });  // Rechts
+    }
+
+    columnPositions.forEach((cp, idx) => {
+      const colGroup = new THREE.Group();
+      colGroup.position.set(cp.x, podH + 0.15, cp.z);
+
+      // Säulenbasis (Zweistufige Plinthe + Rosa/Violett Torus-Wulst)
+      const plinth = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.3, 1.35), colPlinthMat);
+      plinth.position.y = 0.15;
+      colGroup.add(plinth);
+
+      const torus1 = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.1, 8, 16), violetTrimMat);
+      torus1.rotation.x = Math.PI / 2;
+      torus1.position.y = 0.36;
+      colGroup.add(torus1);
+
+      const torus2 = new THREE.Mesh(new THREE.TorusGeometry(0.56, 0.08, 8, 16), pinkTrimMat);
+      torus2.rotation.x = Math.PI / 2;
+      torus2.position.y = 0.52;
+      colGroup.add(torus2);
+
+      // Kannelierter römischer Säulenschaft (16 Kanneluren)
+      const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(colR * 0.88, colR, colH - 1.2, 16),
+        marbleMat
+      );
+      shaft.position.y = 0.52 + (colH - 1.2) / 2;
+      shaft.castShadow = true;
+      colGroup.add(shaft);
+
+      // Halsring
+      const neckRing = new THREE.Mesh(new THREE.TorusGeometry(colR * 0.92, 0.08, 6, 16), goldMat);
+      neckRing.rotation.x = Math.PI / 2;
+      neckRing.position.y = colH - 0.7;
+      colGroup.add(neckRing);
+
+      // Korinthisches / Rhythmisches Kapitell mit Rosa & Violett Schnitzereien
+      const capBase = new THREE.Mesh(
+        new THREE.CylinderGeometry(colR * 1.25, colR * 0.9, 0.5, 8),
+        colPlinthMat
+      );
+      capBase.position.y = colH - 0.45;
+      colGroup.add(capBase);
+
+      const capAbacus = new THREE.Mesh(
+        new THREE.BoxGeometry(1.4, 0.2, 1.4),
+        violetTrimMat
+      );
+      capAbacus.position.y = colH - 0.1;
+      colGroup.add(capAbacus);
+
+      // Kleine rosa Rosette am Kapitell
+      const rosette = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 6), pinkTrimMat);
+      rosette.position.set(0, colH - 0.35, 0.62);
+      colGroup.add(rosette);
+
+      templeGroup.add(colGroup);
+    });
+
+    // 4. Architrav & Fries & Gebälk (Entablement)
+    const entablatureY = podH + 0.15 + colH;
+    const architrave = new THREE.Mesh(
+      new THREE.BoxGeometry(podW, 0.65, podL),
+      marbleMat
+    );
+    architrave.position.y = entablatureY + 0.32;
+    architrave.castShadow = true;
+    templeGroup.add(architrave);
+
+    // Zierfries mit violetten Paneelen und rosa Reliefs
+    const frieze = new THREE.Mesh(
+      new THREE.BoxGeometry(podW + 0.1, 0.55, podL + 0.1),
+      violetTrimMat
+    );
+    frieze.position.y = entablatureY + 0.85;
+    templeGroup.add(frieze);
+
+    // Rosa Zierleiste
+    const friezeTrim = new THREE.Mesh(
+      new THREE.BoxGeometry(podW + 0.35, 0.18, podL + 0.35),
+      pinkTrimMat
+    );
+    friezeTrim.position.y = entablatureY + 1.15;
+    templeGroup.add(friezeTrim);
+
+    // 5. Klassischer Römischer Dreiecksgiebel (Pediment / Tympanon) an Front und Rückseite
+    const roofY = entablatureY + 1.25;
+    [colZHalf, -colZHalf].forEach((gz, gIdx) => {
+      const giebGeo = new THREE.ConeGeometry(podW * 0.56, 3.2, 3);
+      const giebel = new THREE.Mesh(giebGeo, marbleMat);
+      giebel.position.set(0, roofY + 1.6, gz);
+      giebel.rotation.y = gIdx === 0 ? 0 : Math.PI;
+      giebel.scale.set(1, 1, 0.45);
+      giebel.castShadow = true;
+      templeGroup.add(giebel);
+
+      // Violettes Giebelfeld (Tympanon)
+      const tympanon = new THREE.Mesh(
+        new THREE.ConeGeometry(podW * 0.48, 2.6, 3),
+        violetTrimMat
+      );
+      tympanon.position.set(0, roofY + 1.45, gz + (gIdx === 0 ? 0.2 : -0.2));
+      tympanon.rotation.y = gIdx === 0 ? 0 : Math.PI;
+      tympanon.scale.set(1, 1, 0.3);
+      templeGroup.add(tympanon);
+
+      // Himmels-Symbol im Giebel (Goldener Mond & Stern)
+      const moonEmblem = new THREE.Mesh(
+        new THREE.TorusGeometry(0.65, 0.12, 6, 16, Math.PI * 1.4),
+        goldMat
+      );
+      moonEmblem.position.set(0, roofY + 1.3, gz + (gIdx === 0 ? 0.38 : -0.38));
+      templeGroup.add(moonEmblem);
+
+      const starEmblem = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.32, 0),
+        pinkTrimMat
+      );
+      starEmblem.position.set(0, roofY + 1.3, gz + (gIdx === 0 ? 0.4 : -0.4));
+      templeGroup.add(starEmblem);
+
+      // Goldene Akroterion-Verzierung an der Giebelspitze
+      const akroter = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 5), goldMat);
+      akroter.position.set(0, roofY + 3.4, gz);
+      templeGroup.add(akroter);
+    });
+
+    // Tempeldach (Schrägdach mit rosa/violetten Akzenten)
+    const roofMat = new THREE.MeshLambertMaterial({ color: 0x9b5de5, flatShading: true });
+    const roof = new THREE.Mesh(
+      new THREE.ConeGeometry(podW * 0.58, 3.2, 4),
+      roofMat
+    );
+    roof.position.set(0, roofY + 1.6, 0);
+    roof.rotation.y = Math.PI / 4;
+    roof.scale.set(1, 1, podL / podW);
+    roof.castShadow = true;
+    templeGroup.add(roof);
+
+    // 6. IN DER MITTE DES TEMPELBODENS: DIE BLUME DES LEBENS IN LILA
+    const flowerOfLifeTex = this.createFlowerOfLifeTexture();
+
+    // Runder erhabener Marmorsockel in der Mitte
+    const dais = new THREE.Mesh(
+      new THREE.CylinderGeometry(4.4, 4.6, 0.16, 32),
+      marbleMat
+    );
+    dais.position.set(0, podH + 0.15 + 0.08, 0);
+    dais.receiveShadow = true;
+    templeGroup.add(dais);
+
+    // Rosa Zierring um die Blume des Lebens
+    const daisRing = new THREE.Mesh(
+      new THREE.TorusGeometry(4.2, 0.12, 8, 32),
+      pinkTrimMat
+    );
+    daisRing.rotation.x = Math.PI / 2;
+    daisRing.position.set(0, podH + 0.25, 0);
+    templeGroup.add(daisRing);
+
+    // Die leuchtende Blume des Lebens Medaille (Lila)
+    const flowerOfLifeMesh = new THREE.Mesh(
+      new THREE.CircleGeometry(4.0, 48),
+      new THREE.MeshLambertMaterial({
+        map: flowerOfLifeTex,
+        emissive: 0x4a1572,
+        emissiveIntensity: 0.8,
+        side: THREE.DoubleSide
+      })
+    );
+    flowerOfLifeMesh.rotation.x = -Math.PI / 2;
+    flowerOfLifeMesh.position.set(0, podH + 0.26, 0);
+    flowerOfLifeMesh.receiveShadow = true;
+    templeGroup.add(flowerOfLifeMesh);
+
+    // 4 Zier-Podeste mit rosa Kristallfackeln um die Blume des Lebens
+    for (let p = 0; p < 4; p++) {
+      const pAng = (p / 4) * Math.PI * 2 + Math.PI / 4;
+      const px = Math.cos(pAng) * 4.9;
+      const pz = Math.sin(pAng) * 4.9;
+
+      const pedestal = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.32, 0.42, 1.4, 8),
+        violetTrimMat
+      );
+      pedestal.position.set(px, podH + 0.15 + 0.7, pz);
+      pedestal.castShadow = true;
+      templeGroup.add(pedestal);
+
+      const lamp = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.28, 0),
+        new THREE.MeshPhongMaterial({
+          color: 0xff70a6,
+          emissive: 0xff4d94,
+          emissiveIntensity: 0.9,
+          transparent: true,
+          opacity: 0.9
+        })
+      );
+      lamp.position.set(px, podH + 0.15 + 1.55, pz);
+      templeGroup.add(lamp);
+    }
+
+    // Schwebender Tempelkristall über der Blume des Lebens
+    const crystalGeo = new THREE.OctahedronGeometry(1.7, 0);
     const crystalMat = new THREE.MeshPhongMaterial({
-      color: 0x00f5d4,
-      emissive: 0x00bbf9,
-      emissiveIntensity: 0.6,
+      color: 0xc77dff,
+      emissive: 0x9d4edd,
+      emissiveIntensity: 0.85,
       transparent: true,
-      opacity: 0.88,
-      shininess: 90
+      opacity: 0.92,
+      shininess: 100
     });
     this.templeCrystal = new THREE.Mesh(crystalGeo, crystalMat);
-    this.templeCrystal.position.set(0, 4.5, 0);
+    this.templeCrystal.position.set(0, podH + 4.2, 0);
     templeGroup.add(this.templeCrystal);
+
+    // Zartes violettes Punktlicht über der Blume des Lebens
+    const templeLight = new THREE.PointLight(0xc77dff, 1.8, 16);
+    templeLight.position.set(0, podH + 4.0, 0);
+    templeGroup.add(templeLight);
+
+    // 7. TEMPEL MIT LAVENDEL SCHMÜCKEN
+    // Lavendelbeete entlang der Treppe und um die Ecksäulen
+    const lavenderLocations = [
+      // Flankierend an der Treppe
+      { x: -stairW / 2 - 1.2, z: (podL / 2) + 2.0 },
+      { x: -stairW / 2 - 1.2, z: (podL / 2) + 4.2 },
+      { x: stairW / 2 + 1.2, z: (podL / 2) + 2.0 },
+      { x: stairW / 2 + 1.2, z: (podL / 2) + 4.2 },
+      // Vor den vorderen Säulen links und rechts
+      { x: -colXHalf, z: colZHalf + 1.2 },
+      { x: colXHalf, z: colZHalf + 1.2 },
+      { x: -colXHalf + 2.2, z: colZHalf + 1.2 },
+      { x: colXHalf - 2.2, z: colZHalf + 1.2 },
+      // An den Seiten des Podiums
+      { x: -colXHalf - 1.4, z: 0 },
+      { x: -colXHalf - 1.4, z: -4.5 },
+      { x: -colXHalf - 1.4, z: 4.5 },
+      { x: colXHalf + 1.4, z: 0 },
+      { x: colXHalf + 1.4, z: -4.5 },
+      { x: colXHalf + 1.4, z: 4.5 },
+      // An den hinteren Ecken
+      { x: -colXHalf, z: -colZHalf - 1.2 },
+      { x: colXHalf, z: -colZHalf - 1.2 },
+      { x: 0, z: -colZHalf - 1.4 }
+    ];
+
+    lavenderLocations.forEach(loc => {
+      const lavBush = this.createLavenderBush();
+      lavBush.position.set(loc.x, 0, loc.z);
+      templeGroup.add(lavBush);
+    });
 
     this.scene.add(templeGroup);
   }
@@ -982,6 +1512,211 @@ class GalaxySistersGame {
       };
       this.slimes.push(slime);
       this.scene.add(slime);
+    }
+  }
+
+  spawnBees(count = 20) {
+    this.bees = [];
+
+    // Erstelle gestreifte Bienen-Textur (Gelb & Schwarz)
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffbe0b';
+    ctx.fillRect(0, 0, 64, 64);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(16, 0, 12, 64);
+    ctx.fillRect(38, 0, 12, 64);
+    const beeTex = new THREE.CanvasTexture(canvas);
+    const bodyMat = new THREE.MeshLambertMaterial({ map: beeTex });
+    const blackMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+    const wingMat = new THREE.MeshBasicMaterial({
+      color: 0xecfeff,
+      transparent: true,
+      opacity: 0.65,
+      side: THREE.DoubleSide
+    });
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+    for (let i = 0; i < count; i++) {
+      const bee = new THREE.Group();
+
+      // Körper (pummelig & rundlich)
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 10), bodyMat);
+      body.scale.set(1.1, 0.85, 0.85);
+      bee.add(body);
+
+      // Kopf
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), blackMat);
+      head.position.set(0.22, 0.02, 0);
+      bee.add(head);
+
+      // Kulleraugen
+      const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.04, 5, 5), eyeMat);
+      eye1.position.set(0.28, 0.07, 0.07);
+      const eye2 = eye1.clone();
+      eye2.position.z = -0.07;
+      bee.add(eye1, eye2);
+
+      // Fühler
+      const ant1 = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.12, 3), blackMat);
+      ant1.position.set(0.28, 0.14, 0.04);
+      ant1.rotation.set(0.2, 0, -0.4);
+      const ant2 = ant1.clone();
+      ant2.position.z = -0.04;
+      ant2.rotation.set(-0.2, 0, -0.4);
+      bee.add(ant1, ant2);
+
+      // Transparente Flügel
+      const wingGeo = new THREE.PlaneGeometry(0.22, 0.32);
+      const leftWing = new THREE.Mesh(wingGeo, wingMat);
+      leftWing.position.set(0.04, 0.18, 0.12);
+      leftWing.rotation.x = Math.PI / 4;
+      const rightWing = new THREE.Mesh(wingGeo, wingMat);
+      rightWing.position.set(0.04, 0.18, -0.12);
+      rightWing.rotation.x = -Math.PI / 4;
+      bee.add(leftWing, rightWing);
+
+      // Stachel
+      const stinger = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.1, 4), blackMat);
+      stinger.rotation.z = Math.PI / 2;
+      stinger.position.set(-0.28, 0, 0);
+      bee.add(stinger);
+
+      // Flugort: über der Wiese und beim Lavendel-Tempel
+      const nearTemple = (i % 3 === 0);
+      let cx, cz;
+      if (nearTemple) {
+        cx = 25 + (Math.random() - 0.5) * 18;
+        cz = -22 + (Math.random() - 0.5) * 20;
+      } else {
+        cx = (Math.random() - 0.5) * 80;
+        cz = (Math.random() - 0.5) * 80;
+      }
+      const cy = 0.9 + Math.random() * 1.8;
+
+      bee.position.set(cx, cy, cz);
+      this.scene.add(bee);
+
+      this.bees.push({
+        mesh: bee,
+        leftWing: leftWing,
+        rightWing: rightWing,
+        centerPos: new THREE.Vector3(cx, cy, cz),
+        radius: 1.5 + Math.random() * 4.0,
+        speed: 0.02 + Math.random() * 0.025,
+        angle: Math.random() * Math.PI * 2,
+        heightVar: 0.35 + Math.random() * 0.45,
+        bobPhase: Math.random() * 10
+      });
+    }
+  }
+
+  spawnButterflies(count = 25) {
+    this.butterflies = [];
+    const colors = [
+      { main: 0xff70a6, spot: 0xffeef5 }, // Kirschblüten-Pink
+      { main: 0x00b4d8, spot: 0xe0f2fe }, // Morpho Himmelblau
+      { main: 0xffe600, spot: 0xfffbeb }, // Zitronengelb
+      { main: 0xa855f7, spot: 0xf3e8ff }, // Amethyst Lila
+      { main: 0xff6b6b, spot: 0xffe3e3 }, // Korallenrot
+      { main: 0x2ec4b6, spot: 0xd8f3dc }  // Mint Türkis
+    ];
+    const bodyMat = new THREE.MeshBasicMaterial({ color: 0x22222b });
+
+    for (let i = 0; i < count; i++) {
+      const bfly = new THREE.Group();
+      const colScheme = colors[i % colors.length];
+
+      // Körper
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.03, 0.45, 6), bodyMat);
+      body.rotation.x = Math.PI / 2;
+      bfly.add(body);
+
+      // Fühler
+      const antMat = new THREE.MeshBasicMaterial({ color: 0x111 });
+      const ant1 = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.22, 3), antMat);
+      ant1.position.set(0.06, 0.1, 0.2);
+      ant1.rotation.set(0.3, 0, 0.4);
+      const ant2 = ant1.clone();
+      ant2.position.x = -0.06;
+      ant2.rotation.z = -0.4;
+      bfly.add(ant1, ant2);
+
+      // Flügel-Gruppen
+      const leftWingGroup = new THREE.Group();
+      const rightWingGroup = new THREE.Group();
+
+      const wingMat = new THREE.MeshLambertMaterial({
+        color: colScheme.main,
+        side: THREE.DoubleSide
+      });
+      const spotMat = new THREE.MeshBasicMaterial({ color: colScheme.spot });
+
+      // Vorderflügel
+      const foreShape = new THREE.Shape();
+      foreShape.moveTo(0, 0);
+      foreShape.bezierCurveTo(0.3, 0.4, 0.7, 0.5, 0.75, 0.1);
+      foreShape.bezierCurveTo(0.7, -0.2, 0.3, -0.2, 0, 0);
+      const foreGeo = new THREE.ShapeGeometry(foreShape);
+
+      const leftFore = new THREE.Mesh(foreGeo, wingMat);
+      leftWingGroup.add(leftFore);
+      const leftSpot = new THREE.Mesh(new THREE.CircleGeometry(0.09, 8), spotMat);
+      leftSpot.position.set(0.42, 0.15, 0.01);
+      leftWingGroup.add(leftSpot);
+
+      // Hinterflügel
+      const hindShape = new THREE.Shape();
+      hindShape.moveTo(0, 0);
+      hindShape.bezierCurveTo(0.25, -0.1, 0.5, -0.2, 0.45, -0.45);
+      hindShape.bezierCurveTo(0.3, -0.5, 0.1, -0.3, 0, 0);
+      const hindGeo = new THREE.ShapeGeometry(hindShape);
+      const leftHind = new THREE.Mesh(hindGeo, wingMat);
+      leftWingGroup.add(leftHind);
+
+      // Rechte Flügel gespiegelt
+      const rightFore = new THREE.Mesh(foreGeo, wingMat);
+      rightFore.scale.x = -1;
+      rightWingGroup.add(rightFore);
+      const rightSpot = new THREE.Mesh(new THREE.CircleGeometry(0.09, 8), spotMat);
+      rightSpot.position.set(-0.42, 0.15, 0.01);
+      rightWingGroup.add(rightSpot);
+
+      const rightHind = new THREE.Mesh(hindGeo, wingMat);
+      rightHind.scale.x = -1;
+      rightWingGroup.add(rightHind);
+
+      bfly.add(leftWingGroup, rightWingGroup);
+
+      // Platzierung über der Wiese und beim Tempel
+      const nearTemple = (i % 4 === 0);
+      let cx, cz;
+      if (nearTemple) {
+        cx = 25 + (Math.random() - 0.5) * 22;
+        cz = -22 + (Math.random() - 0.5) * 24;
+      } else {
+        cx = (Math.random() - 0.5) * 90;
+        cz = (Math.random() - 0.5) * 90;
+      }
+      const cy = 1.4 + Math.random() * 2.2;
+
+      bfly.position.set(cx, cy, cz);
+      this.scene.add(bfly);
+
+      this.butterflies.push({
+        mesh: bfly,
+        leftWing: leftWingGroup,
+        rightWing: rightWingGroup,
+        basePos: new THREE.Vector3(cx, cy, cz),
+        wanderRadius: 4 + Math.random() * 9,
+        speed: 0.008 + Math.random() * 0.014,
+        angle: Math.random() * Math.PI * 2,
+        heightVar: 0.6 + Math.random() * 0.8,
+        flapSpeed: 0.016 + Math.random() * 0.006,
+        timeOffset: Math.random() * 20
+      });
     }
   }
 
@@ -2095,6 +2830,68 @@ class GalaxySistersGame {
 
     // Falling lila & rosa particles from enchanted trees
     this.updateFallingPetals();
+
+    // 20 winzige Bienen
+    this.updateBees();
+
+    // 25 bunte Schmetterlinge
+    this.updateButterflies();
+
+    // Lavendel-Windbewegung
+    this.updateLavender();
+  }
+
+  updateBees() {
+    if (!this.bees || this.bees.length === 0) return;
+    const now = Date.now();
+    for (let i = 0; i < this.bees.length; i++) {
+      const b = this.bees[i];
+      b.angle += b.speed;
+      const x = b.centerPos.x + Math.cos(b.angle) * b.radius;
+      const z = b.centerPos.z + Math.sin(b.angle) * b.radius;
+      const y = b.centerPos.y + Math.sin(now * 0.006 + b.bobPhase) * b.heightVar;
+
+      b.mesh.position.set(x, y, z);
+      // Drehung in Flugrichtung
+      b.mesh.rotation.y = -b.angle + Math.PI / 2;
+
+      // Schnelles Flügelschlagen der Biene
+      const flap = Math.sin(now * 0.08 + b.bobPhase) * 0.9;
+      b.leftWing.rotation.x = Math.PI / 4 + flap;
+      b.rightWing.rotation.x = -Math.PI / 4 - flap;
+    }
+  }
+
+  updateButterflies() {
+    if (!this.butterflies || this.butterflies.length === 0) return;
+    const now = Date.now();
+    for (let i = 0; i < this.butterflies.length; i++) {
+      const b = this.butterflies[i];
+      b.angle += b.speed;
+      const x = b.basePos.x + Math.cos(b.angle) * b.wanderRadius + Math.sin(b.angle * 2.3) * 1.6;
+      const z = b.basePos.z + Math.sin(b.angle) * b.wanderRadius + Math.cos(b.angle * 1.7) * 1.6;
+      const y = b.basePos.y + Math.sin(now * 0.003 + b.timeOffset) * b.heightVar;
+
+      b.mesh.position.set(x, y, z);
+      // Drehung in Flugrichtung und Schräglage in der Kurve
+      b.mesh.rotation.y = -b.angle + Math.PI / 2;
+      b.mesh.rotation.z = Math.sin(now * 0.004 + b.timeOffset) * 0.18;
+
+      // Anmutiger Flügelschlag des Schmetterlings
+      const flap = Math.sin(now * b.flapSpeed + b.timeOffset) * 0.85;
+      b.leftWing.rotation.y = flap;
+      b.rightWing.rotation.y = -flap;
+    }
+  }
+
+  updateLavender() {
+    if (!this.lavenderStems || this.lavenderStems.length === 0) return;
+    const windTime = Date.now() * 0.0028;
+    for (let i = 0; i < this.lavenderStems.length; i++) {
+      const stem = this.lavenderStems[i];
+      stem.rotation.z = Math.sin(windTime + stem.userData.phase) * 0.08;
+      stem.rotation.x = Math.cos(windTime * 0.85 + stem.userData.phase) * 0.05;
+    }
   }
 
   updateFallingPetals() {
