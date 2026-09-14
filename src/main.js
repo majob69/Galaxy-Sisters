@@ -182,8 +182,8 @@ const SISTERS = [
     themeColor: 0xb8c0ff,
     accentColor: "#b8c0ff",
     speed: 0.18,
-    jumpPower: 0.18,
-    gravity: 0.007, // sanft & schwebend, aber nicht mehr übertrieben hoch
+    jumpPower: 0.17,
+    gravity: 0.010,
     hairColor: 0xe0e7ff,
     dressColor: 0x725ac1,
     ability1: {
@@ -203,8 +203,8 @@ const SISTERS = [
     icon: "⭐",
     themeColor: 0xffe066,
     accentColor: "#ffe066",
-    speed: 0.24,
-    jumpPower: 0.19,
+    speed: 0.23,
+    jumpPower: 0.17,
     gravity: 0.012,
     hairColor: 0xffd166,
     dressColor: 0xffb703,
@@ -226,7 +226,7 @@ const SISTERS = [
     themeColor: 0xff7b00,
     accentColor: "#ff7b00",
     speed: 0.19,
-    jumpPower: 0.18,
+    jumpPower: 0.17,
     gravity: 0.012,
     hairColor: 0xffa200,
     dressColor: 0xd90429,
@@ -248,7 +248,7 @@ const SISTERS = [
     themeColor: 0x9d4edd,
     accentColor: "#9d4edd",
     speed: 0.18,
-    jumpPower: 0.18,
+    jumpPower: 0.17,
     gravity: 0.012,
     hairColor: 0x5a189a,
     dressColor: 0x3c096c,
@@ -432,8 +432,10 @@ class GalaxySistersGame {
       const z = (Math.random() - 0.5) * 110;
       if (Math.abs(x) < 5 && Math.abs(z) < 5) continue;
       if (x > 14 && z > 14) continue; // avoid boss center
-      // avoid temple podium footprint
-      if (x > 14 && x < 36 && z < -8 && z > -36) continue;
+      // avoid temple podium footprint, stairs and perimeter walls
+      if (x >= 11 && x <= 33 && z >= -35 && z <= 0.5) continue;
+      // avoid village hut
+      if (x >= -18 && x <= -10 && z >= -12 && z <= -4) continue;
 
       const tuft = new THREE.Group();
       const mat = bladeMats[i % bladeMats.length];
@@ -626,9 +628,11 @@ class GalaxySistersGame {
     for (let i = 0; i < 40; i++) {
       const x = (Math.random() - 0.5) * 85;
       const z = (Math.random() - 0.5) * 85;
-      // Don't spawn on center spawn or boss arena
+      // Don't spawn on center spawn, boss arena, temple, or village hut
       if (Math.abs(x) < 8 && Math.abs(z) < 8) continue;
       if (x > 15 && z > 15) continue; // boss area
+      if (x >= 10 && x <= 34 && z >= -36 && z <= 2) continue; // Celestial Temple area (no tree in temple)
+      if (x >= -18 && x <= -10 && z >= -12 && z <= -4) continue; // Village hut area
 
       const treeGroup = new THREE.Group();
 
@@ -728,8 +732,10 @@ class GalaxySistersGame {
       const fz = (Math.random() - 0.5) * 105;
       if (Math.abs(fx) < 5 && Math.abs(fz) < 5) continue;
       if (fx > 15 && fz > 15) continue;
-      // avoid inside temple podium
-      if (fx > 14 && fx < 36 && fz < -8 && fz > -36) continue;
+      // avoid inside temple podium, stairs and perimeter walls
+      if (fx >= 11 && fx <= 33 && fz >= -35 && fz <= 0.5) continue;
+      // avoid village hut
+      if (fx >= -18 && fx <= -10 && fz >= -12 && fz <= -4) continue;
 
       const flowerGroup = new THREE.Group();
 
@@ -1114,32 +1120,39 @@ class GalaxySistersGame {
     const stepCount = 7;
     const stairW = 13.0;
     const stairL = 5.6;
+    const stepDepth = stairL / stepCount; // 0.8
     for (let s = 0; s < stepCount; s++) {
       const stepH = podH / stepCount;
       const stepY = (s + 0.5) * stepH;
-      const stepProg = s / (stepCount - 1);
-      const stepZ = (podL / 2) + (stairL * (1 - stepProg * 0.88));
+      const localCenterZ = (podL / 2) + stairL - (s + 0.5) * stepDepth;
       const stepBox = new THREE.Mesh(
-        new THREE.BoxGeometry(stairW, stepH, stairL / stepCount + 0.2),
+        new THREE.BoxGeometry(stairW, stepH, stepDepth + 0.12),
         marbleMat
       );
-      stepBox.position.set(0, stepY, (podL / 2) + stairL - s * (stairL / stepCount));
+      stepBox.position.set(0, stepY, localCenterZ);
       stepBox.receiveShadow = true;
       templeGroup.add(stepBox);
 
-      // Begehbare Stufen
+      // Begehbare Stufen als präzise AABB-Boxen (keine schwebenden Fake-Zylinder mehr!)
+      const worldCenterZ = pos.z + localCenterZ;
       this.platforms.push({
-        box: new THREE.Box3().setFromObject(stepBox),
-        topY: pos.y + (s + 1) * stepH,
-        radius: 6.5
+        type: 'box',
+        minX: pos.x - stairW / 2,
+        maxX: pos.x + stairW / 2,
+        minZ: worldCenterZ - stepDepth * 0.55,
+        maxZ: worldCenterZ + stepDepth * 0.55,
+        topY: pos.y + (s + 1) * stepH
       });
     }
 
-    // Hauptboden als Plattform für Kollision
+    // Hauptboden als präzise AABB-Plattform über das gesamte 18x26 Podium
     this.platforms.push({
-      box: new THREE.Box3().setFromObject(basePodium),
-      topY: pos.y + podH + 0.15,
-      radius: 12.0
+      type: 'box',
+      minX: pos.x - podW / 2,
+      maxX: pos.x + podW / 2,
+      minZ: pos.z - podL / 2,
+      maxZ: pos.z + podL / 2,
+      topY: pos.y + podH
     });
 
     // Treppenwangen (Balustraden) links und rechts
@@ -1163,75 +1176,56 @@ class GalaxySistersGame {
       templeGroup.add(lavUrn);
     });
 
-    // Register Temple Podium walls to prevent walking into the base from ground level
-    // Left podium wall
+    // 2.1 Massive Podium-Kollision (Bodenlevel bis zur Tempeloberkante)
+    // Verhindert verlässlich das Durchlaufen der Podium-Seitenwände
+    // Linke Podium-Wand
     this.colliders.push({
       type: 'box',
       minX: pos.x - podW / 2 - 0.2,
-      maxX: pos.x - podW / 2 + 0.8,
+      maxX: pos.x - stairW / 2,
       minZ: pos.z - podL / 2 - 0.2,
       maxZ: pos.z + podL / 2 + 0.2,
       minY: pos.y,
-      maxY: pos.y + podH
+      maxY: pos.y + podH - 0.05
     });
-    // Right podium wall
+    // Rechte Podium-Wand
     this.colliders.push({
       type: 'box',
-      minX: pos.x + podW / 2 - 0.8,
+      minX: pos.x + stairW / 2,
       maxX: pos.x + podW / 2 + 0.2,
       minZ: pos.z - podL / 2 - 0.2,
       maxZ: pos.z + podL / 2 + 0.2,
       minY: pos.y,
-      maxY: pos.y + podH
+      maxY: pos.y + podH - 0.05
     });
-    // Rear podium wall
+    // Hintere Podium-Wand
     this.colliders.push({
       type: 'box',
-      minX: pos.x - podW / 2,
-      maxX: pos.x + podW / 2,
+      minX: pos.x - stairW / 2,
+      maxX: pos.x + stairW / 2,
       minZ: pos.z - podL / 2 - 0.2,
-      maxZ: pos.z - podL / 2 + 0.8,
+      maxZ: pos.z + podL / 2,
       minY: pos.y,
-      maxY: pos.y + podH
+      maxY: pos.y + podH - 0.05
     });
-    // Front wall Left of stairs
-    this.colliders.push({
-      type: 'box',
-      minX: pos.x - podW / 2,
-      maxX: pos.x - stairW / 2,
-      minZ: pos.z + podL / 2 - 0.8,
-      maxZ: pos.z + podL / 2 + 0.2,
-      minY: pos.y,
-      maxY: pos.y + podH
-    });
-    // Front wall Right of stairs
-    this.colliders.push({
-      type: 'box',
-      minX: pos.x + stairW / 2,
-      maxX: pos.x + podW / 2,
-      minZ: pos.z + podL / 2 - 0.8,
-      maxZ: pos.z + podL / 2 + 0.2,
-      minY: pos.y,
-      maxY: pos.y + podH
-    });
-    // Balustrades flanking stairs
+    // Treppenwangen-Kollision (Balustraden) links und rechts
     this.colliders.push({
       type: 'box',
       minX: pos.x - stairW / 2 - 0.9,
       maxX: pos.x - stairW / 2,
-      minZ: pos.z + podL / 2,
+      minZ: pos.z + podL / 2 - 0.2,
       maxZ: pos.z + podL / 2 + stairL + 0.5,
       minY: pos.y,
-      maxY: pos.y + podH + 1.2
+      maxY: pos.y + podH + 1.4
     });
     this.colliders.push({
       type: 'box',
       minX: pos.x + stairW / 2,
       maxX: pos.x + stairW / 2 + 0.9,
-      minZ: pos.z + podL / 2,
+      minZ: pos.z + podL / 2 - 0.2,
       maxZ: pos.z + podL / 2 + stairL + 0.5,
       minY: pos.y,
-      maxY: pos.y + podH + 1.2
+      maxY: pos.y + podH + 1.4
     });
 
     // 3. Stattliche Römische Säulenhalle (20 flutete Säulen)
@@ -1240,8 +1234,8 @@ class GalaxySistersGame {
     const colPlinthMat = new THREE.MeshLambertMaterial({ color: 0xf3e8f7 });
 
     const columnPositions = [];
-    const colXHalf = (podW / 2) - 1.5;
-    const colZHalf = (podL / 2) - 1.5;
+    const colXHalf = (podW / 2) - 1.5; // 7.5
+    const colZHalf = (podL / 2) - 1.5; // 11.5
 
     // Front (6) und Heck (6)
     for (let c = 0; c < 6; c++) {
@@ -1256,14 +1250,91 @@ class GalaxySistersGame {
       columnPositions.push({ x: colXHalf, z: cz });  // Rechts
     }
 
+    // 3.1 Römische Tempelwände auf dem Podium (Parapete & Cella-Wände mit Violett/Rosa Zierleiste)
+    const wallH = 1.6;
+    const wallThick = 0.45;
+    // Linke Wand zwischen den Säulen
+    const leftWall = new THREE.Mesh(
+      new THREE.BoxGeometry(wallThick, wallH, colZHalf * 2),
+      marbleMat
+    );
+    leftWall.position.set(-colXHalf, podH + wallH / 2, 0);
+    leftWall.castShadow = true;
+    templeGroup.add(leftWall);
+    const leftWallTrim = new THREE.Mesh(
+      new THREE.BoxGeometry(wallThick + 0.1, 0.15, colZHalf * 2 + 0.1),
+      violetTrimMat
+    );
+    leftWallTrim.position.set(-colXHalf, podH + wallH + 0.075, 0);
+    templeGroup.add(leftWallTrim);
+
+    // Rechte Wand zwischen den Säulen
+    const rightWall = new THREE.Mesh(
+      new THREE.BoxGeometry(wallThick, wallH, colZHalf * 2),
+      marbleMat
+    );
+    rightWall.position.set(colXHalf, podH + wallH / 2, 0);
+    rightWall.castShadow = true;
+    templeGroup.add(rightWall);
+    const rightWallTrim = new THREE.Mesh(
+      new THREE.BoxGeometry(wallThick + 0.1, 0.15, colZHalf * 2 + 0.1),
+      violetTrimMat
+    );
+    rightWallTrim.position.set(colXHalf, podH + wallH + 0.075, 0);
+    templeGroup.add(rightWallTrim);
+
+    // Hintere Wand
+    const backWall = new THREE.Mesh(
+      new THREE.BoxGeometry(colXHalf * 2, wallH, wallThick),
+      marbleMat
+    );
+    backWall.position.set(0, podH + wallH / 2, -colZHalf);
+    backWall.castShadow = true;
+    templeGroup.add(backWall);
+    const backWallTrim = new THREE.Mesh(
+      new THREE.BoxGeometry(colXHalf * 2 + 0.1, 0.15, wallThick + 0.1),
+      violetTrimMat
+    );
+    backWallTrim.position.set(0, podH + wallH + 0.075, -colZHalf);
+    templeGroup.add(backWallTrim);
+
+    // Kollisionsboxen für die Tempelwände auf dem Podium
+    this.colliders.push({
+      type: 'box',
+      minX: pos.x - colXHalf - 0.5,
+      maxX: pos.x - colXHalf + 0.5,
+      minZ: pos.z - colZHalf - 0.5,
+      maxZ: pos.z + colZHalf + 0.5,
+      minY: pos.y + podH - 0.1,
+      maxY: pos.y + podH + wallH + 1.0
+    });
+    this.colliders.push({
+      type: 'box',
+      minX: pos.x + colXHalf - 0.5,
+      maxX: pos.x + colXHalf + 0.5,
+      minZ: pos.z - colZHalf - 0.5,
+      maxZ: pos.z + colZHalf + 0.5,
+      minY: pos.y + podH - 0.1,
+      maxY: pos.y + podH + wallH + 1.0
+    });
+    this.colliders.push({
+      type: 'box',
+      minX: pos.x - colXHalf - 0.5,
+      maxX: pos.x + colXHalf + 0.5,
+      minZ: pos.z - colZHalf - 0.5,
+      maxZ: pos.z - colZHalf + 0.5,
+      minY: pos.y + podH - 0.1,
+      maxY: pos.y + podH + wallH + 1.0
+    });
+
     columnPositions.forEach((cp, idx) => {
-      // Register each column as a solid cylinder collider
+      // Jede Säule ist ein solider Zylinder-Kollider vom Boden bis zur Decke
       this.colliders.push({
         type: 'cylinder',
         x: pos.x + cp.x,
         z: pos.z + cp.z,
-        radius: 0.72,
-        minY: pos.y + podH - 0.1,
+        radius: 0.75,
+        minY: pos.y,
         maxY: pos.y + podH + colH
       });
 
@@ -1439,6 +1510,15 @@ class GalaxySistersGame {
     flowerOfLifeMesh.receiveShadow = true;
     templeGroup.add(flowerOfLifeMesh);
 
+    // Dais als begehbare Plattform registrieren
+    this.platforms.push({
+      type: 'cylinder',
+      x: pos.x,
+      z: pos.z,
+      radius: 4.6,
+      topY: pos.y + podH + 0.24
+    });
+
     // 4 Zier-Podeste mit rosa Kristallfackeln um die Blume des Lebens
     for (let p = 0; p < 4; p++) {
       const pAng = (p / 4) * Math.PI * 2 + Math.PI / 4;
@@ -1537,9 +1617,11 @@ class GalaxySistersGame {
 
       // Save for jump collision
       this.platforms.push({
-        box: new THREE.Box3().setFromObject(plat),
+        type: 'cylinder',
+        x: plat.position.x,
+        z: plat.position.z,
         topY: height + 0.25,
-        radius: 1.8
+        radius: 1.8 - i * 0.1
       });
     }
 
@@ -1549,7 +1631,9 @@ class GalaxySistersGame {
     finalPlat.position.set(startPos.x + Math.sin(numSteps * 0.7) * 4, finalHeight, startPos.z - numSteps * 3.8);
     this.scene.add(finalPlat);
     this.platforms.push({
-      box: new THREE.Box3().setFromObject(finalPlat),
+      type: 'cylinder',
+      x: finalPlat.position.x,
+      z: finalPlat.position.z,
       topY: finalHeight + 0.4,
       radius: 3.5
     });
@@ -2106,14 +2190,6 @@ class GalaxySistersGame {
     });
 
     this.showFloatingText(`✨ ${s.name} ausgewählt!`, this.playerGroup.position, s.accentColor);
-  }
-
-  doJump() {
-    if (this.isGrounded) {
-      this.playerVelY = SISTERS[this.activeSisterIdx].jumpPower;
-      this.isGrounded = false;
-      sfx.jump();
-    }
   }
 
   // ==========================================
@@ -2794,30 +2870,47 @@ class GalaxySistersGame {
     this.playerVelY -= current.gravity;
     this.playerGroup.position.y += this.playerVelY;
 
-    // Check platform collision
-    let onPlatform = false;
-    for (const plat of this.platforms) {
-      const dx = this.playerGroup.position.x - plat.box.getCenter(new THREE.Vector3()).x;
-      const dz = this.playerGroup.position.z - plat.box.getCenter(new THREE.Vector3()).z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist < plat.radius && this.playerGroup.position.y >= plat.topY - 0.4 && this.playerGroup.position.y <= plat.topY + 0.5) {
-        if (this.playerVelY <= 0) {
-          this.playerGroup.position.y = plat.topY;
-          this.playerVelY = 0;
-          this.isGrounded = true;
-          onPlatform = true;
-          break;
+    // Check platform collision (AABB boxes for temple & stairs, cylinders for obby & dais)
+    let bestPlatform = null;
+    const px = this.playerGroup.position.x;
+    const pz = this.playerGroup.position.z;
+    const py = this.playerGroup.position.y;
+
+    for (let i = 0; i < this.platforms.length; i++) {
+      const plat = this.platforms[i];
+      let isInside = false;
+
+      if (plat.type === 'box') {
+        isInside = (px >= plat.minX && px <= plat.maxX && pz >= plat.minZ && pz <= plat.maxZ);
+      } else if (plat.type === 'cylinder') {
+        const dx = px - plat.x;
+        const dz = pz - plat.z;
+        isInside = (dx * dx + dz * dz <= plat.radius * plat.radius);
+      }
+
+      if (isInside) {
+        const diff = py - plat.topY;
+        // Erlaubt das Besteigen von Stufen (diff bis -0.38) und sauberes Landen von oben (diff bis +0.55)
+        if (diff >= -0.38 && diff <= 0.55) {
+          if (!bestPlatform || plat.topY > bestPlatform.topY) {
+            bestPlatform = plat;
+          }
         }
       }
     }
 
-    // Ground check (y = 0)
-    if (!onPlatform) {
-      if (this.playerGroup.position.y <= 0) {
-        this.playerGroup.position.y = 0;
-        this.playerVelY = 0;
-        this.isGrounded = true;
-      }
+    if (bestPlatform && this.playerVelY <= 0.08) {
+      this.playerGroup.position.y = bestPlatform.topY;
+      this.playerVelY = 0;
+      this.isGrounded = true;
+    } else if (this.playerGroup.position.y <= 0) {
+      // Bodenkontakt (Wiese y = 0)
+      this.playerGroup.position.y = 0;
+      this.playerVelY = 0;
+      this.isGrounded = true;
+    } else {
+      // Im freien Fall / Sprung
+      this.isGrounded = false;
     }
   }
 
