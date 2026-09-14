@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Galaxy Sisters - 3D Kawaii Adventure</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700;800&display=swap" rel="stylesheet">
+  
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <!-- UI Overlay -->
+  <div id="ui-overlay">
+    <!-- Header -->
+    <div class="header-row">
+      <!-- Active Sister Status -->
+      <div class="char-card clickable" id="char-card">
+        <div class="char-avatar-ring" id="char-avatar">🌙</div>
+        <div class="char-info">
+          <div class="char-name-tag" id="char-name">Luna <span style="font-size:0.9rem">🌙</span></div>
+          <div class="char-title" id="char-title">Mond-Wächterin (Sanfte Schwerkraft)</div>
+          <div class="hp-bar-container">
+            <div class="hp-bar-fill" id="player-hp-bar"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Boss Bar (Appears when near boss) -->
+      <div class="boss-banner" id="boss-banner">
+        <div class="boss-title">⚡ VORTOX – DER WIRBELNDE KLAUENWÄCHTER ⚡</div>
+        <div class="boss-bar-wrap">
+          <div class="boss-bar-fill" id="boss-hp-bar"></div>
+        </div>
+        <div class="boss-subtitle" id="boss-state-text">Vorsicht: Dreht sich schnell im Kreis!</div>
+      </div>
+
+      <!-- Quest / Guide Panel -->
+      <div class="quest-panel clickable">
+        <div class="quest-title">✨ Galaxy Quest: Himmelsberg</div>
+        <div class="quest-item">🏔️ <b>Obby:</b> Klettere über schwebende Felsen</div>
+        <div class="quest-item">🛖 <b>Dorf & Tempel:</b> Erkunde die Wiese & Schrein</div>
+        <div class="quest-item">👾 <b>Bosskampf:</b> Besiege Vortox in der Arena!</div>
+        <div style="margin-top: 8px; display: flex; gap: 8px;">
+          <button class="sister-btn clickable" id="btn-boss2" style="font-size:0.75rem; padding: 4px 10px;">🦋 Boss 2 Info</button>
+          <button class="sister-btn clickable" id="btn-sound" style="font-size:0.75rem; padding: 4px 10px;">🔊 Audio: An</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Instructions Overlay -->
+    <div style="display: flex; justify-content: center; width: 100%;">
+      <div class="instructions-overlay">
+        <span><b>W, A, S, D</b> / <b>Pfeiltasten</b> = Laufen</span>
+        <span><b>Leertaste</b> = Springen</span>
+        <span><b>E</b> / <b>Klick</b> = Spezial-Fähigkeit</span>
+        <span><b>1 - 4</b> / <b>Q</b> = Schwester wechseln</span>
+      </div>
+    </div>
+
+    <!-- Bottom Bar: Sisters Selection & Action Buttons -->
+    <div class="bottom-bar">
+      <!-- 4 Sisters Selector -->
+      <div class="sister-picker clickable">
+        <button class="sister-btn active clickable" data-sister="0">
+          <span class="hotkey-badge">1</span> 🌙 Luna (Mond)
+        </button>
+        <button class="sister-btn clickable" data-sister="1">
+          <span class="hotkey-badge">2</span> ⭐ Stella (Sterne)
+        </button>
+        <button class="sister-btn clickable" data-sister="2">
+          <span class="hotkey-badge">3</span> ☀️ Solana (Sonne)
+        </button>
+        <button class="sister-btn clickable" data-sister="3">
+          <span class="hotkey-badge">4</span> 🪐 Saturna (Saturn)
+        </button>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="action-bar">
+        <button class="action-btn clickable" id="btn-ability">
+          <span id="ability-icon">🛡️</span>
+          <span id="ability-text">Mond-Schild</span>
+          <span class="key-hint">[E]</span>
+        </button>
+        <button class="action-btn clickable" id="btn-jump" style="background: linear-gradient(135deg, #4facfe, #00f2fe);">
+          <span>🦘</span> Sprung
+          <span class="key-hint">[Space]</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for Boss 2 Concept -->
+  <div class="modal-backdrop" id="boss2-modal">
+    <div class="modal-content">
+      <button class="modal-close clickable" id="modal-close-btn">&times;</button>
+      <h3 class="modal-title">🦋 Bosskampf 2: Morvanta</h3>
+      <div class="modal-body">
+        <p><b>Die Totenkopf-Mottenkönigin</b></p>
+        <p>Ein gigantischer, mystischer Schmetterling, der hoch über den Berggipfeln nistet.</p>
+        <h4>Aussehen:</h4>
+        <p>Riesige, leuchtend rote Flügel mit dunklem <b>Totenkopf-Muster</b> und geheimnisvollen Punkten. Lange, pechschwarze Fühler, die wie Peitschen durch die Luft zucken.</p>
+        <h4>Spezial-Attacken:</h4>
+        <ul>
+          <li><b>Hurrikan-Flügelschlag:</b> Sie schlägt mit brutaler Wucht die Flügel zusammen und schleudert Windstöße & Gestein auf das Team!</li>
+          <li><b>Fühler-Schlinge (Koop-Mechanik):</b> Ihre schwarzen Fühler schießen nach einer Schwester, wickeln sie ein und drohen sie zu zerquetschen! Die anderen Schwestern müssen schnell herbeieilen und die Fühler attackieren, um ihre Freundin zu befreien!</li>
+        </ul>
+        <h4>Strategie:</h4>
+        <p>Nutze <b>Saturnas Gravitations-Ringe</b>, um Morvanta auf den Boden zu zwingen, während <b>Solana</b> und <b>Stella</b> massiven Lichtschaden austeilen und <b>Luna</b> das Team abschirmt!</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Game Script -->
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

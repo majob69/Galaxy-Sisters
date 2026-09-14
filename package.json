@@ -1,0 +1,16 @@
+{
+  "name": "galaxy-sisters",
+  "version": "1.0.0",
+  "description": "Galaxy Sisters - 3D Kawaii Co-op Adventure Game Prototype",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vite",
+    "start": "vite --open"
+  },
+  "dependencies": {
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}
