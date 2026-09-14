@@ -182,8 +182,8 @@ const SISTERS = [
     themeColor: 0xb8c0ff,
     accentColor: "#b8c0ff",
     speed: 0.18,
-    jumpPower: 0.32,
-    gravity: 0.008, // floaty
+    jumpPower: 0.18,
+    gravity: 0.007, // sanft & schwebend, aber nicht mehr übertrieben hoch
     hairColor: 0xe0e7ff,
     dressColor: 0x725ac1,
     ability1: {
@@ -204,7 +204,7 @@ const SISTERS = [
     themeColor: 0xffe066,
     accentColor: "#ffe066",
     speed: 0.24,
-    jumpPower: 0.28,
+    jumpPower: 0.19,
     gravity: 0.012,
     hairColor: 0xffd166,
     dressColor: 0xffb703,
@@ -226,8 +226,8 @@ const SISTERS = [
     themeColor: 0xff7b00,
     accentColor: "#ff7b00",
     speed: 0.19,
-    jumpPower: 0.27,
-    gravity: 0.013,
+    jumpPower: 0.18,
+    gravity: 0.012,
     hairColor: 0xffa200,
     dressColor: 0xd90429,
     ability1: {
@@ -248,7 +248,7 @@ const SISTERS = [
     themeColor: 0x9d4edd,
     accentColor: "#9d4edd",
     speed: 0.18,
-    jumpPower: 0.26,
+    jumpPower: 0.18,
     gravity: 0.012,
     hairColor: 0x5a189a,
     dressColor: 0x3c096c,
@@ -295,8 +295,10 @@ class GalaxySistersGame {
     
     // Interactive Objects in World
     this.platforms = [];
+    this.colliders = [];
     this.slimes = [];
     this.creatures = [];
+    this.prevPlayerPos = null;
     
     this.initScene();
     this.buildWorld();
@@ -688,6 +690,16 @@ class GalaxySistersGame {
       treeGroup.position.set(x, 0, z);
       this.scene.add(treeGroup);
 
+      // Register tree trunk as solid cylinder collider
+      this.colliders.push({
+        type: 'cylinder',
+        x: x,
+        z: z,
+        radius: trunkBottomRadius * 0.9,
+        minY: 0,
+        maxY: trunkHeight
+      });
+
       // Save canopy location for falling particles
       this.treeCanopies.push({
         x: x,
@@ -845,6 +857,17 @@ class GalaxySistersGame {
     this.scene.add(npc);
 
     this.scene.add(hutGroup);
+
+    // Register wooden hut as solid obstacle box
+    this.colliders.push({
+      type: 'box',
+      minX: pos.x - 2.7,
+      maxX: pos.x + 2.7,
+      minZ: pos.z - 2.5,
+      maxZ: pos.z + 2.5,
+      minY: pos.y,
+      maxY: pos.y + 4.5
+    });
   }
 
   createKawaiiVillager() {
@@ -1135,12 +1158,80 @@ class GalaxySistersGame {
         new THREE.CylinderGeometry(0.45, 0.35, 0.7, 8),
         pinkTrimMat
       );
-      urn.position.set(bx, podH + 0.75, (podL / 2) + stairL);
-      templeGroup.add(urn);
-
       const lavUrn = this.createLavenderBush();
       lavUrn.position.set(bx, podH + 1.1, (podL / 2) + stairL);
       templeGroup.add(lavUrn);
+    });
+
+    // Register Temple Podium walls to prevent walking into the base from ground level
+    // Left podium wall
+    this.colliders.push({
+      type: 'box',
+      minX: pos.x - podW / 2 - 0.2,
+      maxX: pos.x - podW / 2 + 0.8,
+      minZ: pos.z - podL / 2 - 0.2,
+      maxZ: pos.z + podL / 2 + 0.2,
+      minY: pos.y,
+      maxY: pos.y + podH
+    });
+    // Right podium wall
+    this.colliders.push({
+      type: 'box',
+      minX: pos.x + podW / 2 - 0.8,
+      maxX: pos.x + podW / 2 + 0.2,
+      minZ: pos.z - podL / 2 - 0.2,
+      maxZ: pos.z + podL / 2 + 0.2,
+      minY: pos.y,
+      maxY: pos.y + podH
+    });
+    // Rear podium wall
+    this.colliders.push({
+      type: 'box',
+      minX: pos.x - podW / 2,
+      maxX: pos.x + podW / 2,
+      minZ: pos.z - podL / 2 - 0.2,
+      maxZ: pos.z - podL / 2 + 0.8,
+      minY: pos.y,
+      maxY: pos.y + podH
+    });
+    // Front wall Left of stairs
+    this.colliders.push({
+      type: 'box',
+      minX: pos.x - podW / 2,
+      maxX: pos.x - stairW / 2,
+      minZ: pos.z + podL / 2 - 0.8,
+      maxZ: pos.z + podL / 2 + 0.2,
+      minY: pos.y,
+      maxY: pos.y + podH
+    });
+    // Front wall Right of stairs
+    this.colliders.push({
+      type: 'box',
+      minX: pos.x + stairW / 2,
+      maxX: pos.x + podW / 2,
+      minZ: pos.z + podL / 2 - 0.8,
+      maxZ: pos.z + podL / 2 + 0.2,
+      minY: pos.y,
+      maxY: pos.y + podH
+    });
+    // Balustrades flanking stairs
+    this.colliders.push({
+      type: 'box',
+      minX: pos.x - stairW / 2 - 0.9,
+      maxX: pos.x - stairW / 2,
+      minZ: pos.z + podL / 2,
+      maxZ: pos.z + podL / 2 + stairL + 0.5,
+      minY: pos.y,
+      maxY: pos.y + podH + 1.2
+    });
+    this.colliders.push({
+      type: 'box',
+      minX: pos.x + stairW / 2,
+      maxX: pos.x + stairW / 2 + 0.9,
+      minZ: pos.z + podL / 2,
+      maxZ: pos.z + podL / 2 + stairL + 0.5,
+      minY: pos.y,
+      maxY: pos.y + podH + 1.2
     });
 
     // 3. Stattliche Römische Säulenhalle (20 flutete Säulen)
@@ -1166,6 +1257,16 @@ class GalaxySistersGame {
     }
 
     columnPositions.forEach((cp, idx) => {
+      // Register each column as a solid cylinder collider
+      this.colliders.push({
+        type: 'cylinder',
+        x: pos.x + cp.x,
+        z: pos.z + cp.z,
+        radius: 0.72,
+        minY: pos.y + podH - 0.1,
+        maxY: pos.y + podH + colH
+      });
+
       const colGroup = new THREE.Group();
       colGroup.position.set(cp.x, podH + 0.15, cp.z);
 
@@ -2574,14 +2675,62 @@ class GalaxySistersGame {
       sfx.setBGMMode(dist < 28 ? 'boss' : 'peaceful');
     }
 
-    // Camera follow smoothly
+    // Camera follows player tightly and translates with player movement
+    const playerPos = this.playerGroup.position;
+    if (!this.prevPlayerPos) {
+      this.prevPlayerPos = playerPos.clone();
+    }
+    const deltaMove = new THREE.Vector3().subVectors(playerPos, this.prevPlayerPos);
+    this.camera.position.add(deltaMove);
+    this.prevPlayerPos.copy(playerPos);
+
+    // Keep camera target firmly locked onto player center
+    const targetY = playerPos.y + 1.6;
     this.controls.target.lerp(
-      new THREE.Vector3(this.playerGroup.position.x, this.playerGroup.position.y + 1.6, this.playerGroup.position.z),
-      0.08
+      new THREE.Vector3(playerPos.x, targetY, playerPos.z),
+      0.22
     );
     this.controls.update();
 
     this.renderer.render(this.scene, this.camera);
+  }
+
+  checkWallCollision(px, pz, radius, py) {
+    const footY = py;
+    const headY = py + 1.8;
+
+    for (let i = 0; i < this.colliders.length; i++) {
+      const c = this.colliders[i];
+      if (headY < c.minY || footY > c.maxY) continue;
+
+      if (c.type === 'cylinder') {
+        const dx = px - c.x;
+        const dz = pz - c.z;
+        const minDist = c.radius + radius;
+        if (dx * dx + dz * dz < minDist * minDist) {
+          return true; // Collision with column / tree / pillar
+        }
+      } else if (c.type === 'box') {
+        if (
+          px + radius > c.minX &&
+          px - radius < c.maxX &&
+          pz + radius > c.minZ &&
+          pz - radius < c.maxZ
+        ) {
+          return true; // Collision with wall / podium / hut
+        }
+      }
+    }
+    return false;
+  }
+
+  doJump() {
+    if (this.isGrounded) {
+      const current = SISTERS[this.activeSisterIdx];
+      this.playerVelY = current.jumpPower;
+      this.isGrounded = false;
+      sfx.jump();
+    }
   }
 
   updatePlayerMovement() {
@@ -2610,8 +2759,21 @@ class GalaxySistersGame {
       const camEuler = new THREE.Euler(0, this.camera.rotation.y, 0, 'YXZ');
       moveVec.applyEuler(camEuler);
 
-      this.playerGroup.position.x += moveVec.x * current.speed;
-      this.playerGroup.position.z += moveVec.z * current.speed;
+      // Solid Wall Collision Detection (X & Z separated for smooth wall sliding)
+      const oldX = this.playerGroup.position.x;
+      const oldZ = this.playerGroup.position.z;
+      const playerRadius = 0.42;
+      const playerY = this.playerGroup.position.y;
+
+      const nextX = oldX + moveVec.x * current.speed;
+      if (!this.checkWallCollision(nextX, oldZ, playerRadius, playerY)) {
+        this.playerGroup.position.x = nextX;
+      }
+
+      const nextZ = oldZ + moveVec.z * current.speed;
+      if (!this.checkWallCollision(this.playerGroup.position.x, nextZ, playerRadius, playerY)) {
+        this.playerGroup.position.z = nextZ;
+      }
 
       // Face direction of movement
       const targetAngle = Math.atan2(moveVec.x, moveVec.z);
