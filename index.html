@@ -21,6 +21,33 @@
 <body>
   <div id="canvas-container"></div>
 
+  <!-- Intro Screen Overlay with 4 Sisters Picture -->
+  <div id="intro-screen" class="intro-screen">
+    <div class="intro-modal">
+      <div class="intro-artwork-wrapper">
+        <img src="/intro.jpg" alt="Galaxy Sisters: Luna, Stella, Sol & Planeta" class="intro-artwork" onerror="this.src='./intro.jpg'">
+        <div class="intro-chip">🌸 Magisches Koop-Abenteuer</div>
+      </div>
+      <div class="intro-details">
+        <h1 class="intro-title">✨ GALAXY SISTERS ✨</h1>
+        <p class="intro-description">
+          Erkunde die Zauberwelt mit <b>Luna 🌙</b>, <b>Stella ⭐</b>, <b>Sol ☀️</b> und <b>Planeta 🪐</b>!
+        </p>
+        <div class="intro-features-grid">
+          <div class="feature-tag">🕹️ Roblox Touch-Steuerung</div>
+          <div class="feature-tag">🏹 Stella Sternen-Bogen</div>
+          <div class="feature-tag">💚 Luna Heilzauber</div>
+          <div class="feature-tag">🪨 Sol Versteinerung (4s)</div>
+          <div class="feature-tag">🪐 Planeta Unsichtbar</div>
+          <div class="feature-tag">🎵 Dynamische Musik</div>
+        </div>
+        <button id="btn-start-game" class="btn-start clickable" type="button">
+          <span>🚀</span> ABENTEUER STARTEN
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- UI Overlay -->
   <div id="ui-overlay">
     <!-- Header -->
@@ -30,7 +57,7 @@
         <div class="char-avatar-ring" id="char-avatar">🌙</div>
         <div class="char-info">
           <div class="char-name-tag" id="char-name">Luna <span style="font-size:0.9rem">🌙</span></div>
-          <div class="char-title" id="char-title">Mond-Wächterin (Sanfte Schwerkraft)</div>
+          <div class="char-title" id="char-title">Mond-Wächterin (Sanfte Schwerkraft & Heilung)</div>
           <div class="hp-bar-container">
             <div class="hp-bar-fill" id="player-hp-bar"></div>
           </div>
@@ -59,44 +86,63 @@
       </div>
     </div>
 
-    <!-- Instructions Overlay -->
-    <div style="display: flex; justify-content: center; width: 100%;">
-      <div class="instructions-overlay">
-        <span><b>W, A, S, D</b> / <b>Pfeiltasten</b> = Laufen</span>
-        <span><b>Leertaste</b> = Springen</span>
-        <span><b>E</b> / <b>Klick</b> = Spezial-Fähigkeit</span>
-        <span><b>1 - 4</b> / <b>Q</b> = Schwester wechseln</span>
-      </div>
+    <!-- Center Screen Instructions (Subtle) -->
+    <div class="instructions-overlay">
+      <span>🕹️ <b>Roblox Touch-Feld</b> oder <b>WASD</b> zum Laufen</span>
+      <span>•</span>
+      <span>🦘 <b>Sprung-Taste</b> oder <b>Space</b></span>
+      <span>•</span>
+      <span>✨ <b>Power-Kreise</b> oder <b>E / R</b></span>
     </div>
 
-    <!-- Bottom Bar: Sisters Selection & Action Buttons -->
-    <div class="bottom-bar">
-      <!-- 4 Sisters Selector -->
-      <div class="sister-picker clickable">
-        <button class="sister-btn active clickable" data-sister="0">
-          <span class="hotkey-badge">1</span> 🌙 Luna (Mond)
-        </button>
-        <button class="sister-btn clickable" data-sister="1">
-          <span class="hotkey-badge">2</span> ⭐ Stella (Sterne)
-        </button>
-        <button class="sister-btn clickable" data-sister="2">
-          <span class="hotkey-badge">3</span> ☀️ Solana (Sonne)
-        </button>
-        <button class="sister-btn clickable" data-sister="3">
-          <span class="hotkey-badge">4</span> 🪐 Saturna (Saturn)
-        </button>
+    <!-- Roblox On-Screen Touch Controls (Works on Mobile & Desktop Mouse) -->
+    <!-- 1. Left: Virtual Joystick Run Field (Lauf-Feld) -->
+    <div id="roblox-joystick-container" class="roblox-joystick-container clickable">
+      <div id="joystick-base" class="joystick-base">
+        <div id="joystick-thumb" class="joystick-thumb"></div>
       </div>
+      <div class="joystick-hint">🕹️ LAUFEN</div>
+    </div>
 
-      <!-- Action Buttons -->
-      <div class="action-bar">
-        <button class="action-btn clickable" id="btn-ability">
-          <span id="ability-icon">🛡️</span>
-          <span id="ability-text">Mond-Schild</span>
-          <span class="key-hint">[E]</span>
+    <!-- 2. Right: Action Circles (Kreise für Kräfte & Sprung wie Roblox) -->
+    <div class="roblox-action-cluster">
+      <!-- Power 2 Circle (Zweitkraft: Luna Heilung, Stella Dash, Sol Versteinern, Planeta Unsichtbar) -->
+      <button class="action-circle circle-power2 clickable" id="circle-power2" type="button" title="Kraft 2 einsetzen [R]">
+        <div class="circle-icon-wrap" id="circle-power2-icon">💚</div>
+        <div class="circle-label" id="circle-power2-name">Heilung</div>
+        <div class="circle-badge">P2</div>
+        <div class="circle-cooldown-overlay" id="circle-power2-cd"></div>
+      </button>
+
+      <!-- Power 1 Circle (Hauptkraft: Luna Schild, Stella Sternenbogen, Sol Supernova, Planeta Ringe) -->
+      <button class="action-circle circle-power1 clickable" id="circle-power1" type="button" title="Kraft 1 einsetzen [E]">
+        <div class="circle-icon-wrap" id="circle-power1-icon">🛡️</div>
+        <div class="circle-label" id="circle-power1-name">Mondschild</div>
+        <div class="circle-badge">P1</div>
+        <div class="circle-cooldown-overlay" id="circle-power1-cd"></div>
+      </button>
+
+      <!-- Big Roblox Jump Circle -->
+      <button class="action-circle circle-jump clickable" id="circle-jump" type="button" title="Springen [Space]">
+        <div class="circle-icon-wrap">🦘</div>
+        <div class="circle-label">SPRUNG</div>
+      </button>
+    </div>
+
+    <!-- Bottom Bar: Sisters Switcher (Touch & Click friendly) -->
+    <div class="bottom-bar">
+      <div class="sister-picker clickable">
+        <button class="sister-btn active clickable" data-sister="0" type="button">
+          <span class="hotkey-badge">1</span> 🌙 Luna
         </button>
-        <button class="action-btn clickable" id="btn-jump" style="background: linear-gradient(135deg, #4facfe, #00f2fe);">
-          <span>🦘</span> Sprung
-          <span class="key-hint">[Space]</span>
+        <button class="sister-btn clickable" data-sister="1" type="button">
+          <span class="hotkey-badge">2</span> ⭐ Stella
+        </button>
+        <button class="sister-btn clickable" data-sister="2" type="button">
+          <span class="hotkey-badge">3</span> ☀️ Sol
+        </button>
+        <button class="sister-btn clickable" data-sister="3" type="button">
+          <span class="hotkey-badge">4</span> 🪐 Planeta
         </button>
       </div>
     </div>
@@ -105,7 +151,7 @@
   <!-- Modal for Boss 2 Concept -->
   <div class="modal-backdrop" id="boss2-modal">
     <div class="modal-content">
-      <button class="modal-close clickable" id="modal-close-btn">&times;</button>
+      <button class="modal-close clickable" id="modal-close-btn" type="button">&times;</button>
       <h3 class="modal-title">🦋 Bosskampf 2: Morvanta</h3>
       <div class="modal-body">
         <p><b>Die Totenkopf-Mottenkönigin</b></p>
@@ -118,7 +164,7 @@
           <li><b>Fühler-Schlinge (Koop-Mechanik):</b> Ihre schwarzen Fühler schießen nach einer Schwester, wickeln sie ein und drohen sie zu zerquetschen! Die anderen Schwestern müssen schnell herbeieilen und die Fühler attackieren, um ihre Freundin zu befreien!</li>
         </ul>
         <h4>Strategie:</h4>
-        <p>Nutze <b>Saturnas Gravitations-Ringe</b>, um Morvanta auf den Boden zu zwingen, während <b>Solana</b> und <b>Stella</b> massiven Lichtschaden austeilen und <b>Luna</b> das Team abschirmt!</p>
+        <p>Nutze <b>Planetas Gravitations-Ringe</b>, um Morvanta auf den Boden zu zwingen, während <b>Sol</b> und <b>Stella</b> massiven Lichtschaden austeilen und <b>Luna</b> das Team abschirmt und heilt!</p>
       </div>
     </div>
   </div>

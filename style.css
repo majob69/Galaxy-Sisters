@@ -396,3 +396,353 @@ body, html {
   50% { transform: translate(-50%, -30px) scale(1.3); }
   100% { opacity: 0; transform: translate(-50%, -60px) scale(0.8); }
 }
+
+/* Prevent unwanted focus ring & keyboard triggering */
+button:focus, .clickable:focus {
+  outline: none !important;
+}
+
+/* ==========================================
+   INTRO SCREEN OVERLAY
+   ========================================== */
+.intro-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at center, rgba(30, 15, 45, 0.92) 0%, rgba(10, 5, 18, 0.98) 100%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.6s;
+  padding: 16px;
+}
+
+.intro-screen.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.intro-modal {
+  max-width: 620px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-radius: 28px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(180, 120, 255, 0.25);
+  display: flex;
+  flex-direction: column;
+  animation: introPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes introPop {
+  0% { transform: scale(0.92) translateY(20px); opacity: 0; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.intro-artwork-wrapper {
+  position: relative;
+  width: 100%;
+  height: 280px;
+  overflow: hidden;
+  background: #120b18;
+}
+
+.intro-artwork {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 6s ease-out;
+}
+
+.intro-artwork:hover {
+  transform: scale(1.04);
+}
+
+.intro-chip {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #fed7aa;
+}
+
+.intro-details {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  background: linear-gradient(180deg, rgba(25, 15, 38, 0.8) 0%, rgba(15, 8, 25, 0.95) 100%);
+}
+
+.intro-title {
+  font-size: 1.8rem;
+  font-weight: 900;
+  letter-spacing: 1px;
+  background: linear-gradient(90deg, #ff9a9e 0%, #fecfef 50%, #a1c4fd 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 4px 20px rgba(255, 154, 158, 0.4);
+}
+
+.intro-description {
+  font-size: 0.95rem;
+  color: #e2e8f0;
+  line-height: 1.5;
+}
+
+.intro-features-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 4px 0 8px 0;
+}
+
+.feature-tag {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.btn-start {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #f43f5e, #ec4899, #8b5cf6);
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-radius: 30px;
+  padding: 12px 36px;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(236, 72, 153, 0.45);
+  transition: all 0.25s ease;
+  margin-top: 6px;
+}
+
+.btn-start:hover {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 14px 36px rgba(236, 72, 153, 0.65);
+}
+
+.btn-start:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+/* ==========================================
+   ROBLOX TOUCH CONTROLS
+   ========================================== */
+/* Virtual Joystick on Bottom Left */
+.roblox-joystick-container {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.joystick-base {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: 2.5px solid rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 0 16px rgba(255, 255, 255, 0.1);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.joystick-thumb {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ffffff 0%, #c4b5fd 70%, #8b5cf6 100%);
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 0 18px rgba(167, 139, 250, 0.8), 0 4px 12px rgba(0, 0, 0, 0.4);
+  position: absolute;
+  pointer-events: none;
+  transition: transform 0.05s ease-out;
+}
+
+.joystick-hint {
+  margin-top: 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: rgba(255, 255, 255, 0.75);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* Roblox Action Circles Cluster on Bottom Right */
+.roblox-action-cluster {
+  position: absolute;
+  bottom: 24px;
+  right: 24px;
+  z-index: 25;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.action-circle {
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  border: none;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.4);
+  transition: transform 0.1s cubic-bezier(0.2, 0, 0, 1), filter 0.15s ease;
+}
+
+.action-circle:active {
+  transform: scale(0.90) !important;
+}
+
+/* Big Jump Button */
+.circle-jump {
+  width: 78px;
+  height: 78px;
+  background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%);
+  border: 3px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 8px 28px rgba(2, 132, 199, 0.5), inset 0 0 12px rgba(255, 255, 255, 0.3);
+}
+
+.circle-jump .circle-icon-wrap {
+  font-size: 2rem;
+}
+
+.circle-jump .circle-label {
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  margin-top: -3px;
+}
+
+/* Power 1 Circle */
+.circle-power1 {
+  width: 66px;
+  height: 66px;
+  background: linear-gradient(135deg, #9333ea 0%, #c084fc 100%);
+  border: 2.5px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 8px 24px rgba(147, 51, 234, 0.45);
+}
+
+.circle-power1 .circle-icon-wrap {
+  font-size: 1.65rem;
+}
+
+.circle-power1 .circle-label {
+  font-size: 0.58rem;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  max-width: 58px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Power 2 Circle */
+.circle-power2 {
+  width: 66px;
+  height: 66px;
+  background: linear-gradient(135deg, #059669 0%, #34d399 100%);
+  border: 2.5px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 8px 24px rgba(5, 150, 105, 0.45);
+}
+
+.circle-power2 .circle-icon-wrap {
+  font-size: 1.65rem;
+}
+
+.circle-power2 .circle-label {
+  font-size: 0.58rem;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+  max-width: 58px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.circle-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: rgba(15, 8, 25, 0.85);
+  border: 1.5px solid rgba(255, 255, 255, 0.5);
+  border-radius: 10px;
+  font-size: 0.58rem;
+  font-weight: 900;
+  padding: 1px 5px;
+  color: #ffde59;
+}
+
+.circle-cooldown-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  font-weight: 900;
+  color: #fff;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.circle-cooldown-overlay.active {
+  opacity: 1;
+}
+
+/* Adjust bottom bar spacing */
+.bottom-bar {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: auto;
+  max-width: 90%;
+  z-index: 20;
+}
