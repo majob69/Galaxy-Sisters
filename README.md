@@ -38,6 +38,14 @@ Ein farbenfrohes 3D-Action-Adventure / Platformer im Kawaii-Anime-Stil, direkt i
 | **Schwester wechseln** | `1`, `2`, `3`, `4` oder `Q` oder Klick in der Leiste |
 | **Kamera drehen / zoomen** | Maus gedrückt halten & ziehen / Mausrad |
 
+* **Grafik-Upgrade „Himmelsgebirge“:**
+  * 🏔️ **Echte Bergketten:** Rausch-generierte Grate mit Almwiesen, Felsen und Schneegipfeln, dahinter ferne Bergsilhouetten über einem **Wolkenmeer**.
+  * 💧 **Wasserfall, Fluss & Teich:** Der Fluss entspringt einer leuchtenden Kristallquelle, stürzt über eine Klippe (mit Gischt und Regenbogen), fließt durch den Koi-Teich bis zum Südsee.
+  * 🏊 **Schwimmen:** Tiefes Wasser ist schwimmbar (langsamer, Kopf über Wasser); mit `Leertaste` springst du wieder heraus. Flaches Wasser bremst beim Waten.
+  * 🌉 **Vier Brücken:** Rote Mondbrücke mit Laternen (Teich), römische Steinbrücke mit Blume des Lebens (Tempel ↔ Dorf), Hängebrücke über der Wasserfall-Schlucht und schwebende Kristall-Sternenbrücke (Weg zum Obby).
+  * ✨ **Anime-Look:** Cel-Shading, Farbverlauf-Himmel mit Sonne, Bloom-Leuchten (Laternen, Kristalle, Wasserglitzern).
+  * 🔋 **Grafik-Schalter:** Button „Grafik: Hoch/Niedrig“ im Quest-Panel (Niedrig = ohne Bloom, für Handy/Tablet).
+
 ---
 
 ## 🚀 Spiel starten
