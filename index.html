@@ -3,8 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Galaxy Sisters - 3D Kawaii Adventure</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=3.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700;800&display=swap" rel="stylesheet">
@@ -79,20 +82,46 @@
         <div class="quest-item">🏔️ <b>Obby:</b> Klettere über schwebende Felsen</div>
         <div class="quest-item">🛖 <b>Dorf & Tempel:</b> Erkunde die Wiese & Schrein</div>
         <div class="quest-item">👾 <b>Bosskampf:</b> Besiege Vortox in der Arena!</div>
-        <div style="margin-top: 8px; display: flex; gap: 8px;">
+        <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
           <button class="sister-btn clickable" id="btn-boss2" style="font-size:0.75rem; padding: 4px 10px;">🦋 Boss 2 Info</button>
           <button class="sister-btn clickable" id="btn-sound" style="font-size:0.75rem; padding: 4px 10px;">🔊 Audio: An</button>
+          <button class="sister-btn clickable" id="btn-toggle-help" style="font-size:0.75rem; padding: 4px 10px;">⌨️ Steuerung</button>
+        </div>
+
+        <!-- Controls Popup directly underneath Quest Panel -->
+        <div id="controls-popup" class="controls-popup">
+          <div class="controls-popup-header">
+            <span class="controls-popup-title">⌨️ Tastatur-Steuerung</span>
+            <button id="btn-close-controls" class="btn-ctrl-close clickable" type="button" title="Schließen">✕</button>
+          </div>
+          <div class="controls-popup-grid">
+            <div class="ctrl-row">
+              <span class="ctrl-keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span>
+              <span class="ctrl-desc">Laufen</span>
+            </div>
+            <div class="ctrl-row">
+              <span class="ctrl-keys"><kbd>Space</kbd></span>
+              <span class="ctrl-desc">Springen</span>
+            </div>
+            <div class="ctrl-row">
+              <span class="ctrl-keys"><kbd>E</kbd></span>
+              <span class="ctrl-desc">Kraft 1 (Schild / Pfeil / Nova / Ring)</span>
+            </div>
+            <div class="ctrl-row">
+              <span class="ctrl-keys"><kbd>R</kbd></span>
+              <span class="ctrl-desc">Kraft 2 (Heil / Dash / Stein / Tarn)</span>
+            </div>
+            <div class="ctrl-row">
+              <span class="ctrl-keys"><kbd>1</kbd>–<kbd>4</kbd> / <kbd>Q</kbd></span>
+              <span class="ctrl-desc">Schwester wechseln</span>
+            </div>
+            <div class="ctrl-row">
+              <span class="ctrl-keys"><kbd>Maus</kbd></span>
+              <span class="ctrl-desc">Kamera drehen & Zoom</span>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-
-    <!-- Center Screen Instructions (Subtle) -->
-    <div class="instructions-overlay">
-      <span>🕹️ <b>Roblox Touch-Feld</b> oder <b>WASD</b> zum Laufen</span>
-      <span>•</span>
-      <span>🦘 <b>Sprung-Taste</b> oder <b>Space</b></span>
-      <span>•</span>
-      <span>✨ <b>Power-Kreise</b> oder <b>E / R</b></span>
     </div>
 
     <!-- Roblox On-Screen Touch Controls (Works on Mobile & Desktop Mouse) -->
@@ -170,6 +199,6 @@
   </div>
 
   <!-- Main Game Script -->
-  <script type="module" src="src/main.js"></script>
+  <script type="module" src="src/main.js?v=3.0"></script>
 </body>
 </html>

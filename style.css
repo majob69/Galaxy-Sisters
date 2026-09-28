@@ -127,6 +127,7 @@ body, html {
 
 /* Quest / Info Box */
 .quest-panel {
+  position: relative;
   background: rgba(20, 15, 40, 0.7);
   backdrop-filter: blur(10px);
   border: 2px solid rgba(168, 126, 255, 0.4);
@@ -304,16 +305,134 @@ body, html {
   font-weight: 900;
 }
 
-/* Tooltip / Instructions overlay */
-.instructions-overlay {
-  background: rgba(0, 0, 0, 0.4);
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  color: #dfd7fa;
+/* Keyboard Controls Popup Dialog (Docked under Quest Panel) */
+.controls-popup {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  background: rgba(14, 10, 30, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 2px solid rgba(255, 224, 102, 0.55);
+  border-radius: 18px;
+  padding: 14px 16px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 25px rgba(255, 224, 102, 0.2);
+  z-index: 100;
   display: flex;
-  gap: 16px;
-  backdrop-filter: blur(6px);
+  flex-direction: column;
+  gap: 10px;
+  transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.25s;
+  opacity: 1;
+  transform: translateY(0);
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.controls-popup.hidden {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.97);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.controls-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  padding-bottom: 8px;
+}
+
+.controls-popup-title {
+  font-weight: 800;
+  color: #ffe066;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-shadow: 0 0 10px rgba(255, 224, 102, 0.4);
+}
+
+.btn-ctrl-close {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 800;
+  transition: all 0.2s ease;
+}
+
+.btn-ctrl-close:hover {
+  background: rgba(255, 77, 109, 0.85);
+  border-color: #ff4d6d;
+  transform: scale(1.15);
+}
+
+.controls-popup-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ctrl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ctrl-row:last-child {
+  border-bottom: none;
+}
+
+.ctrl-keys {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.ctrl-keys kbd {
+  background: linear-gradient(180deg, #382f55 0%, #1e1732 100%);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-bottom: 2.5px solid rgba(0, 0, 0, 0.7);
+  border-radius: 6px;
+  padding: 2px 7px;
+  font-family: inherit;
+  font-weight: 800;
+  font-size: 0.78rem;
+  color: #ffd166;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  display: inline-block;
+  line-height: 1.25;
+}
+
+.ctrl-desc {
+  font-size: 0.82rem;
+  color: #e5d7ff;
+  font-weight: 600;
+  text-align: right;
+}
+
+@media (max-width: 600px) {
+  .controls-popup {
+    width: 290px;
+    padding: 10px 12px;
+  }
+  .ctrl-desc {
+    font-size: 0.76rem;
+  }
 }
 
 /* Modal for Game Info / Boss 2 preview */

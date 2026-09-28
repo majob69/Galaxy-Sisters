@@ -220,7 +220,7 @@ const SISTERS = [
     }
   },
   {
-    name: "Sol", // renamed from Solana
+    name: "Sol",
     title: "Sonnen-Kämpferin (Supernova & Versteinerung)",
     icon: "☀️",
     themeColor: 0xff7b00,
@@ -242,7 +242,7 @@ const SISTERS = [
     }
   },
   {
-    name: "Planeta", // renamed from Saturna
+    name: "Planeta",
     title: "Planeten-Mystikerin (Gravitations-Ringe & Unsichtbarkeit)",
     icon: "🪐",
     themeColor: 0x9d4edd,
@@ -278,16 +278,20 @@ class GalaxySistersGame {
     this.isPlayerInvisible = false;
     this.invisibleTimer = 0;
     
-    // Movement & Physics
+    // Physics, Clock & Responsiveness
+    this.clock = new THREE.Clock();
     this.keys = {};
     this.playerVelY = 0;
     this.isGrounded = false;
+    this.coyoteTimer = 0;
+    this.jumpBufferTimer = 0;
     this.projectiles = [];
     this.particles = [];
-    this.treePetals = [];
+    this.treePetalsData = [];
     this.treeCanopies = [];
     this.runningParticles = [];
-    this.grassBlades = [];
+    this.clouds = [];
+    this.waterMesh = null;
     this.bees = [];
     this.butterflies = [];
     this.lavenderStems = [];
@@ -299,7 +303,9 @@ class GalaxySistersGame {
     this.slimes = [];
     this.creatures = [];
     this.prevPlayerPos = null;
+    this.mountainsData = [];
     
+    this.initMountainsData();
     this.initScene();
     this.buildWorld();
     this.createPlayerMesh();
@@ -310,75 +316,215 @@ class GalaxySistersGame {
     this.animate();
   }
 
+  // ==========================================
+  // 3.0 MOUNTAINS GEOMETRY DATA
+  // Deterministic mountain peaks allowing seamless climbing and matching visuals
+  // ==========================================
+  initMountainsData() {
+    this.mountainsData = [];
+    const mountainColors = [0x5f749d, 0x6e81a8, 0x7c90b6, 0x8fa4c8];
+    for (let i = 0; i < 18; i++) {
+      const angle = (i / 18) * Math.PI * 2;
+      const pRand1 = ((i * 137.5) % 100) / 100;
+      const pRand2 = ((i * 241.7 + 37) % 100) / 100;
+      const pRand3 = ((i * 389.1 + 83) % 100) / 100;
+
+      const dist = 68 + pRand1 * 16;
+      const height = 30 + pRand2 * 22;
+      const radius = 17 + pRand3 * 8;
+      const mx = Math.cos(angle) * dist;
+      const mz = Math.sin(angle) * dist;
+      const color = mountainColors[i % mountainColors.length];
+
+      // Foothills elevation at center
+      const baseY = this.getBaseTerrainHeight(mx, mz);
+      this.mountainsData.push({ mx, mz, radius, height, color, baseY });
+    }
+  }
+
+  // ==========================================
+  // 3.1 BASE TERRAIN ELEVATION (Without mountain cones)
+  // Ensures precise physics, grounded flora, and smooth rolling hills
+  // ==========================================
+  getBaseTerrainHeight(x, z) {
+    const dist = Math.hypot(x, z);
+
+    // 1. Surrounding mountain foothills rising naturally towards boundary
+    let outerMountains = 0;
+    if (dist > 46) {
+      const ramp = (dist - 46) * 0.36;
+      outerMountains = Math.pow(ramp, 1.48);
+    }
+
+    // 2. Rolling organic meadow hills
+    const hill = Math.sin(x * 0.075) * Math.cos(z * 0.075) * 0.85 + Math.sin(x * 0.032 + z * 0.038) * 0.45;
+
+    // 3. Flat masks for architectural and interactive zones
+    // A. Center Spawn
+    const dSpawn = Math.hypot(x, z - 8);
+    const spawnMask = Math.min(1, Math.max(0, (dSpawn - 4.5) / 5.0));
+
+    // B. Celestial Temple [11, 33] x [-35, 1]
+    const dxTemple = Math.max(0, Math.abs(x - 22) - 11.5);
+    const dzTemple = Math.max(0, Math.abs(z - (-18)) - 17.5);
+    const dTemple = Math.hypot(dxTemple, dzTemple);
+    const templeMask = Math.min(1, Math.max(0, dTemple / 5.5));
+
+    // C. Village Hut [-18, -10] x [-12, -4]
+    const dxHut = Math.max(0, Math.abs(x - (-14)) - 4.5);
+    const dzHut = Math.max(0, Math.abs(z - (-8)) - 4.5);
+    const dHut = Math.hypot(dxHut, dzHut);
+    const hutMask = Math.min(1, Math.max(0, dHut / 5.0));
+
+    // D. Boss Arena (32, 30)
+    const dBoss = Math.hypot(x - 32, z - 30);
+    const bossMask = Math.min(1, Math.max(0, (dBoss - 16.5) / 6.0));
+
+    // E. Obby Parkour Start (-25, 15)
+    const dxObby = Math.max(0, Math.abs(x - (-25)) - 4.5);
+    const dzObby = Math.max(0, Math.abs(z - 1.5) - 16.5);
+    const dObby = Math.hypot(dxObby, dzObby);
+    const obbyMask = Math.min(1, Math.max(0, dObby / 5.0));
+
+    // F. Enchanted Crystal Pond Basin depression at (-4.5, 0.5)
+    const dPond = Math.hypot(x - (-4.5), z - 0.5);
+    let pondDepression = 0;
+    if (dPond < 5.8) {
+      pondDepression = Math.cos((dPond / 5.8) * (Math.PI / 2)) * -0.72;
+    }
+
+    const flatFactor = Math.min(spawnMask, templeMask, hutMask, bossMask, obbyMask);
+    return (hill * flatFactor) + pondDepression + outerMountains;
+  }
+
+  // ==========================================
+  // 3.2 FULL TERRAIN ELEVATION MODEL
+  // Includes mountain cone slopes so player walks up the peaks
+  // ==========================================
+  getTerrainHeight(x, z, includeMountains = true) {
+    let baseH = this.getBaseTerrainHeight(x, z);
+
+    if (includeMountains && this.mountainsData && this.mountainsData.length > 0) {
+      const dist = Math.hypot(x, z);
+      if (dist > 45) {
+        for (let i = 0; i < this.mountainsData.length; i++) {
+          const m = this.mountainsData[i];
+          const dm = Math.hypot(x - m.mx, z - m.mz);
+          if (dm < m.radius) {
+            // Cone surface slope: base is at m.baseY - 2, peak at m.baseY - 2 + m.height
+            const coneH = (m.baseY - 2) + (1 - dm / m.radius) * m.height;
+            if (coneH > baseH) {
+              baseH = coneH;
+            }
+          }
+        }
+      }
+    }
+
+    return baseH;
+  }
+
   initScene() {
     const container = document.getElementById('canvas-container');
     
-    // Scene
+    // Scene with soft pastel atmosphere
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xdce7fe);
-    this.scene.fog = new THREE.FogExp2(0xdce7fe, 0.012);
+    this.scene.background = new THREE.Color(0xdbeafe);
+    this.scene.fog = new THREE.FogExp2(0xdbeafe, 0.010);
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
     this.camera.position.set(0, 8, 14);
 
-    // Renderer
+    // Renderer (Optimized pixelRatio & PCF soft shadows)
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
 
-    // Orbit Controls for smooth camera orbit/inspection
+    // Orbit Controls
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.05;
-    this.controls.maxPolarAngle = Math.PI / 2 - 0.05; // don't go below ground
-    this.controls.minDistance = 5;
-    this.controls.maxDistance = 28;
+    this.controls.dampingFactor = 0.06;
+    this.controls.maxPolarAngle = Math.PI / 2 - 0.05;
+    this.controls.minDistance = 4.5;
+    this.controls.maxDistance = 30;
 
-    // Lighting (Warm Anime Fantasy lighting)
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x7687a4, 0.8);
+    // Warm Anime Fantasy Lighting
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0x7289da, 0.85);
     this.scene.add(hemiLight);
 
-    const dirLight = new THREE.DirectionalLight(0xfffaed, 1.3);
-    dirLight.position.set(40, 60, 30);
+    const dirLight = new THREE.DirectionalLight(0xfffaed, 1.35);
+    dirLight.position.set(45, 65, 35);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.width = 2048;
     dirLight.shadow.mapSize.height = 2048;
     dirLight.shadow.camera.near = 0.5;
-    dirLight.shadow.camera.far = 200;
-    const d = 50;
+    dirLight.shadow.camera.far = 220;
+    const d = 55;
     dirLight.shadow.camera.left = -d;
     dirLight.shadow.camera.right = d;
     dirLight.shadow.camera.top = d;
     dirLight.shadow.camera.bottom = -d;
+    dirLight.shadow.bias = -0.0004;
     this.scene.add(dirLight);
 
-    // Celestial Sky objects (Floating pastel stars and cute moon in sky)
+    // Sky & Clouds
     this.createSkyDecorations();
   }
 
   createSkyDecorations() {
-    // Distant stylized cute moon
-    const moonGeo = new THREE.SphereGeometry(6, 16, 16);
-    const moonMat = new THREE.MeshBasicMaterial({ color: 0xfff9db });
+    // Stylized Anime Moon
+    const moonGeo = new THREE.SphereGeometry(6.5, 18, 18);
+    const moonMat = new THREE.MeshBasicMaterial({ color: 0xfffbe6 });
     const moon = new THREE.Mesh(moonGeo, moonMat);
-    moon.position.set(-60, 50, -90);
+    moon.position.set(-65, 52, -95);
     this.scene.add(moon);
 
-    // Floating sky stars
+    // Floating Golden Celestial Stars
     const starGeo = new THREE.OctahedronGeometry(1.2, 0);
     const starMat = new THREE.MeshBasicMaterial({ color: 0xffd166 });
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 28; i++) {
       const star = new THREE.Mesh(starGeo, starMat);
       star.position.set(
-        (Math.random() - 0.5) * 180,
-        25 + Math.random() * 30,
-        (Math.random() - 0.5) * 180
+        (Math.random() - 0.5) * 190,
+        24 + Math.random() * 32,
+        (Math.random() - 0.5) * 190
       );
       this.scene.add(star);
+    }
+
+    // Fluffy 3D Anime Clouds slowly drifting across the sky
+    this.clouds = [];
+    const cloudMat = new THREE.MeshLambertMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.88,
+      flatShading: true
+    });
+
+    for (let c = 0; c < 12; c++) {
+      const cloudGroup = new THREE.Group();
+      const puffCount = 5 + Math.floor(Math.random() * 3);
+      for (let p = 0; p < puffCount; p++) {
+        const radius = 2.4 + Math.random() * 2.2;
+        const puff = new THREE.Mesh(new THREE.DodecahedronGeometry(radius, 1), cloudMat);
+        puff.position.set(
+          (p - puffCount / 2) * 2.2 + (Math.random() - 0.5) * 1.0,
+          (Math.random() - 0.5) * 0.8,
+          (Math.random() - 0.5) * 2.0
+        );
+        cloudGroup.add(puff);
+      }
+      const cx = (Math.random() - 0.5) * 200;
+      const cy = 34 + Math.random() * 18;
+      const cz = (Math.random() - 0.5) * 200;
+      cloudGroup.position.set(cx, cy, cz);
+      cloudGroup.userData = { driftSpeed: 0.012 + Math.random() * 0.018 };
+      this.scene.add(cloudGroup);
+      this.clouds.push(cloudGroup);
     }
   }
 
@@ -397,16 +543,26 @@ class GalaxySistersGame {
     ctx.fillRect(0, 0, 512, 512);
 
     // Multi-toned grass blade strokes & clover speckles
-    for (let i = 0; i < 2400; i++) {
+    for (let i = 0; i < 2600; i++) {
       const gx = Math.random() * 512;
       const gy = Math.random() * 512;
       const bladeCol = Math.random() > 0.5 ? '#7fde64' : (Math.random() > 0.5 ? '#438034' : '#92e970');
       ctx.strokeStyle = bladeCol;
-      ctx.lineWidth = 1 + Math.random() * 2;
+      ctx.lineWidth = 1 + Math.random() * 2.2;
       ctx.beginPath();
       ctx.moveTo(gx, gy);
       ctx.lineTo(gx + (Math.random() - 0.5) * 8, gy - 6 - Math.random() * 8);
       ctx.stroke();
+    }
+
+    // Subtle clover and flower dots
+    for (let i = 0; i < 120; i++) {
+      const cx = Math.random() * 512;
+      const cy = Math.random() * 512;
+      ctx.fillStyle = Math.random() > 0.5 ? '#ffb3c6' : '#fff3bf';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 1.8, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     const tex = new THREE.CanvasTexture(canvas);
@@ -416,74 +572,20 @@ class GalaxySistersGame {
     return tex;
   }
 
-  buildGrassBlades() {
-    this.grassBlades = [];
-    const bladeGeo = new THREE.PlaneGeometry(0.48, 0.7);
-    const bladeMats = [
-      new THREE.MeshLambertMaterial({ color: 0x5ebd4c, side: THREE.DoubleSide }),
-      new THREE.MeshLambertMaterial({ color: 0x73d360, side: THREE.DoubleSide }),
-      new THREE.MeshLambertMaterial({ color: 0x479e39, side: THREE.DoubleSide }),
-      new THREE.MeshLambertMaterial({ color: 0x82e066, side: THREE.DoubleSide }),
-      new THREE.MeshLambertMaterial({ color: 0x3d8c2e, side: THREE.DoubleSide })
-    ];
-
-    for (let i = 0; i < 950; i++) {
-      const x = (Math.random() - 0.5) * 110;
-      const z = (Math.random() - 0.5) * 110;
-      if (Math.abs(x) < 5 && Math.abs(z) < 5) continue;
-      if (x > 14 && z > 14) continue; // avoid boss center
-      // avoid temple podium footprint, stairs and perimeter walls
-      if (x >= 11 && x <= 33 && z >= -35 && z <= 0.5) continue;
-      // avoid village hut
-      if (x >= -18 && x <= -10 && z >= -12 && z <= -4) continue;
-
-      const tuft = new THREE.Group();
-      const mat = bladeMats[i % bladeMats.length];
-      const scaleY = 0.75 + Math.random() * 0.55;
-
-      // Cross planes for lush 3D grass tuft
-      const p1 = new THREE.Mesh(bladeGeo, mat);
-      p1.scale.y = scaleY;
-      p1.position.y = 0.35 * scaleY;
-      tuft.add(p1);
-
-      const p2 = new THREE.Mesh(bladeGeo, mat);
-      p2.scale.y = scaleY;
-      p2.position.y = 0.35 * scaleY;
-      p2.rotation.y = Math.PI / 2;
-      tuft.add(p2);
-
-      const p3 = new THREE.Mesh(bladeGeo, mat);
-      p3.scale.y = scaleY;
-      p3.position.y = 0.35 * scaleY;
-      p3.rotation.y = Math.PI / 4;
-      tuft.add(p3);
-
-      tuft.position.set(x, 0, z);
-      tuft.userData = { swayOffset: Math.random() * 10, swaySpeed: 0.8 + Math.random() * 0.5 };
-      this.scene.add(tuft);
-      this.grassBlades.push(tuft);
-    }
-  }
-
   // ==========================================
-  // 4. WORLD GENERATION (Meadow, Mountains, Temple, Obby)
+  // 4. WORLD GENERATION
   // ==========================================
   buildWorld() {
-    // 4.1 Ground Meadow with realistic texture
-    const groundGeo = new THREE.PlaneGeometry(160, 160, 64, 64);
-    // Add subtle wave to terrain
+    // 4.1 Ground Terrain Mesh with continuous analytical height
+    const groundGeo = new THREE.PlaneGeometry(210, 210, 140, 140);
     const pos = groundGeo.attributes.position;
     for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const y = pos.getY(i);
-      const distFromCenter = Math.sqrt(x * x + y * y);
-      let z = Math.sin(x * 0.1) * Math.cos(y * 0.1) * 0.8;
-      // Make mountains higher at edges
-      if (distFromCenter > 45) {
-        z += Math.pow((distFromCenter - 45) * 0.45, 1.4);
-      }
-      pos.setZ(i, z);
+      const localX = pos.getX(i);
+      const localY = pos.getY(i);
+      const worldX = localX;
+      const worldZ = -localY;
+      const worldY = this.getTerrainHeight(worldX, worldZ, false);
+      pos.setZ(i, worldY);
     }
     groundGeo.computeVertexNormals();
 
@@ -494,63 +596,264 @@ class GalaxySistersGame {
     this.groundMesh = new THREE.Mesh(groundGeo, groundMat);
     this.groundMesh.rotation.x = -Math.PI / 2;
     this.groundMesh.receiveShadow = true;
+    this.groundMesh.matrixAutoUpdate = false;
+    this.groundMesh.updateMatrix();
     this.scene.add(this.groundMesh);
 
-    // 4.2 Distant Mountain Peaks (Gebirge)
+    // 4.2 Distant Mountain Peaks
     this.buildMountains();
 
-    // 4.3 Cute Trees & Bushes & Flowers
+    // 4.3 Enchanted Crystal Pond & Water Lilies
+    this.buildCrystalPond();
+
+    // 4.4 Winding Cobblestone Pathways
+    this.buildStonePaths();
+
+    // 4.5 Enchanted Giant Trees & Foliage
     this.buildFoliage();
 
-    // 4.3b Visible 3D Grass Blades swaying in wind
-    this.buildGrassBlades();
+    // 4.6 Instanced 3D Grass Blades (GPU-Instanced, zero CPU sway cost!)
+    this.buildInstancedGrass();
 
-    // 4.4 Cozy Wooden Hut (Hütte)
+    // 4.7 Instanced Wildflowers
+    this.buildInstancedFlowers();
+
+    // 4.8 Bioluminescent Magic Mushrooms & Crystals
+    this.buildMushroomsAndCrystals();
+
+    // 4.9 Cozy Wooden Village Hut with Picket Fence & Lantern
     this.buildVillageHut(new THREE.Vector3(-14, 0, -8));
 
-    // 4.5 Celestial Ancient Temple (Versteckter Tempel)
+    // 4.10 Celestial Ancient Temple
     this.buildCelestialTemple(new THREE.Vector3(22, 0, -20));
 
-    // 4.6 Obby (Floating Jumping Platforms leading to high Star Altar)
+    // 4.11 Obby (Stepping Stones Altar)
     this.buildObbyParkour(new THREE.Vector3(-25, 0, 15));
 
-    // 4.7 Cute Creature NPCs (Starlets)
+    // 4.12 Cute Starlet NPCs
     this.spawnCuteCreatures();
 
-    // 4.8 Minor Slime Enemies (Bösewichte)
+    // 4.13 Minor Slimes
     this.spawnMinorSlimes();
 
-    // 4.9 20 winzige Bienen & 25 Schmetterlinge
-    this.spawnBees(20);
-    this.spawnButterflies(25);
+    // 4.14 Bees & Butterflies
+    this.spawnBees(22);
+    this.spawnButterflies(26);
   }
 
   buildMountains() {
-    const mountainColors = [0x5f749d, 0x7688ad, 0x8ea2c4];
-    for (let i = 0; i < 14; i++) {
-      const angle = (i / 14) * Math.PI * 2;
-      const dist = 65 + Math.random() * 15;
-      const height = 28 + Math.random() * 20;
-      const radius = 14 + Math.random() * 8;
-
-      const mntGeo = new THREE.ConeGeometry(radius, height, 6);
+    if (!this.mountainsData || this.mountainsData.length === 0) return;
+    for (let i = 0; i < this.mountainsData.length; i++) {
+      const m = this.mountainsData[i];
+      const mntGeo = new THREE.ConeGeometry(m.radius, m.height, 7);
       const mntMat = new THREE.MeshLambertMaterial({ 
-        color: mountainColors[i % mountainColors.length], 
+        color: m.color, 
         flatShading: true 
       });
       const mnt = new THREE.Mesh(mntGeo, mntMat);
-      mnt.position.set(Math.cos(angle) * dist, height / 2 - 2, Math.sin(angle) * dist);
+      mnt.position.set(m.mx, m.baseY + m.height / 2 - 2, m.mz);
       mnt.castShadow = true;
       mnt.receiveShadow = true;
+      mnt.matrixAutoUpdate = false;
+      mnt.updateMatrix();
       this.scene.add(mnt);
 
-      // Snow cap
-      const snowGeo = new THREE.ConeGeometry(radius * 0.38, height * 0.35, 6);
+      // Glistening Snow Cap
+      const snowGeo = new THREE.ConeGeometry(m.radius * 0.38, m.height * 0.34, 7);
       const snowMat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
       const snow = new THREE.Mesh(snowGeo, snowMat);
-      snow.position.set(mnt.position.x, mnt.position.y + height * 0.33, mnt.position.z);
+      snow.position.set(mnt.position.x, mnt.position.y + m.height * 0.33, mnt.position.z);
+      snow.matrixAutoUpdate = false;
+      snow.updateMatrix();
       this.scene.add(snow);
     }
+  }
+
+  // ==========================================
+  // 4.3 ENCHANTED CRYSTAL POND & WATER LILIES
+  // ==========================================
+  buildCrystalPond() {
+    const pondCenter = new THREE.Vector3(-4.5, -0.15, 0.5);
+    const pondRadius = 5.5;
+
+    // Translucent shimmering water surface
+    const waterGeo = new THREE.CircleGeometry(pondRadius, 36);
+    const waterMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      roughness: 0.12,
+      metalness: 0.15,
+      transparent: true,
+      opacity: 0.78,
+      side: THREE.DoubleSide
+    });
+    this.waterMesh = new THREE.Mesh(waterGeo, waterMat);
+    this.waterMesh.rotation.x = -Math.PI / 2;
+    this.waterMesh.position.set(pondCenter.x, pondCenter.y, pondCenter.z);
+    this.waterMesh.receiveShadow = true;
+    this.scene.add(this.waterMesh);
+
+    // Glowing subtle water edge foam ring
+    const foamRingGeo = new THREE.RingGeometry(pondRadius - 0.25, pondRadius + 0.15, 36);
+    const foamMat = new THREE.MeshBasicMaterial({
+      color: 0xdcfce7,
+      transparent: true,
+      opacity: 0.45,
+      side: THREE.DoubleSide
+    });
+    const foamRing = new THREE.Mesh(foamRingGeo, foamMat);
+    foamRing.rotation.x = -Math.PI / 2;
+    foamRing.position.set(pondCenter.x, pondCenter.y + 0.01, pondCenter.z);
+    this.scene.add(foamRing);
+
+    // Stepping Stones across the pond so players can hop across!
+    const stoneMat = new THREE.MeshLambertMaterial({ color: 0xa8b2d1, flatShading: true });
+    const stoneOffsets = [
+      { x: -3.0, z: -2.2, r: 0.8 },
+      { x: -4.2, z: -0.8, r: 0.85 },
+      { x: -4.8, z: 0.8, r: 0.9 },
+      { x: -5.4, z: 2.2, r: 0.78 }
+    ];
+    stoneOffsets.forEach(st => {
+      const sMesh = new THREE.Mesh(new THREE.CylinderGeometry(st.r, st.r * 1.1, 0.45, 8), stoneMat);
+      sMesh.position.set(st.x, pondCenter.y + 0.18, st.z);
+      sMesh.castShadow = true;
+      sMesh.receiveShadow = true;
+      this.scene.add(sMesh);
+
+      this.platforms.push({
+        type: 'cylinder',
+        x: st.x,
+        z: st.z,
+        radius: st.r,
+        topY: pondCenter.y + 0.4
+      });
+    });
+
+    // Floating Lotus Lilies on the pond
+    const padMat = new THREE.MeshLambertMaterial({ color: 0x2d6a4f, side: THREE.DoubleSide });
+    const flowerPinkMat = new THREE.MeshLambertMaterial({ color: 0xff70a6 });
+    const lotusCenterMat = new THREE.MeshBasicMaterial({ color: 0xffd166 });
+
+    const lilyPositions = [
+      { x: -2.2, z: 1.5 },
+      { x: -6.0, z: -1.2 },
+      { x: -3.8, z: 2.8 },
+      { x: -6.5, z: 1.0 },
+      { x: -2.6, z: -0.6 }
+    ];
+
+    lilyPositions.forEach(lp => {
+      const lilyGroup = new THREE.Group();
+      lilyGroup.position.set(lp.x, pondCenter.y + 0.02, lp.z);
+
+      // Lotus Leaf Pad
+      const pad = new THREE.Mesh(new THREE.CircleGeometry(0.55, 12, 0, Math.PI * 1.8), padMat);
+      pad.rotation.x = -Math.PI / 2;
+      pad.rotation.z = Math.random() * Math.PI;
+      lilyGroup.add(pad);
+
+      // Pink Blossom
+      const petalGeo = new THREE.ConeGeometry(0.12, 0.28, 5);
+      for (let p = 0; p < 7; p++) {
+        const ang = (p / 7) * Math.PI * 2;
+        const petal = new THREE.Mesh(petalGeo, flowerPinkMat);
+        petal.position.set(Math.cos(ang) * 0.16, 0.12, Math.sin(ang) * 0.16);
+        petal.rotation.x = Math.sin(ang) * 0.35;
+        petal.rotation.z = -Math.cos(ang) * 0.35;
+        lilyGroup.add(petal);
+      }
+
+      // Golden Center
+      const center = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 6), lotusCenterMat);
+      center.position.y = 0.14;
+      lilyGroup.add(center);
+
+      this.scene.add(lilyGroup);
+    });
+
+    // River Reeds along pond edge
+    const reedMat = new THREE.MeshLambertMaterial({ color: 0x40916c });
+    const tipMat = new THREE.MeshLambertMaterial({ color: 0x582f0e });
+    for (let r = 0; r < 24; r++) {
+      const ang = (r / 24) * Math.PI * 2;
+      const rx = pondCenter.x + Math.cos(ang) * (pondRadius + 0.3 + Math.random() * 0.5);
+      const rz = pondCenter.z + Math.sin(ang) * (pondRadius + 0.3 + Math.random() * 0.5);
+      const ry = this.getTerrainHeight(rx, rz);
+
+      const reedGroup = new THREE.Group();
+      const rH = 1.2 + Math.random() * 0.6;
+      const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, rH, 4), reedMat);
+      stalk.position.y = rH / 2;
+      reedGroup.add(stalk);
+
+      const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.32, 6), tipMat);
+      tip.position.y = rH * 0.88;
+      reedGroup.add(tip);
+
+      reedGroup.position.set(rx, ry, rz);
+      reedGroup.rotation.y = Math.random() * Math.PI;
+      reedGroup.rotation.z = (Math.random() - 0.5) * 0.15;
+      this.scene.add(reedGroup);
+    }
+  }
+
+  // ==========================================
+  // 4.4 WINDING COBBLESTONE PATHWAYS
+  // ==========================================
+  buildStonePaths() {
+    const stoneMat1 = new THREE.MeshLambertMaterial({ color: 0xd8c8b8, flatShading: true });
+    const stoneMat2 = new THREE.MeshLambertMaterial({ color: 0xbdb0a0, flatShading: true });
+    const stoneMat3 = new THREE.MeshLambertMaterial({ color: 0xc4b4d4, flatShading: true });
+    const pathMats = [stoneMat1, stoneMat2, stoneMat3];
+
+    // Spline-like paths from Spawn (0, 8)
+    const paths = [
+      // Path 1: Spawn -> Village Hut (-14, -8)
+      [
+        { x: 0, z: 8 }, { x: -3, z: 6 }, { x: -6, z: 3 }, { x: -8, z: 0 },
+        { x: -10, z: -3 }, { x: -12, z: -6 }, { x: -14, z: -8 }
+      ],
+      // Path 2: Spawn -> Celestial Temple (22, -20)
+      [
+        { x: 0, z: 8 }, { x: 4, z: 5 }, { x: 8, z: 2 }, { x: 12, z: -3 },
+        { x: 15, z: -8 }, { x: 18, z: -14 }, { x: 22, z: -20 }
+      ],
+      // Path 3: Spawn -> Obby Parkour (-25, 15)
+      [
+        { x: 0, z: 8 }, { x: -5, z: 9 }, { x: -11, z: 11 }, { x: -17, z: 13 },
+        { x: -22, z: 14 }, { x: -25, z: 15 }
+      ],
+      // Path 4: Spawn -> Boss Arena (32, 30)
+      [
+        { x: 0, z: 8 }, { x: 6, z: 12 }, { x: 13, z: 16 }, { x: 20, z: 21 },
+        { x: 26, z: 25 }, { x: 32, z: 30 }
+      ]
+    ];
+
+    paths.forEach(segmentList => {
+      for (let s = 0; s < segmentList.length - 1; s++) {
+        const p1 = segmentList[s];
+        const p2 = segmentList[s + 1];
+        const steps = 7;
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps;
+          const px = p1.x + (p2.x - p1.x) * t + (Math.random() - 0.5) * 0.45;
+          const pz = p1.z + (p2.z - p1.z) * t + (Math.random() - 0.5) * 0.45;
+          const py = this.getTerrainHeight(px, pz);
+
+          const r = 0.45 + Math.random() * 0.35;
+          const stoneGeo = new THREE.CylinderGeometry(r, r * 1.05, 0.08, 6);
+          const mat = pathMats[Math.floor(Math.random() * pathMats.length)];
+          const stone = new THREE.Mesh(stoneGeo, mat);
+          stone.position.set(px, py + 0.04, pz);
+          stone.rotation.y = Math.random() * Math.PI;
+          stone.receiveShadow = true;
+          stone.matrixAutoUpdate = false;
+          stone.updateMatrix();
+          this.scene.add(stone);
+        }
+      }
+    });
   }
 
   createBlackPinkBarkTexture() {
@@ -559,11 +862,9 @@ class GalaxySistersGame {
     canvas.height = 256;
     const ctx = canvas.getContext('2d');
 
-    // Deep black base
     ctx.fillStyle = '#120b16';
     ctx.fillRect(0, 0, 128, 256);
 
-    // Subtle dark vertical bark grain
     for (let i = 0; i < 40; i++) {
       ctx.strokeStyle = i % 2 === 0 ? '#22142d' : '#08050c';
       ctx.lineWidth = 1 + Math.random() * 2.5;
@@ -574,7 +875,6 @@ class GalaxySistersGame {
       ctx.stroke();
     }
 
-    // Stylized vibrant pink bark rings, swirls & highlights
     const pinkTones = ['#ff2a85', '#ff70a6', '#ff4d94', '#ff85a1', '#f72585'];
     for (let y = 15; y < 256; y += 32) {
       const col = pinkTones[Math.floor(Math.random() * pinkTones.length)];
@@ -585,7 +885,6 @@ class GalaxySistersGame {
       ctx.bezierCurveTo(35, y + 14, 85, y - 14, 128, y + 6);
       ctx.stroke();
 
-      // Soft pastel pink inner highlight line
       ctx.strokeStyle = '#ffc2d4';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
@@ -602,7 +901,6 @@ class GalaxySistersGame {
   }
 
   buildFoliage() {
-    // Trees (Enchanted Giant Trees: Black-Pink Trunk & Lush Purple Foliage)
     const barkTexture = this.createBlackPinkBarkTexture();
     const treeTrunkMat = new THREE.MeshLambertMaterial({
       map: barkTexture,
@@ -614,29 +912,26 @@ class GalaxySistersGame {
       flatShading: true
     });
 
-    // Purple / Lila Foliage palette
     const purpleFoliageMats = [
-      new THREE.MeshLambertMaterial({ color: 0x8a2be2, flatShading: true }), // Blueviolet / rich purple
-      new THREE.MeshLambertMaterial({ color: 0x9d4edd, flatShading: true }), // Bright amethyst
-      new THREE.MeshLambertMaterial({ color: 0x7b2cbf, flatShading: true }), // Deep royal purple
-      new THREE.MeshLambertMaterial({ color: 0xa855f7, flatShading: true }), // Vivid violet
-      new THREE.MeshLambertMaterial({ color: 0xb565d8, flatShading: true })  // Soft lilac purple
+      new THREE.MeshLambertMaterial({ color: 0x8a2be2, flatShading: true }),
+      new THREE.MeshLambertMaterial({ color: 0x9d4edd, flatShading: true }),
+      new THREE.MeshLambertMaterial({ color: 0x7b2cbf, flatShading: true }),
+      new THREE.MeshLambertMaterial({ color: 0xa855f7, flatShading: true }),
+      new THREE.MeshLambertMaterial({ color: 0xb565d8, flatShading: true })
     ];
 
     this.treeCanopies = [];
 
-    for (let i = 0; i < 40; i++) {
-      const x = (Math.random() - 0.5) * 85;
-      const z = (Math.random() - 0.5) * 85;
-      // Don't spawn on center spawn, boss arena, temple, or village hut
+    for (let i = 0; i < 42; i++) {
+      const x = (Math.random() - 0.5) * 88;
+      const z = (Math.random() - 0.5) * 88;
       if (Math.abs(x) < 8 && Math.abs(z) < 8) continue;
-      if (x > 15 && z > 15) continue; // boss area
-      if (x >= 10 && x <= 34 && z >= -36 && z <= 2) continue; // Celestial Temple area (no tree in temple)
-      if (x >= -18 && x <= -10 && z >= -12 && z <= -4) continue; // Village hut area
+      if (x > 15 && z > 15) continue; // boss arena
+      if (x >= 10 && x <= 34 && z >= -36 && z <= 2) continue; // Celestial Temple area
+      if (x >= -19 && x <= -9 && z >= -13 && z <= -3) continue; // Village hut area
+      if (Math.hypot(x - (-4.5), z - 0.5) < 7.0) continue; // Pond area
 
       const treeGroup = new THREE.Group();
-
-      // Trunk: significantly bigger (height ~ 5.5 - 7.2)
       const trunkHeight = 5.5 + Math.random() * 1.8;
       const trunkTopRadius = 0.55 + Math.random() * 0.15;
       const trunkBottomRadius = 0.95 + Math.random() * 0.25;
@@ -648,21 +943,19 @@ class GalaxySistersGame {
       trunk.receiveShadow = true;
       treeGroup.add(trunk);
 
-      // Stylized pink accent root ring / collar at bottom
       const rootRingGeo = new THREE.TorusGeometry(trunkBottomRadius * 0.95, 0.16, 6, 12);
       const rootRing = new THREE.Mesh(rootRingGeo, pinkAccentMat);
       rootRing.rotation.x = Math.PI / 2;
       rootRing.position.y = 0.2;
       treeGroup.add(rootRing);
 
-      // Stylized pink accent ring at upper trunk junction
       const collarRingGeo = new THREE.TorusGeometry(trunkTopRadius * 1.05, 0.12, 6, 10);
       const collarRing = new THREE.Mesh(collarRingGeo, pinkAccentMat);
       collarRing.rotation.x = Math.PI / 2;
       collarRing.position.y = trunkHeight * 0.88;
       treeGroup.add(collarRing);
 
-      // Foliage Crown: All Purple (Lila) and much bigger
+      // Lush Purple Crown
       const crownMat = purpleFoliageMats[i % purpleFoliageMats.length];
       const mainCrownRadius = 3.6 + Math.random() * 0.8;
       const crown = new THREE.Mesh(
@@ -674,7 +967,6 @@ class GalaxySistersGame {
       crown.receiveShadow = true;
       treeGroup.add(crown);
 
-      // 2-3 side foliage puffs for voluminous anime silhouette
       const puffCount = 2 + Math.floor(Math.random() * 2);
       for (let p = 0; p < puffCount; p++) {
         const puffMat = purpleFoliageMats[(i + p + 1) % purpleFoliageMats.length];
@@ -691,141 +983,328 @@ class GalaxySistersGame {
         treeGroup.add(puff);
       }
 
-      treeGroup.position.set(x, 0, z);
+      const ty = this.getTerrainHeight(x, z);
+      treeGroup.position.set(x, ty, z);
       this.scene.add(treeGroup);
 
-      // Register tree trunk as solid cylinder collider
       this.colliders.push({
         type: 'cylinder',
         x: x,
         z: z,
-        radius: trunkBottomRadius * 0.9,
-        minY: 0,
-        maxY: trunkHeight
+        radius: trunkBottomRadius * 0.95,
+        minY: ty,
+        maxY: ty + trunkHeight
       });
 
-      // Save canopy location for falling particles
       this.treeCanopies.push({
         x: x,
         z: z,
-        y: trunkHeight + 2.0,
+        y: ty + trunkHeight + 2.0,
         radius: mainCrownRadius + 1.0
       });
     }
 
-    // Small Falling Lila & Rosa Particles
     this.createFallingTreePetals();
+  }
 
-    // Cute Kawaii Flowers - 260+ bunte Blümchen über die gesamte Wiese!
-    const flowerPetalColors = [
-      0xff4d6d, 0xff70a6, 0x3a86ff, 0xa855f7, 0xff99c8, 0x06b6d4,
-      0xffb703, 0xf72585, 0x7209b7, 0x4cc9f0, 0xff5400, 0xffffff,
-      0xe0aaff, 0xff0054, 0x38b000
-    ];
-    const yellowCenterMat = new THREE.MeshLambertMaterial({ color: 0xffe600 });
-    const stemMat = new THREE.MeshLambertMaterial({ color: 0x388e3c });
-    const leafGeo = new THREE.SphereGeometry(0.1, 4, 4);
-    const leafMat = new THREE.MeshLambertMaterial({ color: 0x2d6a4f });
+  // ==========================================
+  // 4.6 HIGH-PERFORMANCE INSTANCED GRASS BLADES
+  // 2,500 blades rendered in 2 draw calls with GPU vertex shader wind!
+  // ==========================================
+  buildInstancedGrass() {
+    const tuftGeo = new THREE.BufferGeometry();
+    const vertices = new Float32Array([
+      -0.24, 0, 0,   0.24, 0, 0,   0.24, 0.75, 0,
+      -0.24, 0, 0,   0.24, 0.75, 0, -0.24, 0.75, 0,
+      0, 0, -0.24,   0, 0, 0.24,   0, 0.75, 0.24,
+      0, 0, -0.24,   0, 0.75, 0.24, 0, 0.75, -0.24
+    ]);
+    const normals = new Float32Array([
+      0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,
+      0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0
+    ]);
+    tuftGeo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    tuftGeo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
 
-    for (let i = 0; i < 260; i++) {
-      const fx = (Math.random() - 0.5) * 105;
-      const fz = (Math.random() - 0.5) * 105;
-      if (Math.abs(fx) < 5 && Math.abs(fz) < 5) continue;
-      if (fx > 15 && fz > 15) continue;
-      // avoid inside temple podium, stairs and perimeter walls
-      if (fx >= 11 && fx <= 33 && fz >= -35 && fz <= 0.5) continue;
-      // avoid village hut
-      if (fx >= -18 && fx <= -10 && fz >= -12 && fz <= -4) continue;
+    const createGrassShaderMat = (colorHex) => {
+      const mat = new THREE.MeshLambertMaterial({
+        color: colorHex,
+        side: THREE.DoubleSide
+      });
+      mat.onBeforeCompile = (shader) => {
+        shader.uniforms.uTime = { value: 0 };
+        mat.userData.shader = shader;
+        shader.vertexShader = 'uniform float uTime;\n' + shader.vertexShader;
+        shader.vertexShader = shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+          float sway = sin(uTime * 2.4 + transformed.y * 3.5 + instanceMatrix[3][0] * 0.4 + instanceMatrix[3][2] * 0.4) * (transformed.y * 0.16);
+          transformed.x += sway;
+          transformed.z += sway * 0.6;
+          `
+        );
+      };
+      return mat;
+    };
 
-      const flowerGroup = new THREE.Group();
+    const countPerBatch = 1250;
+    this.grassMat1 = createGrassShaderMat(0x60c04e);
+    this.grassMat2 = createGrassShaderMat(0x499c3b);
 
-      // Bright yellow center dot (Gelber Punkt in der Mitte)
-      const center = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), yellowCenterMat);
-      center.position.y = 0.24;
-      flowerGroup.add(center);
+    const inst1 = new THREE.InstancedMesh(tuftGeo, this.grassMat1, countPerBatch);
+    const inst2 = new THREE.InstancedMesh(tuftGeo, this.grassMat2, countPerBatch);
+    inst1.receiveShadow = true;
+    inst2.receiveShadow = true;
 
-      // Surrounding colorful petals
-      const petalMat = new THREE.MeshLambertMaterial({ color: flowerPetalColors[i % flowerPetalColors.length] });
-      const petalCount = 5 + (i % 2);
-      for (let p = 0; p < petalCount; p++) {
-        const pAng = (p / petalCount) * Math.PI * 2;
-        const petal = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 6), petalMat);
-        petal.position.set(Math.cos(pAng) * 0.22, 0.20, Math.sin(pAng) * 0.22);
-        petal.scale.set(1.1, 0.6, 1.1);
-        flowerGroup.add(petal);
+    const dummy = new THREE.Object3D();
+    const batches = [inst1, inst2];
+
+    for (let b = 0; b < 2; b++) {
+      const instMesh = batches[b];
+      let placed = 0;
+      let attempts = 0;
+      while (placed < countPerBatch && attempts < 4000) {
+        attempts++;
+        const x = (Math.random() - 0.5) * 115;
+        const z = (Math.random() - 0.5) * 115;
+        if (Math.abs(x) < 4.5 && Math.abs(z) < 4.5) continue;
+        if (x > 14 && z > 14) continue; // boss arena
+        if (x >= 11 && x <= 33 && z >= -35 && z <= 0.5) continue; // temple
+        if (x >= -18 && x <= -10 && z >= -12 && z <= -4) continue; // hut
+        if (Math.hypot(x - (-4.5), z - 0.5) < 5.8) continue; // pond
+
+        const y = this.getTerrainHeight(x, z);
+        const scaleY = 0.75 + Math.random() * 0.55;
+        dummy.position.set(x, y, z);
+        dummy.rotation.y = Math.random() * Math.PI;
+        dummy.scale.set(1.0, scaleY, 1.0);
+        dummy.updateMatrix();
+        instMesh.setMatrixAt(placed, dummy.matrix);
+        placed++;
       }
-
-      // Small green stem
-      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.24, 5), stemMat);
-      stem.position.y = 0.12;
-      flowerGroup.add(stem);
-
-      // Small green leaf
-      const leaf1 = new THREE.Mesh(leafGeo, leafMat);
-      leaf1.scale.set(1.4, 0.2, 0.6);
-      leaf1.position.set(0.13, 0.1, 0);
-      leaf1.rotation.z = 0.3;
-      flowerGroup.add(leaf1);
-
-      flowerGroup.position.set(fx, 0, fz);
-      flowerGroup.rotation.y = Math.random() * Math.PI;
-      this.scene.add(flowerGroup);
+      instMesh.instanceMatrix.needsUpdate = true;
+      this.scene.add(instMesh);
     }
   }
 
+  // ==========================================
+  // 4.7 INSTANCED WILDFLOWERS
+  // 320 vibrant wildflowers rendered in just 3 draw calls!
+  // ==========================================
+  buildInstancedFlowers() {
+    const flowerCount = 320;
+    const stemGeo = new THREE.CylinderGeometry(0.035, 0.035, 0.24, 5);
+    const headGeo = new THREE.SphereGeometry(0.13, 6, 6);
+    const centerGeo = new THREE.SphereGeometry(0.09, 6, 6);
+
+    const stemMat = new THREE.MeshLambertMaterial({ color: 0x388e3c });
+    const petalMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const centerMat = new THREE.MeshLambertMaterial({ color: 0xffe600 });
+
+    const stemInst = new THREE.InstancedMesh(stemGeo, stemMat, flowerCount);
+    const petalInst = new THREE.InstancedMesh(headGeo, petalMat, flowerCount);
+    const centerInst = new THREE.InstancedMesh(centerGeo, centerMat, flowerCount);
+
+    const flowerPetalColors = [
+      new THREE.Color(0xff4d6d), new THREE.Color(0xff70a6), new THREE.Color(0x3a86ff),
+      new THREE.Color(0xa855f7), new THREE.Color(0xff99c8), new THREE.Color(0x06b6d4),
+      new THREE.Color(0xffb703), new THREE.Color(0xf72585), new THREE.Color(0x4cc9f0),
+      new THREE.Color(0xffffff), new THREE.Color(0xe0aaff), new THREE.Color(0xff5400)
+    ];
+
+    const dummy = new THREE.Object3D();
+    let placed = 0;
+    let attempts = 0;
+
+    while (placed < flowerCount && attempts < 2500) {
+      attempts++;
+      const fx = (Math.random() - 0.5) * 110;
+      const fz = (Math.random() - 0.5) * 110;
+      if (Math.abs(fx) < 4.5 && Math.abs(fz) < 4.5) continue;
+      if (fx > 15 && fz > 15) continue;
+      if (fx >= 11 && fx <= 33 && fz >= -35 && fz <= 0.5) continue;
+      if (fx >= -18 && fx <= -10 && fz >= -12 && fz <= -4) continue;
+      if (Math.hypot(fx - (-4.5), fz - 0.5) < 5.8) continue;
+
+      const fy = this.getTerrainHeight(fx, fz);
+
+      // 1. Stem
+      dummy.position.set(fx, fy + 0.12, fz);
+      dummy.rotation.set(0, Math.random() * Math.PI, 0);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      stemInst.setMatrixAt(placed, dummy.matrix);
+
+      // 2. Petal Head
+      dummy.position.set(fx, fy + 0.24, fz);
+      dummy.scale.set(1.5, 0.7, 1.5);
+      dummy.updateMatrix();
+      petalInst.setMatrixAt(placed, dummy.matrix);
+      petalInst.setColorAt(placed, flowerPetalColors[placed % flowerPetalColors.length]);
+
+      // 3. Center
+      dummy.position.set(fx, fy + 0.28, fz);
+      dummy.scale.set(1, 1, 1);
+      dummy.updateMatrix();
+      centerInst.setMatrixAt(placed, dummy.matrix);
+
+      placed++;
+    }
+
+    stemInst.instanceMatrix.needsUpdate = true;
+    petalInst.instanceMatrix.needsUpdate = true;
+    if (petalInst.instanceColor) petalInst.instanceColor.needsUpdate = true;
+    centerInst.instanceMatrix.needsUpdate = true;
+
+    this.scene.add(stemInst, petalInst, centerInst);
+  }
+
+  // ==========================================
+  // 4.8 BIOLUMINESCENT MUSHROOMS & CRYSTALS
+  // ==========================================
+  buildMushroomsAndCrystals() {
+    const shroomCapMats = [
+      new THREE.MeshLambertMaterial({ color: 0x06d6a0, emissive: 0x028090, emissiveIntensity: 0.6 }),
+      new THREE.MeshLambertMaterial({ color: 0xff006e, emissive: 0x8338ec, emissiveIntensity: 0.55 }),
+      new THREE.MeshLambertMaterial({ color: 0xffbe0b, emissive: 0xfb5607, emissiveIntensity: 0.6 })
+    ];
+    const shroomStalkMat = new THREE.MeshLambertMaterial({ color: 0xf8f9fa });
+
+    const shroomClusters = [
+      { x: -10, z: 12 }, { x: 8, z: -12 }, { x: -20, z: -15 },
+      { x: 14, z: 16 }, { x: -8, z: -22 }, { x: 18, z: 5 }
+    ];
+
+    shroomClusters.forEach(sc => {
+      const clusterGroup = new THREE.Group();
+      const count = 3 + Math.floor(Math.random() * 3);
+      for (let s = 0; s < count; s++) {
+        const ox = (Math.random() - 0.5) * 1.4;
+        const oz = (Math.random() - 0.5) * 1.4;
+        const h = 0.35 + Math.random() * 0.4;
+        const r = 0.22 + Math.random() * 0.18;
+
+        const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.07, h, 6), shroomStalkMat);
+        stalk.position.set(ox, h / 2, oz);
+        clusterGroup.add(stalk);
+
+        const capMat = shroomCapMats[s % shroomCapMats.length];
+        const cap = new THREE.Mesh(new THREE.ConeGeometry(r, 0.28, 7), capMat);
+        cap.position.set(ox, h + 0.12, oz);
+        clusterGroup.add(cap);
+
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.04, 4, 4), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+        dot.position.set(ox, h + 0.24, oz + r * 0.4);
+        clusterGroup.add(dot);
+      }
+      const cy = this.getTerrainHeight(sc.x, sc.z);
+      clusterGroup.position.set(sc.x, cy, sc.z);
+      this.scene.add(clusterGroup);
+    });
+
+    const crystalMatAmethyst = new THREE.MeshPhongMaterial({
+      color: 0xc77dff,
+      emissive: 0x7b2cbf,
+      emissiveIntensity: 0.7,
+      transparent: true,
+      opacity: 0.9,
+      shininess: 90
+    });
+    const crystalMatCyan = new THREE.MeshPhongMaterial({
+      color: 0x48cae4,
+      emissive: 0x0077b6,
+      emissiveIntensity: 0.75,
+      transparent: true,
+      opacity: 0.92,
+      shininess: 90
+    });
+
+    const crystalLocations = [
+      { x: -30, z: -25, mat: crystalMatAmethyst },
+      { x: 28, z: -32, mat: crystalMatCyan },
+      { x: -28, z: 26, mat: crystalMatCyan },
+      { x: 38, z: 12, mat: crystalMatAmethyst }
+    ];
+
+    crystalLocations.forEach(cl => {
+      const cGroup = new THREE.Group();
+      for (let i = 0; i < 4; i++) {
+        const h = 1.4 + Math.random() * 1.5;
+        const r = 0.25 + Math.random() * 0.2;
+        const shard = new THREE.Mesh(new THREE.ConeGeometry(r, h, 6), cl.mat);
+        shard.position.set((Math.random() - 0.5) * 0.8, h / 2, (Math.random() - 0.5) * 0.8);
+        shard.rotation.set((Math.random() - 0.5) * 0.35, Math.random() * Math.PI, (Math.random() - 0.5) * 0.35);
+        cGroup.add(shard);
+      }
+      const cy = this.getTerrainHeight(cl.x, cl.z);
+      cGroup.position.set(cl.x, cy, cl.z);
+      this.scene.add(cGroup);
+    });
+  }
+
+  // ==========================================
+  // 4.5 INSTANCED FALLING SAKURA & PURPLE PETALS
+  // 400 petals rendered in 1 single draw call!
+  // ==========================================
   createFallingTreePetals() {
-    this.treePetals = [];
+    this.treePetalsData = [];
     if (!this.treeCanopies || this.treeCanopies.length === 0) return;
 
-    // Rich Lila and Rosa palette for falling particles
-    const petalColors = [
-      0xff70a6, 0xff99c8, 0xf72585, 0xff5390,
-      0xc77dff, 0x9d4edd, 0xd8b4fe, 0xb5179e
-    ];
-    const petalMaterials = petalColors.map(c => new THREE.MeshBasicMaterial({
-      color: c,
+    const count = 400;
+    const petalGeo = new THREE.PlaneGeometry(0.24, 0.3);
+    const petalMat = new THREE.MeshBasicMaterial({
+      color: 0xff99c8,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.88
-    }));
+      opacity: 0.85
+    });
 
-    const petalGeo = new THREE.PlaneGeometry(0.22, 0.28);
-    const petalCount = 350;
+    this.petalsInstanced = new THREE.InstancedMesh(petalGeo, petalMat, count);
+    const dummy = new THREE.Object3D();
 
-    for (let i = 0; i < petalCount; i++) {
-      const mat = petalMaterials[i % petalMaterials.length];
-      const mesh = new THREE.Mesh(petalGeo, mat);
+    const petalColors = [
+      new THREE.Color(0xff70a6), new THREE.Color(0xff99c8),
+      new THREE.Color(0xf72585), new THREE.Color(0xc77dff),
+      new THREE.Color(0x9d4edd), new THREE.Color(0xd8b4fe)
+    ];
 
+    for (let i = 0; i < count; i++) {
       const tree = this.treeCanopies[i % this.treeCanopies.length];
       const ang = Math.random() * Math.PI * 2;
       const dist = Math.random() * tree.radius;
+      const px = tree.x + Math.cos(ang) * dist;
+      const pz = tree.z + Math.sin(ang) * dist;
+      const groundY = this.getTerrainHeight(px, pz);
+      const py = groundY + 0.3 + Math.random() * (tree.y - groundY + 1.2);
 
-      // Start distributed at various heights so world feels alive instantly
-      const initialY = 0.3 + Math.random() * (tree.y + 1.2);
-      mesh.position.set(
-        tree.x + Math.cos(ang) * dist,
-        initialY,
-        tree.z + Math.sin(ang) * dist
-      );
-      mesh.rotation.set(
-        Math.random() * Math.PI,
-        Math.random() * Math.PI,
-        Math.random() * Math.PI
-      );
+      dummy.position.set(px, py, pz);
+      dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+      dummy.updateMatrix();
+      this.petalsInstanced.setMatrixAt(i, dummy.matrix);
+      this.petalsInstanced.setColorAt(i, petalColors[i % petalColors.length]);
 
-      this.scene.add(mesh);
-      this.treePetals.push({
-        mesh: mesh,
+      this.treePetalsData.push({
+        x: px,
+        y: py,
+        z: pz,
         fallSpeed: 0.018 + Math.random() * 0.024,
         swaySeed: Math.random() * 100,
         swaySpeed: 0.8 + Math.random() * 0.9,
-        rotX: (Math.random() - 0.5) * 0.05,
-        rotY: (Math.random() - 0.5) * 0.06,
-        rotZ: (Math.random() - 0.5) * 0.04
+        rotX: (Math.random() - 0.5) * 0.04,
+        rotY: (Math.random() - 0.5) * 0.05,
+        rotZ: (Math.random() - 0.5) * 0.04,
+        treeIdx: i % this.treeCanopies.length
       });
     }
+
+    this.petalsInstanced.instanceMatrix.needsUpdate = true;
+    if (this.petalsInstanced.instanceColor) this.petalsInstanced.instanceColor.needsUpdate = true;
+    this.scene.add(this.petalsInstanced);
   }
 
+  // ==========================================
+  // 4.9 COZY WOODEN VILLAGE HUT WITH FENCE & LANTERN
+  // ==========================================
   buildVillageHut(pos) {
     const hutGroup = new THREE.Group();
     hutGroup.position.copy(pos);
@@ -838,7 +1317,7 @@ class GalaxySistersGame {
     base.receiveShadow = true;
     hutGroup.add(base);
 
-    // Kawaii Roof (Pastel red/pink)
+    // Kawaii Red Roof
     const roofMat = new THREE.MeshLambertMaterial({ color: 0xe63946, flatShading: true });
     const roof = new THREE.Mesh(new THREE.ConeGeometry(4.2, 2.8, 4), roofMat);
     roof.position.y = 4.6;
@@ -846,7 +1325,7 @@ class GalaxySistersGame {
     roof.castShadow = true;
     hutGroup.add(roof);
 
-    // Door
+    // Wooden Door
     const doorMat = new THREE.MeshLambertMaterial({ color: 0x4a2810 });
     const door = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2, 0.2), doorMat);
     door.position.set(0, 1, 2.3);
@@ -857,7 +1336,73 @@ class GalaxySistersGame {
     chimney.position.set(1.5, 4.8, 0.5);
     hutGroup.add(chimney);
 
-    // Villager NPC (Kawaii Cat/Bear) standing next to hut
+    // Cozy Wooden Picket Fence around garden
+    const fenceMat = new THREE.MeshLambertMaterial({ color: 0xc49a6c });
+    const fencePickets = [
+      { x: -3.8, z: 2.8, len: 3.2, rot: 0 },
+      { x: 3.8, z: 2.8, len: 3.2, rot: 0 },
+      { x: -4.8, z: 0.5, len: 4.8, rot: Math.PI / 2 },
+      { x: 4.8, z: 0.5, len: 4.8, rot: Math.PI / 2 }
+    ];
+    fencePickets.forEach(fp => {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(fp.len, 0.12, 0.1), fenceMat);
+      rail.position.set(fp.x, 0.8, fp.z);
+      rail.rotation.y = fp.rot;
+      hutGroup.add(rail);
+
+      const rail2 = rail.clone();
+      rail2.position.y = 0.35;
+      hutGroup.add(rail2);
+
+      const count = Math.floor(fp.len / 0.6);
+      for (let p = 0; p <= count; p++) {
+        const picket = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.1, 0.08), fenceMat);
+        const t = (p / count) - 0.5;
+        picket.position.set(
+          fp.x + (fp.rot === 0 ? t * fp.len : 0),
+          0.55,
+          fp.z + (fp.rot !== 0 ? t * fp.len : 0)
+        );
+        hutGroup.add(picket);
+      }
+    });
+
+    // Rustic Lantern Post with warm glowing lantern!
+    const postMat = new THREE.MeshLambertMaterial({ color: 0x5a3e1b });
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 2.6, 6), postMat);
+    post.position.set(2.4, 1.3, 3.8);
+    hutGroup.add(post);
+
+    const lanternArm = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.08, 0.08), postMat);
+    lanternArm.position.set(2.6, 2.5, 3.8);
+    hutGroup.add(lanternArm);
+
+    const lantern = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.24, 0),
+      new THREE.MeshStandardMaterial({
+        color: 0xffd166,
+        emissive: 0xffaa00,
+        emissiveIntensity: 0.95
+      })
+    );
+    lantern.position.set(2.85, 2.3, 3.8);
+    hutGroup.add(lantern);
+
+    const lanternLight = new THREE.PointLight(0xffbe0b, 1.4, 12);
+    lanternLight.position.set(2.85, 2.3, 3.8);
+    hutGroup.add(lanternLight);
+
+    // Cozy Sitting Bench under the eaves
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.12, 0.65), fenceMat);
+    bench.position.set(-2.2, 0.45, 2.6);
+    hutGroup.add(bench);
+    const benchLeg1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.45, 0.55), fenceMat);
+    benchLeg1.position.set(-3.0, 0.22, 2.6);
+    const benchLeg2 = benchLeg1.clone();
+    benchLeg2.position.x = -1.4;
+    hutGroup.add(benchLeg1, benchLeg2);
+
+    // Villager NPC standing next to hut
     const npc = this.createKawaiiVillager();
     npc.position.set(pos.x + 3.2, 0, pos.z + 2.5);
     this.scene.add(npc);
@@ -867,24 +1412,22 @@ class GalaxySistersGame {
     // Register wooden hut as solid obstacle box
     this.colliders.push({
       type: 'box',
-      minX: pos.x - 2.7,
-      maxX: pos.x + 2.7,
-      minZ: pos.z - 2.5,
-      maxZ: pos.z + 2.5,
+      minX: pos.x - 2.8,
+      maxX: pos.x + 2.8,
+      minZ: pos.z - 2.6,
+      maxZ: pos.z + 2.6,
       minY: pos.y,
-      maxY: pos.y + 4.5
+      maxY: pos.y + 4.8
     });
   }
 
   createKawaiiVillager() {
     const npcGroup = new THREE.Group();
-    // Body
     const bodyMat = new THREE.MeshLambertMaterial({ color: 0xffccd5 });
     const body = new THREE.Mesh(new THREE.SphereGeometry(0.8, 16, 16), bodyMat);
     body.position.y = 0.8;
     npcGroup.add(body);
 
-    // Ears
     const earMat = new THREE.MeshLambertMaterial({ color: 0xff758f });
     const ear1 = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.4, 5), earMat);
     ear1.position.set(-0.4, 1.5, 0);
@@ -892,7 +1435,6 @@ class GalaxySistersGame {
     ear2.position.x = 0.4;
     npcGroup.add(ear1, ear2);
 
-    // Eyes
     const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111 });
     const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 6), eyeMat);
     eye1.position.set(-0.25, 0.95, 0.72);
@@ -900,7 +1442,6 @@ class GalaxySistersGame {
     eye2.position.x = 0.25;
     npcGroup.add(eye1, eye2);
 
-    // Cute speech indicator floating
     const bubble = new THREE.Mesh(
       new THREE.TorusGeometry(0.3, 0.08, 8, 16),
       new THREE.MeshBasicMaterial({ color: 0xffd166 })
@@ -919,7 +1460,6 @@ class GalaxySistersGame {
     const cx = 512;
     const cy = 512;
 
-    // Background: Edler dunkler Amethyst-Marmor
     const bgGrad = ctx.createRadialGradient(cx, cy, 40, cx, cy, 512);
     bgGrad.addColorStop(0, '#2b1049');
     bgGrad.addColorStop(0.6, '#1a082e');
@@ -927,7 +1467,6 @@ class GalaxySistersGame {
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, 1024, 1024);
 
-    // Zarte Marmoradern in zartem Rosa/Lila
     ctx.strokeStyle = 'rgba(216, 180, 254, 0.09)';
     ctx.lineWidth = 2.5;
     for (let i = 0; i < 16; i++) {
@@ -937,11 +1476,9 @@ class GalaxySistersGame {
       ctx.stroke();
     }
 
-    // Heilige Geometrie: Blume des Lebens (Flower of Life - 19 ineinandergreifende Kreise)
-    const R = 105; // Radius jedes Kreises
+    const R = 105;
     const circleCenters = [{ x: cx, y: cy }];
 
-    // Ring 1: 6 Kreise um das Zentrum
     for (let i = 0; i < 6; i++) {
       const ang = (i * Math.PI) / 3;
       circleCenters.push({
@@ -950,7 +1487,6 @@ class GalaxySistersGame {
       });
     }
 
-    // Ring 2: 12 äußere Kreise
     for (let i = 0; i < 6; i++) {
       const ang = (i * Math.PI) / 3;
       circleCenters.push({
@@ -965,23 +1501,21 @@ class GalaxySistersGame {
       });
     }
 
-    // Doppelte äußere Umrandung mit magischem violettem Schein
     ctx.shadowColor = '#c77dff';
     ctx.shadowBlur = 28;
 
-    ctx.strokeStyle = '#d8b4fe'; // zartes Flieder
+    ctx.strokeStyle = '#d8b4fe';
     ctx.lineWidth = 9;
     ctx.beginPath();
     ctx.arc(cx, cy, 3 * R + 6, 0, Math.PI * 2);
     ctx.stroke();
 
-    ctx.strokeStyle = '#9d4edd'; // sattes Lila
+    ctx.strokeStyle = '#9d4edd';
     ctx.lineWidth = 5;
     ctx.beginPath();
     ctx.arc(cx, cy, 3 * R + 22, 0, Math.PI * 2);
     ctx.stroke();
 
-    // 19 Kreise der Blume des Lebens in leuchtendem Lila zeichnen
     circleCenters.forEach((pt, idx) => {
       ctx.shadowColor = idx === 0 ? '#ff70a6' : '#c77dff';
       ctx.shadowBlur = idx === 0 ? 32 : 18;
@@ -992,7 +1526,6 @@ class GalaxySistersGame {
       ctx.stroke();
     });
 
-    // Zarte rosa und goldene Lichtpunkte an den Schnittpunkten
     ctx.shadowBlur = 12;
     ctx.shadowColor = '#ff70a6';
     ctx.fillStyle = '#ffb3c6';
@@ -1024,7 +1557,6 @@ class GalaxySistersGame {
       const spreadDist = Math.random() * 0.45;
       const stemH = 1.0 + Math.random() * 0.45;
 
-      // Grüner Stängel
       const stem = new THREE.Mesh(
         new THREE.CylinderGeometry(0.02, 0.028, stemH, 4),
         stemMat
@@ -1032,7 +1564,6 @@ class GalaxySistersGame {
       stem.position.y = stemH / 2;
       stemGroup.add(stem);
 
-      // Lavendel-Blütenähre (mehrere gestapelte lila Blütentupfer)
       const spikeH = stemH * 0.45;
       const tipCount = 5;
       for (let t = 0; t < tipCount; t++) {
@@ -1050,7 +1581,6 @@ class GalaxySistersGame {
         0,
         Math.sin(spreadAng) * spreadDist
       );
-      // Leichte Fächerung nach außen
       stemGroup.rotation.z = (Math.random() - 0.5) * 0.25;
       stemGroup.rotation.x = (Math.random() - 0.5) * 0.25;
       stemGroup.userData = { phase: Math.random() * 10 };
@@ -1062,12 +1592,14 @@ class GalaxySistersGame {
     return bushGroup;
   }
 
+  // ==========================================
+  // 4.10 CELESTIAL ANCIENT TEMPLE
+  // ==========================================
   buildCelestialTemple(pos) {
     const templeGroup = new THREE.Group();
     templeGroup.position.copy(pos);
 
-    // Edle Römische Materialien mit Violett & Rosa Akzenten
-    const marbleMat = new THREE.MeshLambertMaterial({ color: 0xf5edf8, flatShading: true }); // Weiß-rosa römischer Marmor
+    const marbleMat = new THREE.MeshLambertMaterial({ color: 0xf5edf8, flatShading: true });
     const darkPodiumMat = new THREE.MeshLambertMaterial({ color: 0xded2e4, flatShading: true });
     const violetTrimMat = new THREE.MeshLambertMaterial({
       color: 0x8a2be2,
@@ -1087,7 +1619,6 @@ class GalaxySistersGame {
       emissiveIntensity: 0.4
     });
 
-    // 1. Großes Römisches Tempel-Podium (18 x 26 x 2.2)
     const podW = 18;
     const podL = 26;
     const podH = 2.2;
@@ -1101,7 +1632,6 @@ class GalaxySistersGame {
     basePodium.castShadow = true;
     templeGroup.add(basePodium);
 
-    // Umlaufende violett & rosa profilierte Zierleiste oben am Podium
     const podTrimViolet = new THREE.Mesh(
       new THREE.BoxGeometry(podW + 0.5, 0.22, podL + 0.5),
       violetTrimMat
@@ -1116,11 +1646,11 @@ class GalaxySistersGame {
     podTrimPink.position.y = podH + 0.12;
     templeGroup.add(podTrimPink);
 
-    // 2. Monumentale Römische Freitreppe an der Frontseite (+Z)
+    // Grand Stairs (+Z front)
     const stepCount = 7;
     const stairW = 13.0;
     const stairL = 5.6;
-    const stepDepth = stairL / stepCount; // 0.8
+    const stepDepth = stairL / stepCount;
     for (let s = 0; s < stepCount; s++) {
       const stepH = podH / stepCount;
       const stepY = (s + 0.5) * stepH;
@@ -1133,7 +1663,6 @@ class GalaxySistersGame {
       stepBox.receiveShadow = true;
       templeGroup.add(stepBox);
 
-      // Begehbare Stufen als präzise AABB-Boxen (keine schwebenden Fake-Zylinder mehr!)
       const worldCenterZ = pos.z + localCenterZ;
       this.platforms.push({
         type: 'box',
@@ -1145,7 +1674,7 @@ class GalaxySistersGame {
       });
     }
 
-    // Hauptboden als präzise AABB-Plattform über das gesamte 18x26 Podium
+    // Main Podium Walkable Platform
     this.platforms.push({
       type: 'box',
       minX: pos.x - podW / 2,
@@ -1155,7 +1684,7 @@ class GalaxySistersGame {
       topY: pos.y + podH
     });
 
-    // Treppenwangen (Balustraden) links und rechts
+    // Balustrades
     const balustradeMat = new THREE.MeshLambertMaterial({ color: 0xede0f2 });
     [-stairW / 2 - 0.45, stairW / 2 + 0.45].forEach(bx => {
       const bal = new THREE.Mesh(
@@ -1166,19 +1695,12 @@ class GalaxySistersGame {
       bal.castShadow = true;
       templeGroup.add(bal);
 
-      // Sockel-Urne mit üppigem Lavendel am Treppenaufgang
-      const urn = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.45, 0.35, 0.7, 8),
-        pinkTrimMat
-      );
       const lavUrn = this.createLavenderBush();
       lavUrn.position.set(bx, podH + 1.1, (podL / 2) + stairL);
       templeGroup.add(lavUrn);
     });
 
-    // 2.1 Massive Podium-Kollision (Bodenlevel bis zur Tempeloberkante)
-    // Verhindert verlässlich das Durchlaufen der Podium-Seitenwände
-    // Linke Podium-Wand
+    // Podium Wall Colliders
     this.colliders.push({
       type: 'box',
       minX: pos.x - podW / 2 - 0.2,
@@ -1188,7 +1710,6 @@ class GalaxySistersGame {
       minY: pos.y,
       maxY: pos.y + podH - 0.05
     });
-    // Rechte Podium-Wand
     this.colliders.push({
       type: 'box',
       minX: pos.x + stairW / 2,
@@ -1198,17 +1719,15 @@ class GalaxySistersGame {
       minY: pos.y,
       maxY: pos.y + podH - 0.05
     });
-    // Hintere Podium-Wand
     this.colliders.push({
       type: 'box',
       minX: pos.x - stairW / 2,
       maxX: pos.x + stairW / 2,
       minZ: pos.z - podL / 2 - 0.2,
-      maxZ: pos.z + podL / 2,
+      maxZ: pos.z - podL / 2,
       minY: pos.y,
       maxY: pos.y + podH - 0.05
     });
-    // Treppenwangen-Kollision (Balustraden) links und rechts
     this.colliders.push({
       type: 'box',
       minX: pos.x - stairW / 2 - 0.9,
@@ -1228,77 +1747,44 @@ class GalaxySistersGame {
       maxY: pos.y + podH + 1.4
     });
 
-    // 3. Stattliche Römische Säulenhalle (20 flutete Säulen)
+    // 20 Fluted Roman Columns
     const colH = 7.4;
     const colR = 0.52;
     const colPlinthMat = new THREE.MeshLambertMaterial({ color: 0xf3e8f7 });
 
     const columnPositions = [];
-    const colXHalf = (podW / 2) - 1.5; // 7.5
-    const colZHalf = (podL / 2) - 1.5; // 11.5
+    const colXHalf = (podW / 2) - 1.5;
+    const colZHalf = (podL / 2) - 1.5;
 
-    // Front (6) und Heck (6)
     for (let c = 0; c < 6; c++) {
       const cx = -colXHalf + (c / 5) * (colXHalf * 2);
-      columnPositions.push({ x: cx, z: colZHalf });  // Front
-      columnPositions.push({ x: cx, z: -colZHalf }); // Back
+      columnPositions.push({ x: cx, z: colZHalf });
+      columnPositions.push({ x: cx, z: -colZHalf });
     }
-    // Seiten (je 4 Säulen zwischen den Ecken)
     for (let s = 1; s <= 4; s++) {
       const cz = -colZHalf + (s / 5) * (colZHalf * 2);
-      columnPositions.push({ x: -colXHalf, z: cz }); // Links
-      columnPositions.push({ x: colXHalf, z: cz });  // Rechts
+      columnPositions.push({ x: -colXHalf, z: cz });
+      columnPositions.push({ x: colXHalf, z: cz });
     }
 
-    // 3.1 Römische Tempelwände auf dem Podium (Parapete & Cella-Wände mit Violett/Rosa Zierleiste)
+    // Parapet Walls
     const wallH = 1.6;
     const wallThick = 0.45;
-    // Linke Wand zwischen den Säulen
-    const leftWall = new THREE.Mesh(
-      new THREE.BoxGeometry(wallThick, wallH, colZHalf * 2),
-      marbleMat
-    );
+    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(wallThick, wallH, colZHalf * 2), marbleMat);
     leftWall.position.set(-colXHalf, podH + wallH / 2, 0);
     leftWall.castShadow = true;
     templeGroup.add(leftWall);
-    const leftWallTrim = new THREE.Mesh(
-      new THREE.BoxGeometry(wallThick + 0.1, 0.15, colZHalf * 2 + 0.1),
-      violetTrimMat
-    );
-    leftWallTrim.position.set(-colXHalf, podH + wallH + 0.075, 0);
-    templeGroup.add(leftWallTrim);
 
-    // Rechte Wand zwischen den Säulen
-    const rightWall = new THREE.Mesh(
-      new THREE.BoxGeometry(wallThick, wallH, colZHalf * 2),
-      marbleMat
-    );
+    const rightWall = new THREE.Mesh(new THREE.BoxGeometry(wallThick, wallH, colZHalf * 2), marbleMat);
     rightWall.position.set(colXHalf, podH + wallH / 2, 0);
     rightWall.castShadow = true;
     templeGroup.add(rightWall);
-    const rightWallTrim = new THREE.Mesh(
-      new THREE.BoxGeometry(wallThick + 0.1, 0.15, colZHalf * 2 + 0.1),
-      violetTrimMat
-    );
-    rightWallTrim.position.set(colXHalf, podH + wallH + 0.075, 0);
-    templeGroup.add(rightWallTrim);
 
-    // Hintere Wand
-    const backWall = new THREE.Mesh(
-      new THREE.BoxGeometry(colXHalf * 2, wallH, wallThick),
-      marbleMat
-    );
+    const backWall = new THREE.Mesh(new THREE.BoxGeometry(colXHalf * 2, wallH, wallThick), marbleMat);
     backWall.position.set(0, podH + wallH / 2, -colZHalf);
     backWall.castShadow = true;
     templeGroup.add(backWall);
-    const backWallTrim = new THREE.Mesh(
-      new THREE.BoxGeometry(colXHalf * 2 + 0.1, 0.15, wallThick + 0.1),
-      violetTrimMat
-    );
-    backWallTrim.position.set(0, podH + wallH + 0.075, -colZHalf);
-    templeGroup.add(backWallTrim);
 
-    // Kollisionsboxen für die Tempelwände auf dem Podium
     this.colliders.push({
       type: 'box',
       minX: pos.x - colXHalf - 0.5,
@@ -1327,8 +1813,7 @@ class GalaxySistersGame {
       maxY: pos.y + podH + wallH + 1.0
     });
 
-    columnPositions.forEach((cp, idx) => {
-      // Jede Säule ist ein solider Zylinder-Kollider vom Boden bis zur Decke
+    columnPositions.forEach((cp) => {
       this.colliders.push({
         type: 'cylinder',
         x: pos.x + cp.x,
@@ -1341,7 +1826,6 @@ class GalaxySistersGame {
       const colGroup = new THREE.Group();
       colGroup.position.set(cp.x, podH + 0.15, cp.z);
 
-      // Säulenbasis (Zweistufige Plinthe + Rosa/Violett Torus-Wulst)
       const plinth = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.3, 1.35), colPlinthMat);
       plinth.position.y = 0.15;
       colGroup.add(plinth);
@@ -1351,76 +1835,30 @@ class GalaxySistersGame {
       torus1.position.y = 0.36;
       colGroup.add(torus1);
 
-      const torus2 = new THREE.Mesh(new THREE.TorusGeometry(0.56, 0.08, 8, 16), pinkTrimMat);
-      torus2.rotation.x = Math.PI / 2;
-      torus2.position.y = 0.52;
-      colGroup.add(torus2);
-
-      // Kannelierter römischer Säulenschaft (16 Kanneluren)
-      const shaft = new THREE.Mesh(
-        new THREE.CylinderGeometry(colR * 0.88, colR, colH - 1.2, 16),
-        marbleMat
-      );
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(colR * 0.88, colR, colH - 1.2, 16), marbleMat);
       shaft.position.y = 0.52 + (colH - 1.2) / 2;
       shaft.castShadow = true;
       colGroup.add(shaft);
 
-      // Halsring
-      const neckRing = new THREE.Mesh(new THREE.TorusGeometry(colR * 0.92, 0.08, 6, 16), goldMat);
-      neckRing.rotation.x = Math.PI / 2;
-      neckRing.position.y = colH - 0.7;
-      colGroup.add(neckRing);
-
-      // Korinthisches / Rhythmisches Kapitell mit Rosa & Violett Schnitzereien
-      const capBase = new THREE.Mesh(
-        new THREE.CylinderGeometry(colR * 1.25, colR * 0.9, 0.5, 8),
-        colPlinthMat
-      );
-      capBase.position.y = colH - 0.45;
-      colGroup.add(capBase);
-
-      const capAbacus = new THREE.Mesh(
-        new THREE.BoxGeometry(1.4, 0.2, 1.4),
-        violetTrimMat
-      );
+      const capAbacus = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.2, 1.4), violetTrimMat);
       capAbacus.position.y = colH - 0.1;
       colGroup.add(capAbacus);
-
-      // Kleine rosa Rosette am Kapitell
-      const rosette = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 6), pinkTrimMat);
-      rosette.position.set(0, colH - 0.35, 0.62);
-      colGroup.add(rosette);
 
       templeGroup.add(colGroup);
     });
 
-    // 4. Architrav & Fries & Gebälk (Entablement)
+    // Architrave & Entablature
     const entablatureY = podH + 0.15 + colH;
-    const architrave = new THREE.Mesh(
-      new THREE.BoxGeometry(podW, 0.65, podL),
-      marbleMat
-    );
+    const architrave = new THREE.Mesh(new THREE.BoxGeometry(podW, 0.65, podL), marbleMat);
     architrave.position.y = entablatureY + 0.32;
     architrave.castShadow = true;
     templeGroup.add(architrave);
 
-    // Zierfries mit violetten Paneelen und rosa Reliefs
-    const frieze = new THREE.Mesh(
-      new THREE.BoxGeometry(podW + 0.1, 0.55, podL + 0.1),
-      violetTrimMat
-    );
+    const frieze = new THREE.Mesh(new THREE.BoxGeometry(podW + 0.1, 0.55, podL + 0.1), violetTrimMat);
     frieze.position.y = entablatureY + 0.85;
     templeGroup.add(frieze);
 
-    // Rosa Zierleiste
-    const friezeTrim = new THREE.Mesh(
-      new THREE.BoxGeometry(podW + 0.35, 0.18, podL + 0.35),
-      pinkTrimMat
-    );
-    friezeTrim.position.y = entablatureY + 1.15;
-    templeGroup.add(friezeTrim);
-
-    // 5. Klassischer Römischer Dreiecksgiebel (Pediment / Tympanon) an Front und Rückseite
+    // Pediments & Roof
     const roofY = entablatureY + 1.25;
     [colZHalf, -colZHalf].forEach((gz, gIdx) => {
       const giebGeo = new THREE.ConeGeometry(podW * 0.56, 3.2, 3);
@@ -1430,72 +1868,23 @@ class GalaxySistersGame {
       giebel.scale.set(1, 1, 0.45);
       giebel.castShadow = true;
       templeGroup.add(giebel);
-
-      // Violettes Giebelfeld (Tympanon)
-      const tympanon = new THREE.Mesh(
-        new THREE.ConeGeometry(podW * 0.48, 2.6, 3),
-        violetTrimMat
-      );
-      tympanon.position.set(0, roofY + 1.45, gz + (gIdx === 0 ? 0.2 : -0.2));
-      tympanon.rotation.y = gIdx === 0 ? 0 : Math.PI;
-      tympanon.scale.set(1, 1, 0.3);
-      templeGroup.add(tympanon);
-
-      // Himmels-Symbol im Giebel (Goldener Mond & Stern)
-      const moonEmblem = new THREE.Mesh(
-        new THREE.TorusGeometry(0.65, 0.12, 6, 16, Math.PI * 1.4),
-        goldMat
-      );
-      moonEmblem.position.set(0, roofY + 1.3, gz + (gIdx === 0 ? 0.38 : -0.38));
-      templeGroup.add(moonEmblem);
-
-      const starEmblem = new THREE.Mesh(
-        new THREE.OctahedronGeometry(0.32, 0),
-        pinkTrimMat
-      );
-      starEmblem.position.set(0, roofY + 1.3, gz + (gIdx === 0 ? 0.4 : -0.4));
-      templeGroup.add(starEmblem);
-
-      // Goldene Akroterion-Verzierung an der Giebelspitze
-      const akroter = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 5), goldMat);
-      akroter.position.set(0, roofY + 3.4, gz);
-      templeGroup.add(akroter);
     });
 
-    // Tempeldach (Schrägdach mit rosa/violetten Akzenten)
     const roofMat = new THREE.MeshLambertMaterial({ color: 0x9b5de5, flatShading: true });
-    const roof = new THREE.Mesh(
-      new THREE.ConeGeometry(podW * 0.58, 3.2, 4),
-      roofMat
-    );
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(podW * 0.58, 3.2, 4), roofMat);
     roof.position.set(0, roofY + 1.6, 0);
     roof.rotation.y = Math.PI / 4;
     roof.scale.set(1, 1, podL / podW);
     roof.castShadow = true;
     templeGroup.add(roof);
 
-    // 6. IN DER MITTE DES TEMPELBODENS: DIE BLUME DES LEBENS IN LILA
+    // Center Dais: Flower of Life in Purple Marble
     const flowerOfLifeTex = this.createFlowerOfLifeTexture();
-
-    // Runder erhabener Marmorsockel in der Mitte
-    const dais = new THREE.Mesh(
-      new THREE.CylinderGeometry(4.4, 4.6, 0.16, 32),
-      marbleMat
-    );
+    const dais = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.6, 0.16, 32), marbleMat);
     dais.position.set(0, podH + 0.15 + 0.08, 0);
     dais.receiveShadow = true;
     templeGroup.add(dais);
 
-    // Rosa Zierring um die Blume des Lebens
-    const daisRing = new THREE.Mesh(
-      new THREE.TorusGeometry(4.2, 0.12, 8, 32),
-      pinkTrimMat
-    );
-    daisRing.rotation.x = Math.PI / 2;
-    daisRing.position.set(0, podH + 0.25, 0);
-    templeGroup.add(daisRing);
-
-    // Die leuchtende Blume des Lebens Medaille (Lila)
     const flowerOfLifeMesh = new THREE.Mesh(
       new THREE.CircleGeometry(4.0, 48),
       new THREE.MeshLambertMaterial({
@@ -1510,7 +1899,6 @@ class GalaxySistersGame {
     flowerOfLifeMesh.receiveShadow = true;
     templeGroup.add(flowerOfLifeMesh);
 
-    // Dais als begehbare Plattform registrieren
     this.platforms.push({
       type: 'cylinder',
       x: pos.x,
@@ -1519,35 +1907,7 @@ class GalaxySistersGame {
       topY: pos.y + podH + 0.24
     });
 
-    // 4 Zier-Podeste mit rosa Kristallfackeln um die Blume des Lebens
-    for (let p = 0; p < 4; p++) {
-      const pAng = (p / 4) * Math.PI * 2 + Math.PI / 4;
-      const px = Math.cos(pAng) * 4.9;
-      const pz = Math.sin(pAng) * 4.9;
-
-      const pedestal = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.32, 0.42, 1.4, 8),
-        violetTrimMat
-      );
-      pedestal.position.set(px, podH + 0.15 + 0.7, pz);
-      pedestal.castShadow = true;
-      templeGroup.add(pedestal);
-
-      const lamp = new THREE.Mesh(
-        new THREE.OctahedronGeometry(0.28, 0),
-        new THREE.MeshPhongMaterial({
-          color: 0xff70a6,
-          emissive: 0xff4d94,
-          emissiveIntensity: 0.9,
-          transparent: true,
-          opacity: 0.9
-        })
-      );
-      lamp.position.set(px, podH + 0.15 + 1.55, pz);
-      templeGroup.add(lamp);
-    }
-
-    // Schwebender Tempelkristall über der Blume des Lebens
+    // Floating Crystal above Center
     const crystalGeo = new THREE.OctahedronGeometry(1.7, 0);
     const crystalMat = new THREE.MeshPhongMaterial({
       color: 0xc77dff,
@@ -1561,37 +1921,19 @@ class GalaxySistersGame {
     this.templeCrystal.position.set(0, podH + 4.2, 0);
     templeGroup.add(this.templeCrystal);
 
-    // Zartes violettes Punktlicht über der Blume des Lebens
     const templeLight = new THREE.PointLight(0xc77dff, 1.8, 16);
     templeLight.position.set(0, podH + 4.0, 0);
     templeGroup.add(templeLight);
 
-    // 7. TEMPEL MIT LAVENDEL SCHMÜCKEN
-    // Lavendelbeete entlang der Treppe und um die Ecksäulen
+    // Lavender Bushes flanking temple
     const lavenderLocations = [
-      // Flankierend an der Treppe
       { x: -stairW / 2 - 1.2, z: (podL / 2) + 2.0 },
-      { x: -stairW / 2 - 1.2, z: (podL / 2) + 4.2 },
       { x: stairW / 2 + 1.2, z: (podL / 2) + 2.0 },
-      { x: stairW / 2 + 1.2, z: (podL / 2) + 4.2 },
-      // Vor den vorderen Säulen links und rechts
       { x: -colXHalf, z: colZHalf + 1.2 },
       { x: colXHalf, z: colZHalf + 1.2 },
-      { x: -colXHalf + 2.2, z: colZHalf + 1.2 },
-      { x: colXHalf - 2.2, z: colZHalf + 1.2 },
-      // An den Seiten des Podiums
       { x: -colXHalf - 1.4, z: 0 },
-      { x: -colXHalf - 1.4, z: -4.5 },
-      { x: -colXHalf - 1.4, z: 4.5 },
-      { x: colXHalf + 1.4, z: 0 },
-      { x: colXHalf + 1.4, z: -4.5 },
-      { x: colXHalf + 1.4, z: 4.5 },
-      // An den hinteren Ecken
-      { x: -colXHalf, z: -colZHalf - 1.2 },
-      { x: colXHalf, z: -colZHalf - 1.2 },
-      { x: 0, z: -colZHalf - 1.4 }
+      { x: colXHalf + 1.4, z: 0 }
     ];
-
     lavenderLocations.forEach(loc => {
       const lavBush = this.createLavenderBush();
       lavBush.position.set(loc.x, 0, loc.z);
@@ -1601,8 +1943,10 @@ class GalaxySistersGame {
     this.scene.add(templeGroup);
   }
 
+  // ==========================================
+  // 4.11 OBBY PARKOUR
+  // ==========================================
   buildObbyParkour(startPos) {
-    // Stepping stones climbing upward in a spiral/line
     const platformMat = new THREE.MeshLambertMaterial({ color: 0x9b5de5 });
     const numSteps = 7;
     for (let i = 0; i < numSteps; i++) {
@@ -1615,7 +1959,6 @@ class GalaxySistersGame {
       plat.receiveShadow = true;
       this.scene.add(plat);
 
-      // Save for jump collision
       this.platforms.push({
         type: 'cylinder',
         x: plat.position.x,
@@ -1625,7 +1968,6 @@ class GalaxySistersGame {
       });
     }
 
-    // Top Platform with Celestial Star Trophy
     const finalHeight = 1.2 + numSteps * 1.5;
     const finalPlat = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 3.5, 0.8, 12), new THREE.MeshLambertMaterial({ color: 0xffd166 }));
     finalPlat.position.set(startPos.x + Math.sin(numSteps * 0.7) * 4, finalHeight, startPos.z - numSteps * 3.8);
@@ -1638,15 +1980,16 @@ class GalaxySistersGame {
       radius: 3.5
     });
 
-    // Star Trophy floating on top
     const star = new THREE.Mesh(new THREE.OctahedronGeometry(1.4, 0), new THREE.MeshBasicMaterial({ color: 0xffbe0b }));
     star.position.set(finalPlat.position.x, finalHeight + 2.5, finalPlat.position.z);
     this.scene.add(star);
     this.trophyStar = star;
   }
 
+  // ==========================================
+  // 4.12 CREATURES & SLIMES
+  // ==========================================
   spawnCuteCreatures() {
-    // Cute little starlets jumping
     for (let i = 0; i < 4; i++) {
       const creature = new THREE.Group();
       const body = new THREE.Mesh(
@@ -1656,22 +1999,23 @@ class GalaxySistersGame {
       body.position.y = 0.5;
       creature.add(body);
 
-      // Kawaii eyes
       const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), new THREE.MeshBasicMaterial({ color: 0x000 }));
       eye1.position.set(-0.16, 0.6, 0.45);
       const eye2 = eye1.clone();
       eye2.position.x = 0.16;
       creature.add(eye1, eye2);
 
-      creature.position.set(-8 + i * 4, 0, 4 + (i % 2) * 3);
-      creature.userData = { initialY: 0, hopOffset: Math.random() * 5 };
+      const cx = -8 + i * 4;
+      const cz = 4 + (i % 2) * 3;
+      const cy = this.getTerrainHeight(cx, cz);
+      creature.position.set(cx, cy, cz);
+      creature.userData = { initialY: cy, hopOffset: Math.random() * 5 };
       this.creatures.push(creature);
       this.scene.add(creature);
     }
   }
 
   spawnMinorSlimes() {
-    // 3 bouncy cute weak slimes
     for (let i = 0; i < 3; i++) {
       const slime = new THREE.Group();
       const slimeMat = new THREE.MeshLambertMaterial({ color: 0x80ed99, transparent: true, opacity: 0.85 });
@@ -1680,7 +2024,6 @@ class GalaxySistersGame {
       body.scale.set(1, 0.8, 1);
       slime.add(body);
 
-      // Red evil/cute eyes
       const eyeMat = new THREE.MeshBasicMaterial({ color: 0x582f0e });
       const eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 6), eyeMat);
       eye.position.set(-0.2, 0.8, 0.6);
@@ -1688,22 +2031,28 @@ class GalaxySistersGame {
       eye2.position.x = 0.2;
       slime.add(eye, eye2);
 
-      slime.position.set(10 + i * 5, 0, -2 - i * 4);
+      const sx = 10 + i * 5;
+      const sz = -2 - i * 4;
+      const sy = this.getTerrainHeight(sx, sz);
+      slime.position.set(sx, sy, sz);
       slime.userData = {
         hp: 30,
         maxHp: 30,
         basePos: slime.position.clone(),
-        alive: true
+        alive: true,
+        groundY: sy
       };
       this.slimes.push(slime);
       this.scene.add(slime);
     }
   }
 
-  spawnBees(count = 20) {
+  // ==========================================
+  // 4.14 BEES & BUTTERFLIES
+  // ==========================================
+  spawnBees(count = 22) {
     this.bees = [];
 
-    // Erstelle gestreifte Bienen-Textur (Gelb & Schwarz)
     const canvas = document.createElement('canvas');
     canvas.width = 64;
     canvas.height = 64;
@@ -1727,33 +2076,20 @@ class GalaxySistersGame {
     for (let i = 0; i < count; i++) {
       const bee = new THREE.Group();
 
-      // Körper (pummelig & rundlich)
       const body = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 10), bodyMat);
       body.scale.set(1.1, 0.85, 0.85);
       bee.add(body);
 
-      // Kopf
       const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), blackMat);
       head.position.set(0.22, 0.02, 0);
       bee.add(head);
 
-      // Kulleraugen
       const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.04, 5, 5), eyeMat);
       eye1.position.set(0.28, 0.07, 0.07);
       const eye2 = eye1.clone();
       eye2.position.z = -0.07;
       bee.add(eye1, eye2);
 
-      // Fühler
-      const ant1 = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.12, 3), blackMat);
-      ant1.position.set(0.28, 0.14, 0.04);
-      ant1.rotation.set(0.2, 0, -0.4);
-      const ant2 = ant1.clone();
-      ant2.position.z = -0.04;
-      ant2.rotation.set(-0.2, 0, -0.4);
-      bee.add(ant1, ant2);
-
-      // Transparente Flügel
       const wingGeo = new THREE.PlaneGeometry(0.22, 0.32);
       const leftWing = new THREE.Mesh(wingGeo, wingMat);
       leftWing.position.set(0.04, 0.18, 0.12);
@@ -1763,13 +2099,6 @@ class GalaxySistersGame {
       rightWing.rotation.x = -Math.PI / 4;
       bee.add(leftWing, rightWing);
 
-      // Stachel
-      const stinger = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.1, 4), blackMat);
-      stinger.rotation.z = Math.PI / 2;
-      stinger.position.set(-0.28, 0, 0);
-      bee.add(stinger);
-
-      // Flugort: über der Wiese und beim Lavendel-Tempel
       const nearTemple = (i % 3 === 0);
       let cx, cz;
       if (nearTemple) {
@@ -1779,9 +2108,19 @@ class GalaxySistersGame {
         cx = (Math.random() - 0.5) * 80;
         cz = (Math.random() - 0.5) * 80;
       }
-      const cy = 0.9 + Math.random() * 1.8;
+      const cy = this.getTerrainHeight(cx, cz) + 0.9 + Math.random() * 1.8;
 
-      bee.position.set(cx, cy, cz);
+      const radius = 1.8 + Math.random() * 3.6;
+      const speed = 0.018 + Math.random() * 0.022;
+      const angle = Math.random() * Math.PI * 2;
+      const heightVar = 0.35 + Math.random() * 0.45;
+      const bobPhase = Math.random() * 10;
+
+      const initX = cx + Math.cos(angle) * radius;
+      const initZ = cz + Math.sin(angle) * radius;
+      const initY = cy + Math.sin(bobPhase) * heightVar;
+      bee.position.set(initX, initY, initZ);
+      bee.rotation.y = -angle - Math.PI / 2;
       this.scene.add(bee);
 
       this.bees.push({
@@ -1789,24 +2128,24 @@ class GalaxySistersGame {
         leftWing: leftWing,
         rightWing: rightWing,
         centerPos: new THREE.Vector3(cx, cy, cz),
-        radius: 1.5 + Math.random() * 4.0,
-        speed: 0.02 + Math.random() * 0.025,
-        angle: Math.random() * Math.PI * 2,
-        heightVar: 0.35 + Math.random() * 0.45,
-        bobPhase: Math.random() * 10
+        radius: radius,
+        speed: speed,
+        angle: angle,
+        heightVar: heightVar,
+        bobPhase: bobPhase
       });
     }
   }
 
-  spawnButterflies(count = 25) {
+  spawnButterflies(count = 26) {
     this.butterflies = [];
     const colors = [
-      { main: 0xff70a6, spot: 0xffeef5 }, // Kirschblüten-Pink
-      { main: 0x00b4d8, spot: 0xe0f2fe }, // Morpho Himmelblau
-      { main: 0xffe600, spot: 0xfffbeb }, // Zitronengelb
-      { main: 0xa855f7, spot: 0xf3e8ff }, // Amethyst Lila
-      { main: 0xff6b6b, spot: 0xffe3e3 }, // Korallenrot
-      { main: 0x2ec4b6, spot: 0xd8f3dc }  // Mint Türkis
+      { main: 0xff70a6, spot: 0xffeef5 },
+      { main: 0x00b4d8, spot: 0xe0f2fe },
+      { main: 0xffe600, spot: 0xfffbeb },
+      { main: 0xa855f7, spot: 0xf3e8ff },
+      { main: 0xff6b6b, spot: 0xffe3e3 },
+      { main: 0x2ec4b6, spot: 0xd8f3dc }
     ];
     const bodyMat = new THREE.MeshBasicMaterial({ color: 0x22222b });
 
@@ -1814,32 +2153,18 @@ class GalaxySistersGame {
       const bfly = new THREE.Group();
       const colScheme = colors[i % colors.length];
 
-      // Körper
       const body = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.03, 0.45, 6), bodyMat);
       body.rotation.x = Math.PI / 2;
       bfly.add(body);
 
-      // Fühler
-      const antMat = new THREE.MeshBasicMaterial({ color: 0x111 });
-      const ant1 = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.22, 3), antMat);
-      ant1.position.set(0.06, 0.1, 0.2);
-      ant1.rotation.set(0.3, 0, 0.4);
-      const ant2 = ant1.clone();
-      ant2.position.x = -0.06;
-      ant2.rotation.z = -0.4;
-      bfly.add(ant1, ant2);
-
-      // Flügel-Gruppen
       const leftWingGroup = new THREE.Group();
       const rightWingGroup = new THREE.Group();
-
       const wingMat = new THREE.MeshLambertMaterial({
         color: colScheme.main,
         side: THREE.DoubleSide
       });
       const spotMat = new THREE.MeshBasicMaterial({ color: colScheme.spot });
 
-      // Vorderflügel
       const foreShape = new THREE.Shape();
       foreShape.moveTo(0, 0);
       foreShape.bezierCurveTo(0.3, 0.4, 0.7, 0.5, 0.75, 0.1);
@@ -1852,16 +2177,6 @@ class GalaxySistersGame {
       leftSpot.position.set(0.42, 0.15, 0.01);
       leftWingGroup.add(leftSpot);
 
-      // Hinterflügel
-      const hindShape = new THREE.Shape();
-      hindShape.moveTo(0, 0);
-      hindShape.bezierCurveTo(0.25, -0.1, 0.5, -0.2, 0.45, -0.45);
-      hindShape.bezierCurveTo(0.3, -0.5, 0.1, -0.3, 0, 0);
-      const hindGeo = new THREE.ShapeGeometry(hindShape);
-      const leftHind = new THREE.Mesh(hindGeo, wingMat);
-      leftWingGroup.add(leftHind);
-
-      // Rechte Flügel gespiegelt
       const rightFore = new THREE.Mesh(foreGeo, wingMat);
       rightFore.scale.x = -1;
       rightWingGroup.add(rightFore);
@@ -1869,13 +2184,8 @@ class GalaxySistersGame {
       rightSpot.position.set(-0.42, 0.15, 0.01);
       rightWingGroup.add(rightSpot);
 
-      const rightHind = new THREE.Mesh(hindGeo, wingMat);
-      rightHind.scale.x = -1;
-      rightWingGroup.add(rightHind);
-
       bfly.add(leftWingGroup, rightWingGroup);
 
-      // Platzierung über der Wiese und beim Tempel
       const nearTemple = (i % 4 === 0);
       let cx, cz;
       if (nearTemple) {
@@ -1885,7 +2195,7 @@ class GalaxySistersGame {
         cx = (Math.random() - 0.5) * 90;
         cz = (Math.random() - 0.5) * 90;
       }
-      const cy = 1.4 + Math.random() * 2.2;
+      const cy = this.getTerrainHeight(cx, cz) + 1.4 + Math.random() * 2.2;
 
       bfly.position.set(cx, cy, cz);
       this.scene.add(bfly);
@@ -1906,22 +2216,22 @@ class GalaxySistersGame {
   }
 
   // ==========================================
-  // 5. BOSS 1: VORTOX (Der Klauenwächter)
-  // Grün-blaues Monster, 1 großes blaues Auge, Schweif, langes Haar, Flügel, Riesenklauen!
+  // 5. BOSS 1: VORTOX
   // ==========================================
   createBossVortox() {
     this.bossGroup = new THREE.Group();
-    this.bossGroup.position.set(32, 0, 30); // in the Boss Arena
+    const bx = 32;
+    const bz = 30;
+    const by = this.getTerrainHeight(bx, bz);
+    this.bossGroup.position.set(bx, by, bz);
 
-    // 5.1 Main Body: Big green-blue torso
-    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x1db99f, flatShading: true }); // grün-blau
+    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x1db99f, flatShading: true });
     const bodyGeo = new THREE.DodecahedronGeometry(2.8, 1);
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.position.y = 3.8;
     body.castShadow = true;
     this.bossGroup.add(body);
 
-    // 5.2 Single Large Glowing Blue Eye in center!
     const eyeSclera = new THREE.Mesh(
       new THREE.SphereGeometry(0.95, 16, 16),
       new THREE.MeshBasicMaterial({ color: 0xffffff })
@@ -1930,13 +2240,12 @@ class GalaxySistersGame {
     eyeSclera.scale.set(1, 1, 0.4);
     this.bossGroup.add(eyeSclera);
 
-    const pupilMat = new THREE.MeshBasicMaterial({ color: 0x0066ff }); // leuchtend blau
+    const pupilMat = new THREE.MeshBasicMaterial({ color: 0x0066ff });
     this.bossEyePupil = new THREE.Mesh(new THREE.SphereGeometry(0.48, 12, 12), pupilMat);
     this.bossEyePupil.position.set(0, 4.2, 2.5);
     this.bossEyePupil.scale.set(1, 1, 0.2);
     this.bossGroup.add(this.bossEyePupil);
 
-    // 5.3 Long Flowing Wild Hair
     const hairMat = new THREE.MeshLambertMaterial({ color: 0x0a9396, flatShading: true });
     const hairGroup = new THREE.Group();
     for (let i = 0; i < 7; i++) {
@@ -1949,7 +2258,6 @@ class GalaxySistersGame {
     this.bossHair = hairGroup;
     this.bossGroup.add(hairGroup);
 
-    // 5.4 Small Wings on Back
     const wingMat = new THREE.MeshLambertMaterial({ color: 0x94d2bd, side: THREE.DoubleSide });
     this.leftWing = new THREE.Mesh(new THREE.ConeGeometry(0.8, 2.5, 4), wingMat);
     this.leftWing.position.set(-1.8, 4.5, -1.8);
@@ -1959,27 +2267,22 @@ class GalaxySistersGame {
     this.rightWing.rotation.set(-0.4, -0.6, -1.2);
     this.bossGroup.add(this.leftWing, this.rightWing);
 
-    // 5.5 Small Cute Tail
     const tailMat = new THREE.MeshLambertMaterial({ color: 0x1db99f });
     this.bossTail = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.6, 2.2, 6), tailMat);
     this.bossTail.position.set(0, 2.4, -2.4);
     this.bossTail.rotation.x = -Math.PI / 3;
     this.bossGroup.add(this.bossTail);
 
-    // 5.6 Massive Arms & Hands with Sharp Claws!
     const armMat = new THREE.MeshLambertMaterial({ color: 0x1db99f });
-    const clawMat = new THREE.MeshLambertMaterial({ color: 0xedf6f9 }); // sharp white/metallic claws
+    const clawMat = new THREE.MeshLambertMaterial({ color: 0xedf6f9 });
 
     this.bossArms = new THREE.Group();
-    
-    // Left Arm + Claws
     const leftArmGroup = new THREE.Group();
     const leftArm = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, 3.2, 6), armMat);
     leftArm.position.set(-3.2, 3.2, 0.5);
     leftArm.rotation.z = Math.PI / 4;
     leftArmGroup.add(leftArm);
 
-    // 3 Sharp Claws
     for (let c = 0; c < 3; c++) {
       const claw = new THREE.Mesh(new THREE.ConeGeometry(0.2, 1.1, 4), clawMat);
       claw.position.set(-4.5 + c * 0.35, 1.8, 1.2);
@@ -1988,7 +2291,6 @@ class GalaxySistersGame {
     }
     this.bossArms.add(leftArmGroup);
 
-    // Right Arm + Claws
     const rightArmGroup = new THREE.Group();
     const rightArm = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, 3.2, 6), armMat);
     rightArm.position.set(3.2, 3.2, 0.5);
@@ -2004,9 +2306,8 @@ class GalaxySistersGame {
     this.bossArms.add(rightArmGroup);
     this.bossGroup.add(this.bossArms);
 
-    // 5.7 Boss Arena Pillars surrounding him
     const arenaGroup = new THREE.Group();
-    arenaGroup.position.set(32, 0, 30);
+    arenaGroup.position.set(bx, by, bz);
     const pillarMat = new THREE.MeshLambertMaterial({ color: 0x495057 });
     for (let i = 0; i < 8; i++) {
       const ang = (i / 8) * Math.PI * 2;
@@ -2017,14 +2318,14 @@ class GalaxySistersGame {
     }
     this.scene.add(arenaGroup);
 
-    // Boss State
     this.bossData = {
       hp: 150,
       maxHp: 150,
-      state: 'idle', // 'idle', 'spin', 'dizzy', 'clawAttack'
+      state: 'idle',
       timer: 0,
       spinAngle: 0,
-      alive: true
+      alive: true,
+      petrifiedTimer: 0
     };
 
     this.scene.add(this.bossGroup);
@@ -2035,29 +2336,26 @@ class GalaxySistersGame {
   // ==========================================
   createPlayerMesh() {
     this.playerGroup = new THREE.Group();
-    this.playerGroup.position.set(0, 0, 8);
+    const spawnY = this.getTerrainHeight(0, 8);
+    this.playerGroup.position.set(0, spawnY, 8);
 
-    // Torso / Dress
     this.playerDressMat = new THREE.MeshLambertMaterial({ color: SISTERS[0].dressColor });
     this.playerDress = new THREE.Mesh(new THREE.ConeGeometry(0.65, 1.3, 8), this.playerDressMat);
     this.playerDress.position.y = 1.0;
     this.playerDress.castShadow = true;
     this.playerGroup.add(this.playerDress);
 
-    // Head
     const skinMat = new THREE.MeshLambertMaterial({ color: 0xffdfba });
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.48, 16, 16), skinMat);
     head.position.y = 1.95;
     head.castShadow = true;
     this.playerGroup.add(head);
 
-    // Kawaii Hair
     this.playerHairMat = new THREE.MeshLambertMaterial({ color: SISTERS[0].hairColor });
     this.playerHair = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 12), this.playerHairMat);
     this.playerHair.position.set(0, 2.05, -0.05);
     this.playerGroup.add(this.playerHair);
 
-    // Cute Anime Eyes
     const eyeMat = new THREE.MeshBasicMaterial({ color: 0x22223b });
     const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), eyeMat);
     eye1.position.set(-0.16, 1.98, 0.42);
@@ -2065,13 +2363,11 @@ class GalaxySistersGame {
     eye2.position.x = 0.16;
     this.playerGroup.add(eye1, eye2);
 
-    // Cosmic Celestial Accessory on head (Mond / Stern / Sonne / Saturn)
     this.accessoryGroup = new THREE.Group();
     this.accessoryGroup.position.set(0, 2.65, 0);
     this.playerGroup.add(this.accessoryGroup);
     this.updateSisterAccessory();
 
-    // Shield Mesh for Luna Ability
     const shieldGeo = new THREE.SphereGeometry(1.6, 16, 16);
     const shieldMat = new THREE.MeshBasicMaterial({
       color: 0x90e0ef,
@@ -2087,7 +2383,6 @@ class GalaxySistersGame {
   }
 
   updateSisterAccessory() {
-    // Clear old accessory
     while (this.accessoryGroup.children.length > 0) {
       this.accessoryGroup.remove(this.accessoryGroup.children[0]);
     }
@@ -2097,21 +2392,18 @@ class GalaxySistersGame {
     this.playerHairMat.color.setHex(current.hairColor);
 
     if (this.activeSisterIdx === 0) {
-      // 🌙 Luna: Crescent Moon
       const moon = new THREE.Mesh(
         new THREE.TorusGeometry(0.32, 0.08, 8, 16, Math.PI * 1.3),
         new THREE.MeshBasicMaterial({ color: 0xffffff })
       );
       this.accessoryGroup.add(moon);
     } else if (this.activeSisterIdx === 1) {
-      // ⭐ Stella: Golden Star & Celestial Star Bow
       const star = new THREE.Mesh(
         new THREE.OctahedronGeometry(0.35, 0),
         new THREE.MeshBasicMaterial({ color: 0xffe066 })
       );
       this.accessoryGroup.add(star);
 
-      // Star Bow held on back / side
       const bow = new THREE.Mesh(
         new THREE.TorusGeometry(0.5, 0.04, 6, 16, Math.PI),
         new THREE.MeshBasicMaterial({ color: 0xffd166 })
@@ -2120,7 +2412,6 @@ class GalaxySistersGame {
       bow.rotation.y = Math.PI / 2;
       this.accessoryGroup.add(bow);
     } else if (this.activeSisterIdx === 2) {
-      // ☀️ Sol: Blazing Sun with Solar Ribbons
       const sun = new THREE.Mesh(
         new THREE.SphereGeometry(0.32, 10, 10),
         new THREE.MeshBasicMaterial({ color: 0xff7b00 })
@@ -2132,7 +2423,6 @@ class GalaxySistersGame {
       );
       this.accessoryGroup.add(corona);
     } else if (this.activeSisterIdx === 3) {
-      // 🪐 Planeta: Dual Cosmic Planetary Rings & Mini Satellites
       const ring1 = new THREE.Mesh(
         new THREE.TorusGeometry(0.48, 0.05, 6, 20),
         new THREE.MeshBasicMaterial({ color: 0xc77dff })
@@ -2147,7 +2437,6 @@ class GalaxySistersGame {
       ring2.rotation.x = Math.PI / 2.5;
       this.accessoryGroup.add(ring2);
 
-      // Mini satellite planet
       const sat = new THREE.Mesh(
         new THREE.SphereGeometry(0.08, 6, 6),
         new THREE.MeshBasicMaterial({ color: 0xffde59 })
@@ -2163,13 +2452,11 @@ class GalaxySistersGame {
     this.updateSisterAccessory();
     sfx.magicSkill(idx);
 
-    // Update UI elements
     const s = SISTERS[idx];
     document.getElementById('char-name').innerHTML = `${s.name} <span style="font-size:0.9rem">${s.icon}</span>`;
     document.getElementById('char-title').textContent = s.title;
     document.getElementById('char-avatar').textContent = s.icon;
 
-    // Update Roblox Action Circles
     const p1Icon = document.getElementById('circle-power1-icon');
     const p1Name = document.getElementById('circle-power1-name');
     if (p1Icon && p1Name) {
@@ -2183,7 +2470,6 @@ class GalaxySistersGame {
       p2Name.textContent = s.ability2.name;
     }
 
-    // Active button styling
     const btns = document.querySelectorAll('.sister-btn[data-sister]');
     btns.forEach((b, i) => {
       b.classList.toggle('active', i === idx);
@@ -2193,7 +2479,7 @@ class GalaxySistersGame {
   }
 
   // ==========================================
-  // 7. ABILITY 1 (Hauptkraft)
+  // 7. ABILITIES
   // ==========================================
   castAbility1() {
     if (this.cooldown1 > 0) return;
@@ -2201,22 +2487,19 @@ class GalaxySistersGame {
     this.cooldown1 = current.ability1.cooldown;
 
     if (this.activeSisterIdx === 0) {
-      // Luna: Mond-Schild (Verlängert auf 7 Sekunden mit Mondsatelliten)
       sfx.magicSkill(0);
       this.shieldMesh.material.opacity = 0.75;
-      this.playerVelY = 0.28; // gentle lunar rise
+      this.playerVelY = 0.28;
       this.showFloatingText("🌙 Mond-Schild (7s) aktiv!", this.playerGroup.position, "#90e0ef");
       setTimeout(() => {
         this.shieldMesh.material.opacity = 0;
       }, 7000);
 
     } else if (this.activeSisterIdx === 1) {
-      // Stella: Sternen-Bogen (Feuert Sternenpfeile mit Bogenanimation!)
       sfx.arrowShoot();
       const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.playerGroup.quaternion);
       this.showFloatingText("🏹 Sternen-Bogen!", this.playerGroup.position, "#ffe066");
 
-      // Fire 4 rapid glowing star arrows in spread
       for (let i = -1.5; i <= 1.5; i += 1.0) {
         const arrowMesh = new THREE.Group();
         const head = new THREE.Mesh(
@@ -2246,14 +2529,12 @@ class GalaxySistersGame {
       }
 
     } else if (this.activeSisterIdx === 2) {
-      // Sol: Solar-Supernova (AoE Blast mit Feuersäulen)
       sfx.magicSkill(2);
       this.showFloatingText("☀️ SUPERNOVA!", this.playerGroup.position, "#ff7b00");
       this.createSupernovaParticles(this.playerGroup.position);
       this.damageInRadius(this.playerGroup.position, 9, 45);
 
     } else if (this.activeSisterIdx === 3) {
-      // Planeta: Planeten-Ringe mit Satelliten & Gravitationssog
       sfx.magicSkill(3);
       this.showFloatingText("🪐 Planeten-Ringe!", this.playerGroup.position, "#9d4edd");
       const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.playerGroup.quaternion);
@@ -2286,16 +2567,12 @@ class GalaxySistersGame {
     }
   }
 
-  // ==========================================
-  // 7b. ABILITY 2 (Zweitkraft)
-  // ==========================================
   castAbility2() {
     if (this.cooldown2 > 0) return;
     const current = SISTERS[this.activeSisterIdx];
     this.cooldown2 = current.ability2.cooldown;
 
     if (this.activeSisterIdx === 0) {
-      // Luna: Heilzauber (+HP für Luna & Mitspieler)
       sfx.heal();
       this.playerHP = Math.min(this.maxPlayerHP, this.playerHP + 50);
       document.getElementById('player-hp-bar').style.width = `${(this.playerHP / this.maxPlayerHP) * 100}%`;
@@ -2303,13 +2580,28 @@ class GalaxySistersGame {
       this.showFloatingText("💚 HEILUNG! +50 HP", this.playerGroup.position, "#2ecc71");
 
     } else if (this.activeSisterIdx === 1) {
-      // Stella: Sternen-Dash
+      // Stella: Safe Sub-stepped Star-Dash
       sfx.magicSkill(1);
       const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.playerGroup.quaternion);
-      this.playerGroup.position.addScaledVector(forward, 7.5);
+      const dashDist = 7.5;
+      const steps = 6;
+      const stepDist = dashDist / steps;
+      const pRad = 0.42;
+
+      for (let s = 0; s < steps; s++) {
+        const nextX = this.playerGroup.position.x + forward.x * stepDist;
+        const nextZ = this.playerGroup.position.z + forward.z * stepDist;
+        const curY = this.playerGroup.position.y;
+        if (!this.checkWallCollision(nextX, nextZ, pRad, curY) && Math.abs(nextX) < 96 && Math.abs(nextZ) < 96) {
+          this.playerGroup.position.x = nextX;
+          this.playerGroup.position.z = nextZ;
+        } else {
+          break;
+        }
+      }
+
       this.showFloatingText("⚡ Sternen-Dash!", this.playerGroup.position, "#ffe066");
 
-      // Star spark burst
       for (let i = 0; i < 20; i++) {
         const sp = new THREE.Mesh(
           new THREE.SphereGeometry(0.18, 4, 4),
@@ -2329,13 +2621,11 @@ class GalaxySistersGame {
       }
 
     } else if (this.activeSisterIdx === 2) {
-      // Sol: Versteinerung (Gegner 4 Sekunden zu Stein erstarren lassen!)
       sfx.petrify();
       this.petrifyEnemies(4.0);
       this.showFloatingText("🪨 VERSTEINERUNG! (4s)", this.playerGroup.position, "#e67e22");
 
     } else if (this.activeSisterIdx === 3) {
-      // Planeta: Unsichtbarkeit (5 Sekunden ätherische Tarnung)
       sfx.invisible();
       this.isPlayerInvisible = true;
       this.invisibleTimer = 5.0;
@@ -2348,7 +2638,6 @@ class GalaxySistersGame {
   }
 
   petrifyEnemies(duration) {
-    // Petrify Boss
     if (this.bossData.alive) {
       const dist = this.bossGroup.position.distanceTo(this.playerGroup.position);
       if (dist < 26) {
@@ -2357,7 +2646,6 @@ class GalaxySistersGame {
       }
     }
 
-    // Petrify Slimes
     this.slimes.forEach(slime => {
       if (slime.userData.alive) {
         const dist = slime.position.distanceTo(this.playerGroup.position);
@@ -2407,14 +2695,12 @@ class GalaxySistersGame {
   }
 
   damageInRadius(pos, radius, dmg) {
-    // Check boss
     if (this.bossData.alive) {
       const d = pos.distanceTo(this.bossGroup.position);
       if (d < radius + 3) {
         this.hitBoss(dmg);
       }
     }
-    // Check slimes
     this.slimes.forEach(slime => {
       if (slime.userData.alive && pos.distanceTo(slime.position) < radius) {
         slime.userData.hp -= dmg;
@@ -2435,7 +2721,6 @@ class GalaxySistersGame {
     sfx.hit();
     this.showFloatingText(`-${dmg} HP!`, this.bossGroup.position, "#00f0ff");
 
-    // Update Boss UI
     const pct = (this.bossData.hp / this.bossData.maxHp) * 100;
     document.getElementById('boss-hp-bar').style.width = `${pct}%`;
 
@@ -2460,7 +2745,6 @@ class GalaxySistersGame {
 
     window.addEventListener('keydown', (e) => {
       this.keys[e.code] = true;
-      // 1 - 4 to switch sister
       if (e.key === '1') this.switchSister(0);
       if (e.key === '2') this.switchSister(1);
       if (e.key === '3') this.switchSister(2);
@@ -2468,15 +2752,20 @@ class GalaxySistersGame {
       if (e.key.toLowerCase() === 'q') {
         this.switchSister((this.activeSisterIdx + 1) % 4);
       }
-      // E to trigger Power 1
       if (e.key.toLowerCase() === 'e') {
         this.castAbility1();
       }
-      // R to trigger Power 2
       if (e.key.toLowerCase() === 'r') {
         this.castAbility2();
       }
-      // Space to Jump (preventDefault stops unwanted browser button triggering!)
+      if (e.key.toLowerCase() === 'h') {
+        const controlsPopup = document.getElementById('controls-popup');
+        const btnHelp = document.getElementById('btn-toggle-help');
+        if (controlsPopup) {
+          const isHidden = controlsPopup.classList.toggle('hidden');
+          if (btnHelp) btnHelp.classList.toggle('active', !isHidden);
+        }
+      }
       if (e.code === 'Space') {
         e.preventDefault();
         this.doJump();
@@ -2487,16 +2776,37 @@ class GalaxySistersGame {
       this.keys[e.code] = false;
     });
 
-    // UI Click Events for Sisters Switcher
+    // Toggle Controls Popup Dialog
+    const controlsPopup = document.getElementById('controls-popup');
+    const btnToggleHelp = document.getElementById('btn-toggle-help');
+    const btnCloseCtrl = document.getElementById('btn-close-controls');
+
+    if (btnCloseCtrl && controlsPopup) {
+      btnCloseCtrl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        controlsPopup.classList.add('hidden');
+        if (btnToggleHelp) btnToggleHelp.classList.remove('active');
+        btnCloseCtrl.blur();
+      });
+    }
+
+    if (btnToggleHelp && controlsPopup) {
+      btnToggleHelp.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isHidden = controlsPopup.classList.toggle('hidden');
+        btnToggleHelp.classList.toggle('active', !isHidden);
+        btnToggleHelp.blur();
+      });
+    }
+
     document.querySelectorAll('.sister-btn[data-sister]').forEach(btn => {
       btn.addEventListener('click', () => {
         const idx = parseInt(btn.dataset.sister);
         this.switchSister(idx);
-        btn.blur(); // Remove focus so Space won't re-trigger
+        btn.blur();
       });
     });
 
-    // Boss 2 Modal
     const modal = document.getElementById('boss2-modal');
     const btnBoss2 = document.getElementById('btn-boss2');
     if (btnBoss2) {
@@ -2512,7 +2822,6 @@ class GalaxySistersGame {
       });
     }
 
-    // Audio toggle
     const soundBtn = document.getElementById('btn-sound');
     if (soundBtn) {
       soundBtn.addEventListener('click', () => {
@@ -2524,7 +2833,6 @@ class GalaxySistersGame {
   }
 
   setupRobloxControls() {
-    // 1. Intro Screen Start Button
     const btnStart = document.getElementById('btn-start-game');
     const introScreen = document.getElementById('intro-screen');
     if (btnStart && introScreen) {
@@ -2534,7 +2842,6 @@ class GalaxySistersGame {
       });
     }
 
-    // 2. Roblox Action Circles (Jump, Power 1, Power 2)
     const btnJump = document.getElementById('circle-jump');
     if (btnJump) {
       const handleJump = (e) => {
@@ -2568,7 +2875,6 @@ class GalaxySistersGame {
       btnP2.addEventListener('mousedown', handleP2);
     }
 
-    // 3. Virtual Joystick on Bottom Left (Touch & Mouse dragging)
     const joystickBase = document.getElementById('joystick-base');
     const joystickThumb = document.getElementById('joystick-thumb');
     if (joystickBase && joystickThumb) {
@@ -2640,7 +2946,6 @@ class GalaxySistersGame {
     el.textContent = text;
     el.style.color = color;
 
-    // Convert 3D position to screen
     const screenPos = worldPos.clone().project(this.camera);
     const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
     const y = (-(screenPos.y * 0.5) + 0.5) * window.innerHeight;
@@ -2654,7 +2959,6 @@ class GalaxySistersGame {
     }, 1200);
   }
 
-  // Running particles behind character feet
   spawnRunningParticle() {
     if (Math.random() > 0.4) return;
     const s = SISTERS[this.activeSisterIdx];
@@ -2664,7 +2968,7 @@ class GalaxySistersGame {
     );
     pMesh.position.set(
       this.playerGroup.position.x + (Math.random() - 0.5) * 0.35,
-      0.15,
+      this.playerGroup.position.y + 0.15,
       this.playerGroup.position.z + (Math.random() - 0.5) * 0.35
     );
     this.scene.add(pMesh);
@@ -2689,40 +2993,46 @@ class GalaxySistersGame {
   }
 
   // ==========================================
-  // 9. GAME LOOP & ANIMATION
+  // 9. GAME LOOP, PHYSICS & ANIMATION
   // ==========================================
   animate() {
     requestAnimationFrame(() => this.animate());
 
-    // Update Ability Cooldown UI for Power 1
-    const p1CdOverlay = document.getElementById('circle-power1-cd');
+    const delta = Math.min(this.clock.getDelta(), 0.05);
+    const dtFactor = delta * 60; // normalized to 60fps baseline
+
+    // Ability Cooldown Timers
     if (this.cooldown1 > 0) {
-      this.cooldown1 -= 0.016;
+      this.cooldown1 = Math.max(0, this.cooldown1 - delta);
+      const p1CdOverlay = document.getElementById('circle-power1-cd');
       if (p1CdOverlay) {
-        p1CdOverlay.classList.add('active');
-        p1CdOverlay.textContent = `${this.cooldown1.toFixed(1)}s`;
+        if (this.cooldown1 > 0) {
+          p1CdOverlay.classList.add('active');
+          p1CdOverlay.textContent = `${this.cooldown1.toFixed(1)}s`;
+        } else {
+          p1CdOverlay.classList.remove('active');
+          p1CdOverlay.textContent = '';
+        }
       }
-    } else if (p1CdOverlay) {
-      p1CdOverlay.classList.remove('active');
-      p1CdOverlay.textContent = '';
     }
 
-    // Update Ability Cooldown UI for Power 2
-    const p2CdOverlay = document.getElementById('circle-power2-cd');
     if (this.cooldown2 > 0) {
-      this.cooldown2 -= 0.016;
+      this.cooldown2 = Math.max(0, this.cooldown2 - delta);
+      const p2CdOverlay = document.getElementById('circle-power2-cd');
       if (p2CdOverlay) {
-        p2CdOverlay.classList.add('active');
-        p2CdOverlay.textContent = `${this.cooldown2.toFixed(1)}s`;
+        if (this.cooldown2 > 0) {
+          p2CdOverlay.classList.add('active');
+          p2CdOverlay.textContent = `${this.cooldown2.toFixed(1)}s`;
+        } else {
+          p2CdOverlay.classList.remove('active');
+          p2CdOverlay.textContent = '';
+        }
       }
-    } else if (p2CdOverlay) {
-      p2CdOverlay.classList.remove('active');
-      p2CdOverlay.textContent = '';
     }
 
     // Invisibility timer for Planeta
     if (this.isPlayerInvisible) {
-      this.invisibleTimer -= 0.016;
+      this.invisibleTimer = Math.max(0, this.invisibleTimer - delta);
       if (this.invisibleTimer <= 0) {
         this.isPlayerInvisible = false;
         this.playerDressMat.transparent = false;
@@ -2733,17 +3043,17 @@ class GalaxySistersGame {
       }
     }
 
-    // 9.1 Player Movement
-    this.updatePlayerMovement();
+    // 9.1 Player Movement with verified physics
+    this.updatePlayerMovement(delta, dtFactor);
 
     // 9.2 Projectiles & Particles
     this.updateProjectiles();
 
     // 9.3 Boss Vortox AI & Attacks
-    this.updateBossAI();
+    this.updateBossAI(delta);
 
-    // 9.4 Ambient Animations (Creatures hopping, grass sway, tree petals)
-    this.updateWorldAmbience();
+    // 9.4 Ambient Animations (Creatures, Grass Sway, Water, Petals, Bees)
+    this.updateWorldAmbience(delta);
 
     // Dynamic BGM based on distance to boss
     if (this.bossData && this.bossData.alive) {
@@ -2751,7 +3061,7 @@ class GalaxySistersGame {
       sfx.setBGMMode(dist < 28 ? 'boss' : 'peaceful');
     }
 
-    // Camera follows player tightly and translates with player movement
+    // Camera follow
     const playerPos = this.playerGroup.position;
     if (!this.prevPlayerPos) {
       this.prevPlayerPos = playerPos.clone();
@@ -2760,7 +3070,6 @@ class GalaxySistersGame {
     this.camera.position.add(deltaMove);
     this.prevPlayerPos.copy(playerPos);
 
-    // Keep camera target firmly locked onto player center
     const targetY = playerPos.y + 1.6;
     this.controls.target.lerp(
       new THREE.Vector3(playerPos.x, targetY, playerPos.z),
@@ -2784,7 +3093,7 @@ class GalaxySistersGame {
         const dz = pz - c.z;
         const minDist = c.radius + radius;
         if (dx * dx + dz * dz < minDist * minDist) {
-          return true; // Collision with column / tree / pillar
+          return true;
         }
       } else if (c.type === 'box') {
         if (
@@ -2793,7 +3102,7 @@ class GalaxySistersGame {
           pz + radius > c.minZ &&
           pz - radius < c.maxZ
         ) {
-          return true; // Collision with wall / podium / hut
+          return true;
         }
       }
     }
@@ -2801,15 +3110,21 @@ class GalaxySistersGame {
   }
 
   doJump() {
-    if (this.isGrounded) {
-      const current = SISTERS[this.activeSisterIdx];
+    this.jumpBufferTimer = 0.12; // 120ms jump buffer
+    const current = SISTERS[this.activeSisterIdx];
+    if (this.isGrounded || this.coyoteTimer > 0) {
       this.playerVelY = current.jumpPower;
       this.isGrounded = false;
+      this.coyoteTimer = 0;
+      this.jumpBufferTimer = 0;
       sfx.jump();
     }
   }
 
-  updatePlayerMovement() {
+  // ==========================================
+  // 9.1 VERIFIED SMOOTH PHYSICS & MOVEMENT
+  // ==========================================
+  updatePlayerMovement(delta, dtFactor) {
     const current = SISTERS[this.activeSisterIdx];
     let moveX = 0;
     let moveZ = 0;
@@ -2819,7 +3134,6 @@ class GalaxySistersGame {
     if (this.keys['KeyA'] || this.keys['ArrowLeft']) moveX -= 1;
     if (this.keys['KeyD'] || this.keys['ArrowRight']) moveX += 1;
 
-    // Merge with Virtual Joystick input
     if (this.joystickDelta.x !== 0 || this.joystickDelta.y !== 0) {
       moveX += this.joystickDelta.x;
       moveZ += this.joystickDelta.y;
@@ -2831,34 +3145,32 @@ class GalaxySistersGame {
       const moveVec = new THREE.Vector3(moveX, 0, moveZ);
       if (moveVec.length() > 1) moveVec.normalize();
       
-      // Align movement with camera orientation
       const camEuler = new THREE.Euler(0, this.camera.rotation.y, 0, 'YXZ');
       moveVec.applyEuler(camEuler);
 
-      // Solid Wall Collision Detection (X & Z separated for smooth wall sliding)
       const oldX = this.playerGroup.position.x;
       const oldZ = this.playerGroup.position.z;
       const playerRadius = 0.42;
       const playerY = this.playerGroup.position.y;
+      const moveStep = current.speed * dtFactor;
 
-      const nextX = oldX + moveVec.x * current.speed;
-      if (!this.checkWallCollision(nextX, oldZ, playerRadius, playerY)) {
+      // X-axis movement & collision
+      const nextX = oldX + moveVec.x * moveStep;
+      if (!this.checkWallCollision(nextX, oldZ, playerRadius, playerY) && Math.abs(nextX) <= 96) {
         this.playerGroup.position.x = nextX;
       }
 
-      const nextZ = oldZ + moveVec.z * current.speed;
-      if (!this.checkWallCollision(this.playerGroup.position.x, nextZ, playerRadius, playerY)) {
+      // Z-axis movement & collision
+      const nextZ = oldZ + moveVec.z * moveStep;
+      if (!this.checkWallCollision(this.playerGroup.position.x, nextZ, playerRadius, playerY) && Math.abs(nextZ) <= 96) {
         this.playerGroup.position.z = nextZ;
       }
 
-      // Face direction of movement
       const targetAngle = Math.atan2(moveVec.x, moveVec.z);
       this.playerGroup.rotation.y = targetAngle;
 
-      // Cute run wobble
       this.playerDress.rotation.z = Math.sin(Date.now() * 0.015) * 0.08;
 
-      // Running footstep particles!
       if (this.isGrounded) {
         this.spawnRunningParticle();
       }
@@ -2866,16 +3178,21 @@ class GalaxySistersGame {
       this.playerDress.rotation.z = 0;
     }
 
-    // Gravity & Obby Platform Collision
-    this.playerVelY -= current.gravity;
-    this.playerGroup.position.y += this.playerVelY;
+    // World boundary protection (Allows scaling the surrounding mountain peaks)
+    this.playerGroup.position.x = Math.max(-96, Math.min(96, this.playerGroup.position.x));
+    this.playerGroup.position.z = Math.max(-96, Math.min(96, this.playerGroup.position.z));
 
-    // Check platform collision (AABB boxes for temple & stairs, cylinders for obby & dais)
-    let bestPlatform = null;
+    // Vertical Physics
+    const prevY = this.playerGroup.position.y;
+    this.playerVelY -= current.gravity * dtFactor;
+    this.playerGroup.position.y += this.playerVelY * dtFactor;
+
     const px = this.playerGroup.position.x;
     const pz = this.playerGroup.position.z;
     const py = this.playerGroup.position.y;
 
+    // Platform collision check (AABB boxes for temple/stairs & cylinders for obby)
+    let bestPlatform = null;
     for (let i = 0; i < this.platforms.length; i++) {
       const plat = this.platforms[i];
       let isInside = false;
@@ -2889,9 +3206,10 @@ class GalaxySistersGame {
       }
 
       if (isInside) {
-        const diff = py - plat.topY;
-        // Erlaubt das Besteigen von Stufen (diff bis -0.38) und sauberes Landen von oben (diff bis +0.55)
-        if (diff >= -0.38 && diff <= 0.55) {
+        // Continuous swept collision: checks landing from prevY down to py
+        const minCheckY = py - 0.35;
+        const maxCheckY = Math.max(prevY + 0.15, py + 0.55);
+        if (plat.topY >= minCheckY && plat.topY <= maxCheckY) {
           if (!bestPlatform || plat.topY > bestPlatform.topY) {
             bestPlatform = plat;
           }
@@ -2899,18 +3217,34 @@ class GalaxySistersGame {
       }
     }
 
-    if (bestPlatform && this.playerVelY <= 0.08) {
+    // Ground elevation from analytical terrain function
+    const groundY = this.getTerrainHeight(px, pz);
+
+    if (bestPlatform && this.playerVelY <= 0.1) {
       this.playerGroup.position.y = bestPlatform.topY;
       this.playerVelY = 0;
       this.isGrounded = true;
-    } else if (this.playerGroup.position.y <= 0) {
-      // Bodenkontakt (Wiese y = 0)
-      this.playerGroup.position.y = 0;
+      this.coyoteTimer = 0.12;
+    } else if (this.playerGroup.position.y <= groundY) {
+      this.playerGroup.position.y = groundY;
       this.playerVelY = 0;
       this.isGrounded = true;
+      this.coyoteTimer = 0.12;
     } else {
-      // Im freien Fall / Sprung
       this.isGrounded = false;
+      this.coyoteTimer = Math.max(0, this.coyoteTimer - delta);
+    }
+
+    // Jump Buffering check
+    if (this.jumpBufferTimer > 0) {
+      this.jumpBufferTimer -= delta;
+      if (this.isGrounded) {
+        this.playerVelY = current.jumpPower;
+        this.isGrounded = false;
+        this.jumpBufferTimer = 0;
+        this.coyoteTimer = 0;
+        sfx.jump();
+      }
     }
   }
 
@@ -2920,7 +3254,6 @@ class GalaxySistersGame {
       p.mesh.position.addScaledVector(p.dir, p.speed);
       p.life--;
 
-      // Hit boss
       if (this.bossData.alive && p.mesh.position.distanceTo(this.bossGroup.position) < 3.8) {
         this.hitBoss(p.damage);
         this.scene.remove(p.mesh);
@@ -2928,7 +3261,6 @@ class GalaxySistersGame {
         continue;
       }
 
-      // Hit slimes
       this.slimes.forEach(slime => {
         if (slime.userData.alive && p.mesh.position.distanceTo(slime.position) < 1.6) {
           slime.userData.hp -= p.damage;
@@ -2946,7 +3278,6 @@ class GalaxySistersGame {
       }
     }
 
-    // Particles
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const pt = this.particles[i];
       pt.mesh.position.add(pt.vel);
@@ -2958,61 +3289,52 @@ class GalaxySistersGame {
     }
   }
 
-  updateBossAI() {
+  updateBossAI(delta) {
     if (!this.bossData.alive) return;
 
-    // Check if boss is currently petrified by Sol
     if (this.bossData.petrifiedTimer > 0) {
-      this.bossData.petrifiedTimer -= 0.016;
+      this.bossData.petrifiedTimer -= delta;
       document.getElementById('boss-state-text').textContent = `🪨 VERSTEINERT! (${this.bossData.petrifiedTimer.toFixed(1)}s)`;
-      return; // Freeze all movement and attacks!
+      return;
     }
 
     const distToPlayer = this.bossGroup.position.distanceTo(this.playerGroup.position);
     const bossBanner = document.getElementById('boss-banner');
 
-    // Show boss banner when near arena
     if (distToPlayer < 24) {
       bossBanner.classList.add('visible');
     } else {
       bossBanner.classList.remove('visible');
     }
 
-    this.bossData.timer += 0.016;
+    this.bossData.timer += delta;
 
-    // Wing flap
     const wingFlap = Math.sin(Date.now() * 0.008) * 0.4;
     this.leftWing.rotation.y = 0.6 + wingFlap;
     this.rightWing.rotation.y = -0.6 - wingFlap;
 
-    // If player is invisible, boss loses target
     if (this.isPlayerInvisible) {
       return;
     }
 
-    // AI Phase State Machine
     if (this.bossData.state === 'idle') {
-      // Look at player
-      this.bossGroup.lookAt(this.playerGroup.position.x, 0, this.playerGroup.position.z);
+      this.bossGroup.lookAt(this.playerGroup.position.x, this.bossGroup.position.y, this.playerGroup.position.z);
 
       if (distToPlayer < 18) {
-        // Trigger signature Tornado-Spin!
         this.bossData.state = 'spin';
         this.bossData.timer = 0;
         document.getElementById('boss-state-text').textContent = "🌪️ TORNADO-WIRBEL! GEFAHR!";
         sfx.bossSpin();
       }
     } else if (this.bossData.state === 'spin') {
-      // TORNADO SPIN ATTACK: spins super fast and charges towards player!
       this.bossGroup.rotation.y += 0.35;
       
       const dir = new THREE.Vector3().subVectors(this.playerGroup.position, this.bossGroup.position).normalize();
+      dir.y = 0;
       this.bossGroup.position.addScaledVector(dir, 0.12);
 
-      // Hit player check
       if (distToPlayer < 3.8) {
         if (this.activeSisterIdx === 0 && this.shieldMesh.material.opacity > 0) {
-          // Luna's shield deflects!
           this.showFloatingText("🛡️ Mond-Schild blockt Wirbel!", this.playerGroup.position, "#90e0ef");
         } else {
           this.playerHP = Math.max(0, this.playerHP - 0.4);
@@ -3020,7 +3342,6 @@ class GalaxySistersGame {
         }
       }
 
-      // After 3.5 seconds of spinning, Boss gets dizzy!
       if (this.bossData.timer > 3.5) {
         this.bossData.state = 'dizzy';
         this.bossData.timer = 0;
@@ -3028,10 +3349,8 @@ class GalaxySistersGame {
         this.showFloatingText("💫 Boss ist schwindelig!", this.bossGroup.position, "#ffdf6b");
       }
     } else if (this.bossData.state === 'dizzy') {
-      // Wobble in place dizzy
       this.bossGroup.rotation.z = Math.sin(Date.now() * 0.01) * 0.25;
       
-      // Vulnerability window: recovers after 4 seconds
       if (this.bossData.timer > 4.0) {
         this.bossGroup.rotation.z = 0;
         this.bossData.state = 'idle';
@@ -3041,8 +3360,32 @@ class GalaxySistersGame {
     }
   }
 
-  updateWorldAmbience() {
+  // ==========================================
+  // 9.4 AMBIENT ANIMATIONS & OPTIMIZED UPDATES
+  // ==========================================
+  updateWorldAmbience(delta) {
     const now = Date.now();
+    const secTime = now * 0.001;
+
+    // Grass GPU wind shader uniform update (ZERO matrix updates, 1 float uniform set!)
+    if (this.grassMat1 && this.grassMat1.userData.shader) {
+      this.grassMat1.userData.shader.uniforms.uTime.value = secTime;
+    }
+    if (this.grassMat2 && this.grassMat2.userData.shader) {
+      this.grassMat2.userData.shader.uniforms.uTime.value = secTime;
+    }
+
+    // Drifting Sky Clouds
+    for (let c = 0; c < this.clouds.length; c++) {
+      const cloud = this.clouds[c];
+      cloud.position.x += cloud.userData.driftSpeed;
+      if (cloud.position.x > 110) cloud.position.x = -110;
+    }
+
+    // Water ripple / opacity shimmer
+    if (this.waterMesh) {
+      this.waterMesh.material.opacity = 0.76 + Math.sin(secTime * 1.5) * 0.04;
+    }
 
     // Temple Crystal rotation
     if (this.templeCrystal) {
@@ -3050,50 +3393,66 @@ class GalaxySistersGame {
       this.templeCrystal.rotation.x = Math.sin(now * 0.001) * 0.2;
     }
 
-    // Trophy Star
+    // Trophy Star rotation
     if (this.trophyStar) {
       this.trophyStar.rotation.y += 0.02;
     }
 
     // Starlet Creatures bouncing
     this.creatures.forEach((c) => {
-      c.position.y = Math.abs(Math.sin(now * 0.004 + c.userData.hopOffset)) * 0.8;
+      c.position.y = c.userData.initialY + Math.abs(Math.sin(now * 0.004 + c.userData.hopOffset)) * 0.8;
     });
 
-    // Visible 3D Grass Blades swaying gently in the breeze
-    if (this.grassBlades) {
-      const grassTime = now * 0.003;
-      for (let g of this.grassBlades) {
-        g.rotation.z = Math.sin(grassTime + g.userData.swayOffset) * 0.12;
-      }
-    }
-
-    // Slimes idle squish and petrify check
+    // Slimes idle squish
     this.slimes.forEach((s) => {
       if (s.userData.alive) {
         if (s.userData.petrifiedTimer > 0) {
-          s.userData.petrifiedTimer -= 0.016;
-          return; // stone frozen
+          s.userData.petrifiedTimer -= delta;
+          return;
         }
         const squish = 0.8 + Math.sin(now * 0.005) * 0.15;
         s.children[0].scale.set(1 / squish, squish, 1 / squish);
       }
     });
 
-    // Running footstep particles
     this.updateRunningParticles();
-
-    // Falling lila & rosa particles from enchanted trees
-    this.updateFallingPetals();
-
-    // 20 winzige Bienen
+    this.updateFallingPetalsInstanced();
     this.updateBees();
-
-    // 25 bunte Schmetterlinge
     this.updateButterflies();
-
-    // Lavendel-Windbewegung
     this.updateLavender();
+  }
+
+  updateFallingPetalsInstanced() {
+    if (!this.petalsInstanced || !this.treePetalsData || this.treePetalsData.length === 0) return;
+    const time = Date.now() * 0.002;
+    const dummy = new THREE.Object3D();
+
+    for (let i = 0; i < this.treePetalsData.length; i++) {
+      const p = this.treePetalsData[i];
+      p.y -= p.fallSpeed;
+      p.x += Math.sin(time * p.swaySpeed + p.swaySeed) * 0.016;
+      p.z += Math.cos(time * p.swaySpeed * 1.3 + p.swaySeed) * 0.016;
+
+      const groundY = this.getTerrainHeight(p.x, p.z);
+      if (p.y <= groundY + 0.15) {
+        const tree = this.treeCanopies[p.treeIdx];
+        if (tree) {
+          const ang = Math.random() * Math.PI * 2;
+          const dist = Math.random() * tree.radius;
+          p.x = tree.x + Math.cos(ang) * dist;
+          p.z = tree.z + Math.sin(ang) * dist;
+          p.y = tree.y + 0.3 + Math.random() * 1.2;
+        }
+      }
+
+      dummy.position.set(p.x, p.y, p.z);
+      dummy.rotation.x += p.rotX;
+      dummy.rotation.y += p.rotY;
+      dummy.rotation.z += p.rotZ;
+      dummy.updateMatrix();
+      this.petalsInstanced.setMatrixAt(i, dummy.matrix);
+    }
+    this.petalsInstanced.instanceMatrix.needsUpdate = true;
   }
 
   updateBees() {
@@ -3101,16 +3460,23 @@ class GalaxySistersGame {
     const now = Date.now();
     for (let i = 0; i < this.bees.length; i++) {
       const b = this.bees[i];
+      const prevX = b.mesh.position.x;
+      const prevZ = b.mesh.position.z;
+
       b.angle += b.speed;
       const x = b.centerPos.x + Math.cos(b.angle) * b.radius;
       const z = b.centerPos.z + Math.sin(b.angle) * b.radius;
       const y = b.centerPos.y + Math.sin(now * 0.006 + b.bobPhase) * b.heightVar;
 
       b.mesh.position.set(x, y, z);
-      // Drehung in Flugrichtung
-      b.mesh.rotation.y = -b.angle + Math.PI / 2;
 
-      // Schnelles Flügelschlagen der Biene
+      // Bee head is along local +X axis: Math.atan2(-dz, dx) points head strictly into flight direction
+      const dx = x - prevX;
+      const dz = z - prevZ;
+      if (Math.hypot(dx, dz) > 0.0001) {
+        b.mesh.rotation.y = Math.atan2(-dz, dx);
+      }
+
       const flap = Math.sin(now * 0.08 + b.bobPhase) * 0.9;
       b.leftWing.rotation.x = Math.PI / 4 + flap;
       b.rightWing.rotation.x = -Math.PI / 4 - flap;
@@ -3122,17 +3488,24 @@ class GalaxySistersGame {
     const now = Date.now();
     for (let i = 0; i < this.butterflies.length; i++) {
       const b = this.butterflies[i];
+      const prevX = b.mesh.position.x;
+      const prevZ = b.mesh.position.z;
+
       b.angle += b.speed;
       const x = b.basePos.x + Math.cos(b.angle) * b.wanderRadius + Math.sin(b.angle * 2.3) * 1.6;
       const z = b.basePos.z + Math.sin(b.angle) * b.wanderRadius + Math.cos(b.angle * 1.7) * 1.6;
       const y = b.basePos.y + Math.sin(now * 0.003 + b.timeOffset) * b.heightVar;
 
       b.mesh.position.set(x, y, z);
-      // Drehung in Flugrichtung und Schräglage in der Kurve
-      b.mesh.rotation.y = -b.angle + Math.PI / 2;
+
+      // Butterfly head is along local +Z axis: Math.atan2(dx, dz) points head strictly into flight direction
+      const dx = x - prevX;
+      const dz = z - prevZ;
+      if (Math.hypot(dx, dz) > 0.0001) {
+        b.mesh.rotation.y = Math.atan2(dx, dz);
+      }
       b.mesh.rotation.z = Math.sin(now * 0.004 + b.timeOffset) * 0.18;
 
-      // Anmutiger Flügelschlag des Schmetterlings
       const flap = Math.sin(now * b.flapSpeed + b.timeOffset) * 0.85;
       b.leftWing.rotation.y = flap;
       b.rightWing.rotation.y = -flap;
@@ -3146,36 +3519,6 @@ class GalaxySistersGame {
       const stem = this.lavenderStems[i];
       stem.rotation.z = Math.sin(windTime + stem.userData.phase) * 0.08;
       stem.rotation.x = Math.cos(windTime * 0.85 + stem.userData.phase) * 0.05;
-    }
-  }
-
-  updateFallingPetals() {
-    if (!this.treePetals || this.treePetals.length === 0) return;
-    const time = Date.now() * 0.002;
-
-    for (let i = 0; i < this.treePetals.length; i++) {
-      const p = this.treePetals[i];
-      p.mesh.position.y -= p.fallSpeed;
-      p.mesh.position.x += Math.sin(time * p.swaySpeed + p.swaySeed) * 0.016;
-      p.mesh.position.z += Math.cos(time * p.swaySpeed * 1.3 + p.swaySeed) * 0.016;
-
-      p.mesh.rotation.x += p.rotX;
-      p.mesh.rotation.y += p.rotY;
-      p.mesh.rotation.z += p.rotZ;
-
-      // When reaching near ground, respawn at random tree canopy
-      if (p.mesh.position.y <= 0.2) {
-        const tree = this.treeCanopies[Math.floor(Math.random() * this.treeCanopies.length)];
-        if (tree) {
-          const ang = Math.random() * Math.PI * 2;
-          const dist = Math.random() * tree.radius;
-          p.mesh.position.set(
-            tree.x + Math.cos(ang) * dist,
-            tree.y + 0.3 + Math.random() * 1.2,
-            tree.z + Math.sin(ang) * dist
-          );
-        }
-      }
     }
   }
 }
