@@ -229,9 +229,14 @@ export class DayNightCycle {
     if (g.mist) g.mist.material.color.copy(this.mix('mist', w));
     if (g.rainbow) g.rainbow.material.uniforms.uStrength.value = wDay;
 
-    // Night glow
-    this.glowMats.forEach((base, mat) => { mat.emissiveIntensity = base * (1 + wNight * 1.4); });
-    this.pointLights.forEach(pl => { pl.light.intensity = pl.base * (1 + wNight * 1.6); });
+    // Night glow; lanterns only glimmer by day and light up from dusk on
+    const lanternOn = Math.min(1, wNight + w.dusk * 0.7);
+    this.glowMats.forEach((base, mat) => {
+      mat.emissiveIntensity = mat.userData.lantern ? base * (0.15 + lanternOn * 1.35) : base * (1 + wNight * 1.4);
+    });
+    this.pointLights.forEach(pl => {
+      pl.light.intensity = pl.light.userData.lantern ? pl.base * (0.2 + lanternOn * 1.8) : pl.base * (1 + wNight * 1.6);
+    });
 
     // Fireflies
     this.fireflies.visible = wNight > 0.02;
@@ -240,9 +245,14 @@ export class DayNightCycle {
       const pos = this.fireflies.geometry.attributes.position.array;
       for (let i = 0; i < this.fireflyBase.length; i++) {
         const f = this.fireflyBase[i];
-        pos[i * 3] = f.x + Math.sin(t * 0.5 * f.sp + f.ph) * 1.6;
-        pos[i * 3 + 1] = f.y + Math.sin(t * 1.1 * f.sp + f.ph * 2) * 0.5;
-        pos[i * 3 + 2] = f.z + Math.cos(t * 0.45 * f.sp + f.ph) * 1.6;
+        const fx = f.x + Math.sin(t * 0.5 * f.sp + f.ph) * 1.6;
+        const fz = f.z + Math.cos(t * 0.45 * f.sp + f.ph) * 1.6;
+        const fy = f.y + Math.sin(t * 1.1 * f.sp + f.ph * 2) * 0.5;
+        const water = g.getWaterSurface(fx, fz);
+        const floor = Math.max(g.getTerrainHeight(fx, fz), water !== null ? water : -Infinity) + 0.3;
+        pos[i * 3] = fx;
+        pos[i * 3 + 1] = Math.max(fy, floor);
+        pos[i * 3 + 2] = fz;
       }
       this.fireflies.geometry.attributes.position.needsUpdate = true;
       this.fireflyMat.opacity = wNight * (0.75 + Math.sin(t * 2.3) * 0.25);

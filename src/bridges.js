@@ -117,6 +117,7 @@ export function buildMoonBridge(game, a, b) {
   const redMat = new THREE.MeshLambertMaterial({ color: 0xe23a4e });
   const goldMat = new THREE.MeshLambertMaterial({ color: 0xffd166, emissive: 0x6b4a00, emissiveIntensity: 0.5 });
   const glowMat = new THREE.MeshLambertMaterial({ color: 0xffe2a8, emissive: 0xffb347, emissiveIntensity: 2.4 });
+  glowMat.userData.lantern = true; // dim by day, full glow after dusk
 
   group.add(deckSegments(def, 30, W, 0.18, woodMats, 0.94));
 

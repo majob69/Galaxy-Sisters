@@ -5,10 +5,10 @@ Ein farbenfrohes 3D-Action-Adventure / Platformer im Kawaii-Anime-Stil, direkt i
 ## 🎮 Features im ersten Prototyp
 
 * **Die 4 Galaxie-Schwestern (jederzeit wechselbar mit Tasten 1, 2, 3, 4 oder UI):**
-  * 🌙 **Luna (Mond):** Sanftes Schweben / Mond-Schild `[E]` (blockiert Angriffe und verringert Schwerkraft)
-  * ⭐ **Stella (Sterne):** Sternen-Dash `[E]` (Sprintet blitzschnell nach vorne & verschießt Sternenkaskaden)
-  * ☀️ **Solana (Sonne):** Solar-Explosion `[E]` (Massiver feuriger Flächenschaden & Partikelregen)
-  * 🪐 **Saturna (Saturn):** Gravitations-Ringe `[E]` (Schießt kosmische Ringe, die Gegner treffen und kontrollieren)
+  * 🌙 **Luna (Mond):** Mondschild `[E]` (blockiert Angriffe) & Heilung `[R]`
+  * ⭐ **Stella (Sterne):** Sternen-Bogen `[E]` (schießt Sternenpfeile) & Sternen-Dash `[R]` (sprintet blitzschnell nach vorne)
+  * ☀️ **Sol (Sonne):** Supernova `[E]` (feuriger Flächenschaden) & Versteinern `[R]` (friert Gegner 4 s ein)
+  * 🪐 **Planeta (Planeten):** Planeten-Ringe `[E]` (kosmische Ringe gegen Gegner) & Unsichtbar `[R]`
 
 * **Die Spielwelt:**
   * 🏔️ **Gebirge & Bergspitzen:** Majestätische Klippen mit Schneekappen rund um das Tal.
@@ -53,6 +53,10 @@ Ein farbenfrohes 3D-Action-Adventure / Platformer im Kawaii-Anime-Stil, direkt i
   * 🌉 Alle 4 Brücken überqueren
   * ✨ 8 goldene Sternenglühwürmchen fangen (nur nachts, manche hoch – springen!)
   * 🌸 5 Mondblumen am Flussufer pflücken (blühen nur nachts)
+* **Kompass:** Leiste oben mit Himmelsrichtungen und Symbolen für alle offenen Quest-Ziele (und den Boss); das nächste Ziel wird mit Entfernung angezeigt, Ziele hinter dir als Pfeil am Rand.
+* **Niedlichere Welt:** Wolkige Baumkronen (lila, rosa Blüten, flieder-weiß), feine Grasbüschel, Starlets als Sternentropfen mit Anime-Augen, Slimes & Katzen-Dorfbewohnerin mit Gesicht, Laternen leuchten erst ab der Dämmerung.
+* **Zauber-Effekte:** Leuchtende Funken, Schockwellen und Lichtspuren (Mondschild-Blase, Heil-Spirale, Sternenpfeile, Dash-Spur, Supernova, Versteinerungswelle, Planeten-Ringe, Treffer-Funken).
+* **Insekten:** Bienen, Schmetterlinge und Glühwürmchen fliegen nicht mehr durch Wände, Säulen, Baumstämme, Boden oder Wasser.
 * **Kamera & Welt:** Die Kamera weicht Hügeln, Klippen und Wasser aus; die Welt (Bäume, Blumen, Steine) sieht bei jedem Besuch gleich aus.
 * **Neuer Sound:** Eigene Musik für Tag, Nacht und Bosskampf (mit Hall & Echo), Umgebungsgeräusche (Fluss, Wasserfall erst in der Nähe, Wind auf den Bergen, Vögel am Tag, Grillen & Eule nachts), Schritte auf Gras/Holz/Stein/Wasser/Kristall und neu gestaltete Zauber-Effekte.
 

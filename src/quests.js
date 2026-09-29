@@ -262,6 +262,7 @@ export class QuestSystem {
           h.y + Math.sin(t * 1.9 + it.phase) * 0.35,
           h.z + Math.sin(t * 0.8 + it.phase) * 1.3
         );
+        g.constrainFlyer(it.group.position, 0.4, 0.3);
         it.wings.scale.x = 1.8 * (0.6 + Math.abs(Math.sin(t * 22 + it.phase)) * 0.4);
         if (it.group.position.distanceTo(new THREE.Vector3(p.x, p.y + 1.1, p.z)) < 1.35) this.collect(it, 'Glühwürmchen gefangen');
       } else if (it.kind === 'flower') {
@@ -308,6 +309,31 @@ export class QuestSystem {
     item.group.visible = false;
     this.game.createHealParticles(item.group.position.clone().setY(this.game.playerGroup.position.y));
     this.mark(item.questId, item.itemId, label);
+  }
+
+  // Open quest goals for the compass: { id, icon, label, x, z }
+  getTargets() {
+    const g = this.game;
+    const isNight = g.dayNight ? g.dayNight.night > 0.45 : false;
+    const out = [];
+    const labels = { shard: 'Sternensplitter', firefly: 'Sternenglühwürmchen', flower: 'Mondblume' };
+    this.items.forEach(it => {
+      if (it.collected || (it.night && !isNight)) return;
+      const def = QUEST_DEFS.find(q => q.id === it.questId);
+      const p = it.kind === 'firefly' ? it.home : it.group.position;
+      out.push({ id: `${it.questId}:${it.itemId}`, icon: def.icon, label: labels[it.kind], x: p.x, z: p.z });
+    });
+    if (!this.state.done.spring) {
+      out.push({ id: 'spring', icon: '⛲', label: 'Kristallquelle', x: this.spring.x, z: this.spring.z });
+    }
+    if (g.bridgeEnds) {
+      Object.keys(BRIDGE_NAMES).forEach(id => {
+        if (this.state.items[`bridges:${id}`]) return;
+        const e = g.bridgeEnds[id];
+        out.push({ id: `bridge:${id}`, icon: '🌉', label: BRIDGE_NAMES[id], x: (e[0].x + e[1].x) / 2, z: (e[0].z + e[1].z) / 2 });
+      });
+    }
+    return out;
   }
 
   // ---------- Quest list in the quest panel ----------

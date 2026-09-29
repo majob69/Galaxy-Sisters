@@ -12,8 +12,10 @@ import { buildMoonBridge, buildRomanBridge, buildRopeBridge, buildStarBridge, br
 import { bakeStaticGroup } from './bake.js';
 import { AudioEngine } from './audio.js';
 import { DayNightCycle } from './daynight.js';
-import { ChibiRig } from './characters.js';
+import { ChibiRig, addAnimeFace, blinkFace } from './characters.js';
 import { QuestSystem, QUEST_DEFS } from './quests.js';
+import { MagicFX, createShieldMaterial } from './magicfx.js';
+import { Compass } from './compass.js';
 
 applyCelShading();
 
@@ -203,6 +205,15 @@ class GalaxySistersGame {
       }
     });
 
+    // Compass with open quest goals (and the boss while he is alive)
+    this.compass = new Compass(this, () => {
+      const targets = this.quests.getTargets();
+      if (this.bossData && this.bossData.alive) {
+        targets.push({ id: 'boss', icon: '👾', label: 'Vortox', x: this.bossGroup.position.x, z: this.bossGroup.position.z });
+      }
+      return targets;
+    });
+
     this.setupUI();
     this.setupEvents();
     this.setupRobloxControls();
@@ -325,6 +336,9 @@ class GalaxySistersGame {
     dirLight.shadow.bias = -0.0004;
     this.scene.add(dirLight);
     this.sunLight = dirLight;
+
+    // Glowing spell particles, shockwaves & flashes
+    this.fx = new MagicFX(this.scene);
 
     // Gradient sky dome with HDR sun, distant ranges and the cloud sea around the Sky Mountains
     this.skyDome = createSkyDome(dirLight.position.clone().normalize());
@@ -1043,13 +1057,15 @@ class GalaxySistersGame {
       flatShading: true
     });
 
-    const purpleFoliageMats = [
-      new THREE.MeshLambertMaterial({ color: 0x8a2be2, flatShading: true }),
-      new THREE.MeshLambertMaterial({ color: 0x9d4edd, flatShading: true }),
-      new THREE.MeshLambertMaterial({ color: 0x7b2cbf, flatShading: true }),
-      new THREE.MeshLambertMaterial({ color: 0xa855f7, flatShading: true }),
-      new THREE.MeshLambertMaterial({ color: 0xb565d8, flatShading: true })
+    const lam = (c) => new THREE.MeshLambertMaterial({ color: c });
+    const crownPalettes = [
+      [lam(0x9d4edd), lam(0xb565d8), lam(0x8a3fe0)], // violet
+      [lam(0xff9ecf), lam(0xffb8dc), lam(0xf27fbc)], // pink blossom
+      [lam(0xe6d8ff), lam(0xf4ecff), lam(0xd2bdfa)]  // lilac-white
     ];
+    const blossomGeo = new THREE.IcosahedronGeometry(0.22, 0);
+    const blossomMats = [lam(0xffffff), lam(0xffe066), lam(0xff70a6)];
+    const forest = new THREE.Group();
 
     this.treeCanopies = [];
 
@@ -1062,6 +1078,7 @@ class GalaxySistersGame {
       if (x >= -19 && x <= -9 && z >= -13 && z <= -3) continue; // Village hut area
       if (this.isNearWater(x, z, 2.6) || this.isOnBridge(x, z, 1.8)) continue; // river, pond & bridges
       if (this.getTerrainSlope(x, z) > 0.3) continue; // no trees on cliffs
+      if (this.treeCanopies.some(t => (t.x - x) ** 2 + (t.z - z) ** 2 < 4.8 * 4.8)) continue; // keep trunks apart
 
       const treeGroup = new THREE.Group();
       const trunkHeight = 5.5 + Math.random() * 1.8;
@@ -1087,37 +1104,43 @@ class GalaxySistersGame {
       collarRing.position.y = trunkHeight * 0.88;
       treeGroup.add(collarRing);
 
-      // Lush Purple Crown
-      const crownMat = purpleFoliageMats[i % purpleFoliageMats.length];
-      const mainCrownRadius = 3.6 + Math.random() * 0.8;
-      const crown = new THREE.Mesh(
-        new THREE.DodecahedronGeometry(mainCrownRadius),
-        crownMat
-      );
-      crown.position.y = trunkHeight + 1.2;
-      crown.castShadow = true;
-      crown.receiveShadow = true;
+      // Fluffy cloud crown: a soft dome of round puffs (purple, pink blossom or lilac-white)
+      const palette = crownPalettes[i % 7 < 4 ? 0 : (i % 7 < 6 ? 1 : 2)];
+      const mainCrownRadius = 3.2 + Math.random() * 0.8;
+      const crown = new THREE.Group();
+      crown.position.y = trunkHeight + 1.0;
       treeGroup.add(crown);
-
-      const puffCount = 2 + Math.floor(Math.random() * 2);
+      const core = new THREE.Mesh(new THREE.IcosahedronGeometry(mainCrownRadius, 1), palette[0]);
+      core.scale.set(1, 0.82, 1);
+      crown.add(core);
+      const puffCount = 8;
       for (let p = 0; p < puffCount; p++) {
-        const puffMat = purpleFoliageMats[(i + p + 1) % purpleFoliageMats.length];
-        const puffRadius = 1.9 + Math.random() * 0.7;
-        const puff = new THREE.Mesh(new THREE.DodecahedronGeometry(puffRadius), puffMat);
-        const ang = (p / puffCount) * Math.PI * 2 + Math.random() * 0.5;
-        const dist = 1.8 + Math.random() * 0.6;
-        puff.position.set(
-          Math.cos(ang) * dist,
-          trunkHeight + 0.6 + (Math.random() - 0.3) * 1.2,
-          Math.sin(ang) * dist
+        const ang = (p / puffCount) * Math.PI * 2 + Math.random() * 0.4;
+        const ring = mainCrownRadius * (0.72 + Math.random() * 0.15);
+        const puffR = mainCrownRadius * (0.42 + Math.random() * 0.14);
+        const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(puffR, 1), palette[(p % 2) + 1]);
+        puff.position.set(Math.cos(ang) * ring, (Math.random() - 0.35) * mainCrownRadius * 0.5, Math.sin(ang) * ring);
+        crown.add(puff);
+      }
+      const top = new THREE.Mesh(new THREE.IcosahedronGeometry(mainCrownRadius * 0.55, 1), palette[1]);
+      top.position.y = mainCrownRadius * 0.62;
+      crown.add(top);
+      // Little blossoms dotting the crown
+      for (let d = 0; d < 10; d++) {
+        const u = Math.random() * Math.PI * 2;
+        const v = Math.random() * 0.9;
+        const blossom = new THREE.Mesh(blossomGeo, blossomMats[(i + d) % blossomMats.length]);
+        blossom.position.set(
+          Math.cos(u) * Math.cos(v) * mainCrownRadius * 1.02,
+          Math.sin(v) * mainCrownRadius * 0.85,
+          Math.sin(u) * Math.cos(v) * mainCrownRadius * 1.02
         );
-        puff.castShadow = true;
-        treeGroup.add(puff);
+        crown.add(blossom);
       }
 
       const ty = this.getTerrainHeight(x, z);
       treeGroup.position.set(x, ty, z);
-      this.scene.add(treeGroup);
+      forest.add(treeGroup);
 
       this.colliders.push({
         type: 'cylinder',
@@ -1136,6 +1159,9 @@ class GalaxySistersGame {
       });
     }
 
+    // All trees merged into a handful of draw calls
+    this.scene.add(bakeStaticGroup(forest));
+
     this.createFallingTreePetals();
   }
 
@@ -1144,23 +1170,52 @@ class GalaxySistersGame {
   // 2,500 blades rendered in 2 draw calls with GPU vertex shader wind!
   // ==========================================
   buildInstancedGrass() {
+    // Tuft of 5 slim, tapered, slightly curved blades with a dark-to-light gradient
     const tuftGeo = new THREE.BufferGeometry();
-    const vertices = new Float32Array([
-      -0.24, 0, 0,   0.24, 0, 0,   0.24, 0.75, 0,
-      -0.24, 0, 0,   0.24, 0.75, 0, -0.24, 0.75, 0,
-      0, 0, -0.24,   0, 0, 0.24,   0, 0.75, 0.24,
-      0, 0, -0.24,   0, 0.75, 0.24, 0, 0.75, -0.24
-    ]);
-    const normals = new Float32Array([
-      0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,
-      0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0,  0, 1, 0
-    ]);
-    tuftGeo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
-    tuftGeo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+    const pos = [];
+    const col = [];
+    const nrm = [];
+    const cBase = new THREE.Color(0x2f7a34);
+    const cMid = new THREE.Color(0x62b94a);
+    const cTip = new THREE.Color(0xd4f7a0);
+    const gradient = (t) => (t < 0.5 ? cBase.clone().lerp(cMid, t * 2) : cMid.clone().lerp(cTip, (t - 0.5) * 2));
+    for (let b = 0; b < 5; b++) {
+      const face = (b / 5) * Math.PI + (b % 2) * 0.4;
+      const fx = Math.cos(face);
+      const fz = Math.sin(face);
+      const lean = face + Math.PI / 2;
+      const lx = Math.cos(lean);
+      const lz = Math.sin(lean);
+      const h = 0.5 + (b % 3) * 0.13;
+      const w = 0.075 - (b % 2) * 0.012;
+      const ox = Math.cos(b * 2.4) * 0.1;
+      const oz = Math.sin(b * 2.4) * 0.1;
+      const bend = 0.12 + (b % 3) * 0.05;
+      const seg = 3;
+      const pt = (t, side) => {
+        const hw = w * Math.pow(1 - t, 0.85) * side;
+        return [ox + lx * bend * t * t + fx * hw, h * t, oz + lz * bend * t * t + fz * hw];
+      };
+      for (let k = 0; k < seg; k++) {
+        const t0 = k / seg;
+        const t1 = (k + 1) / seg;
+        const quad = [[t0, -1], [t0, 1], [t1, 1], [t0, -1], [t1, 1], [t1, -1]];
+        quad.forEach(([t, side]) => {
+          pos.push(...pt(t, side));
+          const c = gradient(t);
+          col.push(c.r, c.g, c.b);
+          nrm.push(0, 1, 0);
+        });
+      }
+    }
+    tuftGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    tuftGeo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    tuftGeo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
 
     const createGrassShaderMat = (colorHex) => {
       const mat = new THREE.MeshLambertMaterial({
         color: colorHex,
+        vertexColors: true,
         side: THREE.DoubleSide
       });
       mat.onBeforeCompile = (shader) => {
@@ -1180,8 +1235,9 @@ class GalaxySistersGame {
     };
 
     const countPerBatch = 1250;
-    this.grassMat1 = createGrassShaderMat(0x60c04e);
-    this.grassMat2 = createGrassShaderMat(0x499c3b);
+    // Batch tints on top of the per-vertex gradient
+    this.grassMat1 = createGrassShaderMat(0xffffff);
+    this.grassMat2 = createGrassShaderMat(0xd6efc0);
 
     const inst1 = new THREE.InstancedMesh(tuftGeo, this.grassMat1, countPerBatch);
     const inst2 = new THREE.InstancedMesh(tuftGeo, this.grassMat2, countPerBatch);
@@ -1520,10 +1576,12 @@ class GalaxySistersGame {
       })
     );
     lantern.position.set(2.85, 2.3, 3.8);
+    lantern.material.userData.lantern = true;
     hutGroup.add(lantern);
 
     const lanternLight = new THREE.PointLight(0xffbe0b, 1.4, 12);
     lanternLight.position.set(2.85, 2.3, 3.8);
+    lanternLight.userData.lantern = true;
     hutGroup.add(lanternLight);
 
     // Cozy Sitting Bench under the eaves
@@ -1538,6 +1596,7 @@ class GalaxySistersGame {
 
     // Villager NPC standing next to hut
     const npc = this.createKawaiiVillager();
+    this.villagerNpc = npc;
     npc.position.set(pos.x + 3.2, 0, pos.z + 2.5);
     this.scene.add(npc);
 
@@ -1569,12 +1628,23 @@ class GalaxySistersGame {
     ear2.position.x = 0.4;
     npcGroup.add(ear1, ear2);
 
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111 });
-    const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 6), eyeMat);
-    eye1.position.set(-0.25, 0.95, 0.72);
-    const eye2 = eye1.clone();
-    eye2.position.x = 0.25;
-    npcGroup.add(eye1, eye2);
+    const face = addAnimeFace(npcGroup, { center: new THREE.Vector3(0, 0.8, 0), radius: 0.8, spread: 0.33, eyeSize: 0.2, iris: 0x2bb3a3 });
+    if (!this.creatureFaces) this.creatureFaces = [];
+    this.creatureFaces.push(face);
+    const whiskerMat = new THREE.MeshBasicMaterial({ color: 0x8a5a66 });
+    [-1, 1].forEach(side => {
+      for (let w = 0; w < 2; w++) {
+        const whisker = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.02, 0.02), whiskerMat);
+        whisker.position.set(side * 0.5, 0.66 + w * 0.08, 0.62);
+        whisker.rotation.set(0, side * -0.5, side * (w ? 0.15 : -0.1));
+        npcGroup.add(whisker);
+      }
+    });
+    const tail = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.8, 4, 8), earMat);
+    tail.position.set(0.35, 0.7, -0.75);
+    tail.rotation.set(0.9, 0, -0.5);
+    npcGroup.add(tail);
+    npcGroup.userData = { ears: [ear1, ear2], tail };
 
     const bubble = new THREE.Mesh(
       new THREE.TorusGeometry(0.3, 0.08, 8, 16),
@@ -2124,27 +2194,43 @@ class GalaxySistersGame {
   // 4.12 CREATURES & SLIMES
   // ==========================================
   spawnCuteCreatures() {
+    const starletColors = [0xffc6d3, 0xbfe3ff, 0xd9c6ff, 0xc6f5d0];
+    const irisColors = [0xff6fa3, 0x4f8cff, 0x9b6cff, 0x2fbf71];
+    const tipMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 1.9, 0.6) });
+    this.creatureFaces = [];
     for (let i = 0; i < 4; i++) {
       const creature = new THREE.Group();
-      const body = new THREE.Mesh(
-        new THREE.SphereGeometry(0.5, 12, 12),
-        new THREE.MeshLambertMaterial({ color: 0xfec5bb })
-      );
+      const bodyMat = new THREE.MeshLambertMaterial({ color: starletColors[i], emissive: new THREE.Color(starletColors[i]).multiplyScalar(0.25) });
+      bodyMat.userData.noNightGlow = true;
+      // Star-drop body: round belly with a curled tip
+      const body = new THREE.Group();
       body.position.y = 0.5;
       creature.add(body);
-
-      const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), new THREE.MeshBasicMaterial({ color: 0x000 }));
-      eye1.position.set(-0.16, 0.6, 0.45);
-      const eye2 = eye1.clone();
-      eye2.position.x = 0.16;
-      creature.add(eye1, eye2);
+      const belly = new THREE.Mesh(new THREE.SphereGeometry(0.5, 20, 16), bodyMat);
+      belly.castShadow = true;
+      body.add(belly);
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.5, 16), bodyMat);
+      tip.position.set(0, 0.52, -0.04);
+      tip.rotation.x = -0.25;
+      body.add(tip);
+      const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.12, 0), tipMat);
+      star.position.set(0, 0.84, -0.12);
+      body.add(star);
+      [-1, 1].forEach(side => {
+        const arm = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), bodyMat);
+        arm.position.set(side * 0.45, -0.1, 0.12);
+        arm.scale.set(0.8, 1.2, 0.8);
+        body.add(arm);
+      });
+      const face = addAnimeFace(body, { center: new THREE.Vector3(0, 0, 0), radius: 0.5, spread: 0.36, eyeSize: 0.13, iris: irisColors[i] });
+      this.creatureFaces.push(face);
 
       const spots = [{ x: 3, z: 12 }, { x: -3, z: 13 }, { x: 6.5, z: 8.5 }, { x: -5.5, z: 15.5 }];
       const cx = spots[i].x;
       const cz = spots[i].z;
       const cy = this.getTerrainHeight(cx, cz);
       creature.position.set(cx, cy, cz);
-      creature.userData = { initialY: cy, hopOffset: Math.random() * 5 };
+      creature.userData = { initialY: cy, hopOffset: Math.random() * 5, body, star };
       this.creatures.push(creature);
       this.scene.add(creature);
     }
@@ -2159,12 +2245,17 @@ class GalaxySistersGame {
       body.scale.set(1, 0.8, 1);
       slime.add(body);
 
-      const eyeMat = new THREE.MeshBasicMaterial({ color: 0x582f0e });
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 6), eyeMat);
-      eye.position.set(-0.2, 0.8, 0.6);
-      const eye2 = eye.clone();
-      eye2.position.x = 0.2;
-      slime.add(eye, eye2);
+      const shine = new THREE.Mesh(
+        new THREE.SphereGeometry(0.16, 10, 8),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthWrite: false })
+      );
+      shine.position.set(-0.28, 0.42, 0.45);
+      shine.scale.set(1, 0.6, 0.4);
+      body.add(shine);
+      // Face sits on the body surface and squishes along with it
+      const slimeFace = addAnimeFace(body, { center: new THREE.Vector3(0, 0.05, 0), radius: 0.71, spread: 0.34, eyeSize: 0.15, iris: 0x1f7a3a, brows: true });
+      if (!this.creatureFaces) this.creatureFaces = [];
+      this.creatureFaces.push(slimeFace);
 
       const sx = 10 + i * 5;
       const sz = -2 - i * 4;
@@ -2380,6 +2471,14 @@ class GalaxySistersGame {
     this.bossEyePupil.position.set(0, 4.2, 2.5);
     this.bossEyePupil.scale.set(1, 1, 0.2);
     this.bossGroup.add(this.bossEyePupil);
+    const bossShine = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.6, 1.6) });
+    const shine1 = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), bossShine);
+    shine1.position.set(-0.2, 4.45, 2.6);
+    shine1.scale.set(1, 1, 0.3);
+    const shine2 = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), bossShine);
+    shine2.position.set(0.18, 4.0, 2.6);
+    shine2.scale.set(1, 1, 0.3);
+    this.bossGroup.add(shine1, shine2);
 
     const hairMat = new THREE.MeshLambertMaterial({ color: 0x0a9396, flatShading: true });
     const hairGroup = new THREE.Group();
@@ -2485,14 +2584,8 @@ class GalaxySistersGame {
     this.accessoryGroup = this.playerRig.accessorySlot;
     this.updateSisterAccessory();
 
-    const shieldGeo = new THREE.SphereGeometry(1.6, 16, 16);
-    const shieldMat = new THREE.MeshBasicMaterial({
-      color: 0x90e0ef,
-      wireframe: true,
-      transparent: true,
-      opacity: 0,
-      depthWrite: false // invisible shield must not punch holes into water behind it
-    });
+    const shieldGeo = new THREE.SphereGeometry(1.6, 32, 20);
+    const shieldMat = createShieldMaterial(); // fresnel bubble, opacity 0 = off
     this.shieldMesh = new THREE.Mesh(shieldGeo, shieldMat);
     this.shieldMesh.position.y = 1.5;
     this.playerGroup.add(this.shieldMesh);
@@ -2606,6 +2699,9 @@ class GalaxySistersGame {
       sfx.magicSkill(0);
       this.shieldMesh.material.opacity = 0.75;
       this.playerVelY = 0.28;
+      const lp = this.playerGroup.position;
+      this.fx.ringWave(lp, new THREE.Color(0.8, 1.5, 2.4), 4.5, 0.6);
+      this.fx.burst(lp.clone().setY(lp.y + 1.4), [new THREE.Color(1.0, 1.4, 2.4), new THREE.Color(2.0, 2.0, 2.4)], 36, { speed: 3.5, up: 1.2, size: 0.35 });
       this.showFloatingText("🌙 Mond-Schild (7s) aktiv!", this.playerGroup.position, "#90e0ef");
       setTimeout(() => {
         this.shieldMesh.material.opacity = 0;
@@ -2620,11 +2716,11 @@ class GalaxySistersGame {
         const arrowMesh = new THREE.Group();
         const head = new THREE.Mesh(
           new THREE.OctahedronGeometry(0.32, 0),
-          new THREE.MeshBasicMaterial({ color: 0xffea00 })
+          new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 2.1, 0.6) })
         );
         const shaft = new THREE.Mesh(
           new THREE.CylinderGeometry(0.04, 0.04, 0.6, 6),
-          new THREE.MeshBasicMaterial({ color: 0xffffff })
+          new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 1.8, 1.6) })
         );
         shaft.rotation.x = Math.PI / 2;
         shaft.position.z = 0.2;
@@ -2639,7 +2735,8 @@ class GalaxySistersGame {
           dir: dir,
           speed: 0.75,
           life: 65,
-          damage: 25
+          damage: 25,
+          trail: new THREE.Color(2.2, 1.7, 0.5)
         });
         this.scene.add(arrowMesh);
       }
@@ -2657,15 +2754,15 @@ class GalaxySistersGame {
       const ringGroup = new THREE.Group();
 
       const r1 = new THREE.Mesh(
-        new THREE.TorusGeometry(1.4, 0.12, 8, 24),
-        new THREE.MeshBasicMaterial({ color: 0xc77dff })
+        new THREE.TorusGeometry(1.4, 0.12, 8, 32),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 0.8, 2.6) })
       );
       r1.rotation.x = Math.PI / 2;
       ringGroup.add(r1);
 
       const r2 = new THREE.Mesh(
-        new THREE.TorusGeometry(1.8, 0.08, 6, 24),
-        new THREE.MeshBasicMaterial({ color: 0xff99c8 })
+        new THREE.TorusGeometry(1.8, 0.08, 6, 32),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 1.0, 1.8) })
       );
       r2.rotation.x = Math.PI / 2.2;
       ringGroup.add(r2);
@@ -2677,7 +2774,9 @@ class GalaxySistersGame {
         speed: 0.5,
         life: 80,
         damage: 32,
-        pullRadius: 7
+        pullRadius: 7,
+        trail: new THREE.Color(1.4, 0.7, 2.4),
+        spin: 0.12
       });
       this.scene.add(ringGroup);
     }
@@ -2703,6 +2802,7 @@ class GalaxySistersGame {
       const steps = 6;
       const stepDist = dashDist / steps;
       const pRad = 0.42;
+      const dashStart = this.playerGroup.position.clone();
 
       for (let s = 0; s < steps; s++) {
         const nextX = this.playerGroup.position.x + forward.x * stepDist;
@@ -2717,6 +2817,12 @@ class GalaxySistersGame {
       }
 
       this.showFloatingText("⚡ Sternen-Dash!", this.playerGroup.position, "#ffe066");
+      const dashEnd = this.playerGroup.position;
+      for (let k = 0; k < 40; k++) {
+        const t = k / 40;
+        const sp = new THREE.Vector3().lerpVectors(dashStart, dashEnd, t).add(new THREE.Vector3((Math.random() - 0.5) * 0.6, 0.4 + Math.random() * 1.4, (Math.random() - 0.5) * 0.6));
+        this.fx.emit(sp, new THREE.Vector3(0, 0.4, 0), k % 2 ? new THREE.Color(2.6, 2.0, 0.5) : new THREE.Color(2.2, 2.2, 2.0), { size: 0.4, life: 0.4 + t * 0.5 });
+      }
 
       for (let i = 0; i < 20; i++) {
         const sp = new THREE.Mesh(
@@ -2739,10 +2845,12 @@ class GalaxySistersGame {
     } else if (this.activeSisterIdx === 2) {
       sfx.petrify();
       this.petrifyEnemies(4.0);
+      this.fx.ringWave(this.playerGroup.position, new THREE.Color(1.4, 1.1, 0.8), 22, 1.0);
       this.showFloatingText("🪨 VERSTEINERUNG! (4s)", this.playerGroup.position, "#e67e22");
 
     } else if (this.activeSisterIdx === 3) {
       sfx.invisible();
+      this.fx.burst(this.playerGroup.position.clone().setY(this.playerGroup.position.y + 1.2), [new THREE.Color(1.6, 0.8, 2.6), new THREE.Color(2.2, 1.6, 2.6)], 40, { speed: 2.5, up: 1, size: 0.35, gravity: -1 });
       this.isPlayerInvisible = true;
       this.invisibleTimer = 5.0;
       this.playerRig.setOpacity(0.25);
@@ -2764,6 +2872,7 @@ class GalaxySistersGame {
         const dist = slime.position.distanceTo(this.playerGroup.position);
         if (dist < 22) {
           slime.userData.petrifiedTimer = duration;
+          this.fx.burst(slime.position.clone().setY(slime.position.y + 0.8), [new THREE.Color(1.3, 1.2, 1.1), new THREE.Color(0.9, 0.8, 0.7)], 18, { speed: 1.5, up: 1, size: 0.3 });
           this.showFloatingText("🪨 Versteinert!", slime.position, "#bdc3c7");
         }
       }
@@ -2771,40 +2880,16 @@ class GalaxySistersGame {
   }
 
   createHealParticles(pos) {
-    for (let i = 0; i < 25; i++) {
-      const p = new THREE.Mesh(
-        new THREE.SphereGeometry(0.16, 6, 6),
-        new THREE.MeshBasicMaterial({ color: Math.random() > 0.5 ? 0x2ecc71 : 0x64ffda })
-      );
-      p.position.copy(pos).add(new THREE.Vector3(
-        (Math.random() - 0.5) * 2,
-        0.3 + Math.random() * 1.5,
-        (Math.random() - 0.5) * 2
-      ));
-      this.particles.push({
-        mesh: p,
-        vel: new THREE.Vector3((Math.random() - 0.5) * 0.05, 0.08 + Math.random() * 0.06, (Math.random() - 0.5) * 0.05),
-        life: 40
-      });
-      this.scene.add(p);
-    }
+    this.fx.ringWave(pos, new THREE.Color(0.6, 2.4, 1.2), 3, 0.7);
+    this.fx.spiral(pos, [new THREE.Color(0.5, 2.4, 1.0), new THREE.Color(0.8, 2.4, 2.0), new THREE.Color(2.0, 2.4, 1.6)], 40, 0.9, 2.6);
   }
 
   createSupernovaParticles(pos) {
-    for (let i = 0; i < 30; i++) {
-      const p = new THREE.Mesh(
-        new THREE.SphereGeometry(0.2, 4, 4),
-        new THREE.MeshBasicMaterial({ color: Math.random() > 0.5 ? 0xff4800 : 0xffaa00 })
-      );
-      p.position.copy(pos).add(new THREE.Vector3(0, 1.2, 0));
-      const vel = new THREE.Vector3(
-        (Math.random() - 0.5) * 0.5,
-        Math.random() * 0.3,
-        (Math.random() - 0.5) * 0.5
-      );
-      this.particles.push({ mesh: p, vel: vel, life: 35 });
-      this.scene.add(p);
-    }
+    const core = pos.clone().setY(pos.y + 1.2);
+    this.fx.flash(core, new THREE.Color(2.2, 1.2, 0.35), 6.5, 0.4);
+    this.fx.ringWave(pos, new THREE.Color(1.9, 0.9, 0.25), 9, 0.55);
+    this.fx.ringWave(pos, new THREE.Color(1.5, 1.35, 0.9), 6, 0.4);
+    this.fx.burst(core, [new THREE.Color(3.0, 1.0, 0.2), new THREE.Color(2.8, 1.8, 0.4), new THREE.Color(2.4, 2.2, 1.2)], 90, { speed: 9, up: 3, size: 0.5, life: 0.9, gravity: 5 });
   }
 
   damageInRadius(pos, radius, dmg) {
@@ -3260,6 +3345,83 @@ class GalaxySistersGame {
     }
   }
 
+  // Highest solid surface below a flyer: terrain, water, and walkable platforms/bridges it is above
+  getFlyerFloor(x, y, z) {
+    let floor = this.getTerrainHeight(x, z);
+    const water = this.getWaterSurface(x, z);
+    if (water !== null && water > floor) floor = water;
+    for (let i = 0; i < this.platforms.length; i++) {
+      const p = this.platforms[i];
+      let inside = false;
+      let top = p.topY;
+      if (p.type === 'box') {
+        inside = x >= p.minX && x <= p.maxX && z >= p.minZ && z <= p.maxZ;
+      } else if (p.type === 'cylinder') {
+        const dx = x - p.x;
+        const dz = z - p.z;
+        inside = dx * dx + dz * dz <= p.radius * p.radius;
+      } else if (p.type === 'bridge') {
+        const rx = x - p.ax;
+        const rz = z - p.az;
+        const along = rx * p.dirX + rz * p.dirZ;
+        const side = -rx * p.dirZ + rz * p.dirX;
+        inside = along >= 0 && along <= p.len && Math.abs(side) <= p.halfWidth + 0.2;
+        if (inside) top = bridgeDeckY(p, along / p.len);
+      }
+      // Thin floating platforms & bridge decks can be passed underneath
+      if (inside && y > top - 0.35 && top > floor) floor = top;
+    }
+    return floor;
+  }
+
+  // Keeps bees, butterflies & fireflies out of walls, columns, trunks, ground, water and platforms
+  constrainFlyer(pos, clearance = 0.35, radius = 0.3) {
+    // Two passes so a push out of one obstacle cannot leave the flyer inside a neighbour
+    for (let pass = 0; pass < 2; pass++) this.pushFlyerOutOfColliders(pos, clearance, radius);
+    const floor = this.getFlyerFloor(pos.x, pos.y, pos.z) + clearance;
+    if (pos.y < floor) pos.y = floor;
+    return pos;
+  }
+
+  pushFlyerOutOfColliders(pos, clearance, radius) {
+    for (let i = 0; i < this.colliders.length; i++) {
+      const c = this.colliders[i];
+      if (pos.y < c.minY - 0.2 || pos.y > c.maxY + 0.2) continue;
+      if (c.type === 'cylinder') {
+        const dx = pos.x - c.x;
+        const dz = pos.z - c.z;
+        const min = c.radius + radius;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < min * min) {
+          const d = Math.sqrt(d2) || 0.001;
+          pos.x = c.x + (dx / d) * min;
+          pos.z = c.z + (dz / d) * min;
+        }
+      } else if (
+        pos.x > c.minX - radius && pos.x < c.maxX + radius &&
+        pos.z > c.minZ - radius && pos.z < c.maxZ + radius
+      ) {
+        // Push out through the closest face (or over the top when that is closer)
+        const pushes = [
+          [c.minX - radius - pos.x, 0, 0],
+          [c.maxX + radius - pos.x, 0, 0],
+          [0, 0, c.minZ - radius - pos.z],
+          [0, 0, c.maxZ + radius - pos.z],
+          [0, c.maxY + clearance - pos.y, 0]
+        ];
+        let best = pushes[0];
+        let bestLen = Infinity;
+        pushes.forEach(pv => {
+          const len = Math.abs(pv[0]) + Math.abs(pv[1]) + Math.abs(pv[2]);
+          if (len < bestLen) { bestLen = len; best = pv; }
+        });
+        pos.x += best[0];
+        pos.y += best[1];
+        pos.z += best[2];
+      }
+    }
+  }
+
   checkWallCollision(px, pz, radius, py) {
     const footY = py;
     const headY = py + 1.8;
@@ -3611,8 +3773,17 @@ class GalaxySistersGame {
       const p = this.projectiles[i];
       p.mesh.position.addScaledVector(p.dir, p.speed);
       p.life--;
+      if (p.spin) p.mesh.rotation.y += p.spin;
+      if (p.trail) {
+        for (let k = 0; k < 2; k++) {
+          const jitter = new THREE.Vector3((Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.3);
+          this.fx.emit(p.mesh.position.clone().add(jitter), jitter.multiplyScalar(0.5), p.trail, { size: 0.32, life: 0.35 });
+        }
+      }
 
       if (this.bossData.alive && p.mesh.position.distanceTo(this.bossGroup.position) < 3.8) {
+        this.fx.flash(p.mesh.position, p.trail || new THREE.Color(2, 2, 2), 3, 0.25);
+        this.fx.burst(p.mesh.position, [p.trail || new THREE.Color(2, 2, 2), new THREE.Color(2.2, 2.2, 2.2)], 22, { speed: 4, up: 1.5, size: 0.35 });
         this.hitBoss(p.damage);
         this.scene.remove(p.mesh);
         this.projectiles.splice(i, 1);
@@ -3623,9 +3794,12 @@ class GalaxySistersGame {
         if (slime.userData.alive && p.mesh.position.distanceTo(slime.position) < 1.6) {
           slime.userData.hp -= p.damage;
           this.showFloatingText(`-${p.damage}`, slime.position, "#ffd166");
+          this.fx.burst(p.mesh.position, [p.trail || new THREE.Color(2, 2, 2)], 10, { speed: 3, up: 1, size: 0.3 });
           if (slime.userData.hp <= 0) {
             slime.userData.alive = false;
             slime.visible = false;
+            this.fx.burst(slime.position.clone().setY(slime.position.y + 0.7), [new THREE.Color(0.6, 2.4, 1.0), new THREE.Color(1.8, 2.4, 1.4)], 40, { speed: 4, up: 2, size: 0.4 });
+            this.fx.ringWave(slime.position, new THREE.Color(0.6, 2.2, 1.0), 3, 0.5);
           }
         }
       });
@@ -3741,9 +3915,21 @@ class GalaxySistersGame {
       if (cloud.position.x > 110) cloud.position.x = -110;
     }
 
+    // Spell effects
+    this.fx.update(delta, this.camera, this.renderer);
+    const shieldShader = this.shieldMesh.material.userData.shader;
+    if (shieldShader) shieldShader.uniforms.uTime.value = this.clock.elapsedTime;
+    if (this.shieldMesh.material.opacity > 0 && Math.random() < 0.6) {
+      const a = Math.random() * Math.PI * 2;
+      const e = (Math.random() - 0.3) * 1.2;
+      const sp = this.playerGroup.position.clone().add(new THREE.Vector3(Math.cos(a) * 1.6 * Math.cos(e), 1.5 + Math.sin(e) * 1.6, Math.sin(a) * 1.6 * Math.cos(e)));
+      this.fx.emit(sp, new THREE.Vector3(-Math.sin(a) * 0.8, 0.3, Math.cos(a) * 0.8), new THREE.Color(1.0, 1.6, 2.6), { size: 0.22, life: 0.6 });
+    }
+
     // Day/night cycle, quests and the soundscape around the player
     this.dayNight.update(delta);
     this.quests.update(delta);
+    this.compass.update(delta);
     const pp = this.playerGroup.position;
     const fallDx = pp.x - WATERFALL.x;
     const fallDz = pp.z - (this.waterfallLipZ + 2);
@@ -3792,10 +3978,31 @@ class GalaxySistersGame {
       this.trophyStar.rotation.y += 0.02;
     }
 
-    // Starlet Creatures bouncing
+    // Starlet Creatures bouncing with squash & stretch, turning towards the player
+    const pp0 = this.playerGroup.position;
     this.creatures.forEach((c) => {
-      c.position.y = c.userData.initialY + Math.abs(Math.sin(now * 0.004 + c.userData.hopOffset)) * 0.8;
+      const hop = Math.sin(now * 0.004 + c.userData.hopOffset);
+      c.position.y = c.userData.initialY + Math.abs(hop) * 0.8;
+      const squash = Math.abs(hop) < 0.2 ? 0.82 + Math.abs(hop) : 1.02;
+      if (c.userData.body) c.userData.body.scale.set(1 / Math.sqrt(squash), squash, 1 / Math.sqrt(squash));
+      if (c.userData.star) c.userData.star.rotation.y += 0.05;
+      const dx = pp0.x - c.position.x;
+      const dz = pp0.z - c.position.z;
+      if (dx * dx + dz * dz < 144) {
+        const want = Math.atan2(dx, dz);
+        let diff = want - c.rotation.y;
+        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+        c.rotation.y += diff * 0.08;
+      }
     });
+    if (this.creatureFaces) this.creatureFaces.forEach(f => blinkFace(f, secTime));
+    if (this.villagerNpc && this.villagerNpc.userData.ears) {
+      const u = this.villagerNpc.userData;
+      const twitch = Math.sin(secTime * 7) > 0.97 ? 0.3 : 0;
+      u.ears[0].rotation.z = 0.15 + twitch;
+      u.ears[1].rotation.z = -0.15;
+      u.tail.rotation.z = -0.5 + Math.sin(secTime * 2.2) * 0.35;
+    }
 
     // Slimes idle squish
     this.slimes.forEach((s) => {
@@ -3860,13 +4067,18 @@ class GalaxySistersGame {
       b.angle += b.speed;
       const x = b.centerPos.x + Math.cos(b.angle) * b.radius;
       const z = b.centerPos.z + Math.sin(b.angle) * b.radius;
-      const y = b.centerPos.y + Math.sin(now * 0.006 + b.bobPhase) * b.heightVar;
+      const bob = Math.sin(now * 0.006 + b.bobPhase) * b.heightVar;
+      // Follow the ground softly (hills, banks, podium) instead of a fixed height
+      const ground = this.getFlyerFloor(x, b.mesh.position.y, z);
+      const targetY = Math.max(b.centerPos.y + bob, ground + 0.7 + bob * 0.5);
+      const y = b.mesh.position.y + (targetY - b.mesh.position.y) * 0.12;
 
       b.mesh.position.set(x, y, z);
+      this.constrainFlyer(b.mesh.position, 0.3, 0.25);
 
       // Bee head is along local +X axis: Math.atan2(-dz, dx) points head strictly into flight direction
-      const dx = x - prevX;
-      const dz = z - prevZ;
+      const dx = b.mesh.position.x - prevX;
+      const dz = b.mesh.position.z - prevZ;
       if (Math.hypot(dx, dz) > 0.0001) {
         b.mesh.rotation.y = Math.atan2(-dz, dx);
       }
@@ -3888,13 +4100,17 @@ class GalaxySistersGame {
       b.angle += b.speed;
       const x = b.basePos.x + Math.cos(b.angle) * b.wanderRadius + Math.sin(b.angle * 2.3) * 1.6;
       const z = b.basePos.z + Math.sin(b.angle) * b.wanderRadius + Math.cos(b.angle * 1.7) * 1.6;
-      const y = b.basePos.y + Math.sin(now * 0.003 + b.timeOffset) * b.heightVar;
+      const bob = Math.sin(now * 0.003 + b.timeOffset) * b.heightVar;
+      const ground = this.getFlyerFloor(x, b.mesh.position.y, z);
+      const targetY = Math.max(b.basePos.y + bob, ground + 1.0 + bob * 0.5);
+      const y = b.mesh.position.y + (targetY - b.mesh.position.y) * 0.1;
 
       b.mesh.position.set(x, y, z);
+      this.constrainFlyer(b.mesh.position, 0.45, 0.45);
 
       // Butterfly head is along local +Z axis: Math.atan2(dx, dz) points head strictly into flight direction
-      const dx = x - prevX;
-      const dz = z - prevZ;
+      const dx = b.mesh.position.x - prevX;
+      const dz = b.mesh.position.z - prevZ;
       if (Math.hypot(dx, dz) > 0.0001) {
         b.mesh.rotation.y = Math.atan2(dx, dz);
       }

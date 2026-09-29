@@ -37,8 +37,8 @@ Für ein 3D-Spiel, das **im Browser** laufen soll und später bis zu **4 Spieler
 |---|---|---|---|---|
 | **Luna** 🌙 | Mond | Silber / Perlblau / Pastellviolett | **Mond-Schwerkraft & Schild:** Verringert die Fallgeschwindigkeit (sanftes Schweben für Obbys) und erzeugt einen reflektierenden Schutzschild gegen Projektile. | Support / Defense |
 | **Stella** ⭐ | Sterne | Goldgelb / Sternenfunkeln | **Sternschnuppen-Sprint & Lichtstrahl:** Kann sich per Sternenblitz nach vorne teleportieren und schießt Sternenkaskaden ab, die dunkle Rätsel aufdecken. | DPS / Mobilität |
-| **Solana** ☀️ | Sonne | Warmes Orange / Korallenrot / Gold | **Solar-Supernova & Heilblüte:** Entfesselt einen feurigen Energieimpuls gegen Feinde und hinterlässt eine heilende Sonnenblume für Schwestern. | Allrounder / Heilerin |
-| **Saturna** 🪐 | Saturn | Mystisches Lila / Türkis / Ring-Accessoires | **Gravitations-Ringe:** Wirft kreisende Planetenringe, die Gegner heranziehen/festhalten oder schwebende Plattformen in Obbys aktivieren. | Crowd-Control / Puzzle-Master |
+| **Sol** ☀️ | Sonne | Warmes Orange / Korallenrot / Gold | **Solar-Supernova & Heilblüte:** Entfesselt einen feurigen Energieimpuls gegen Feinde und hinterlässt eine heilende Sonnenblume für Schwestern. | Allrounder / Heilerin |
+| **Planeta** 🪐 | Planeten (Saturn) | Mystisches Lila / Türkis / Ring-Accessoires | **Gravitations-Ringe:** Wirft kreisende Planetenringe, die Gegner heranziehen/festhalten oder schwebende Plattformen in Obbys aktivieren. | Crowd-Control / Puzzle-Master |
 
 ---
 
@@ -70,13 +70,13 @@ Die Spielwelt ist offen, freundlich und lädt zum Erkunden ein:
 * **Mechaniken:**
   1. **Flügelschlag-Hurrikan:** Schlägt mit gewaltiger Wucht die Flügel zusammen – ein roter Windstoß drückt alle Spielerinnen zurück und wirft Felsen durch die Arena.
   2. **Fühler-Grätsch & Einschnürung:** Morvanta schießt ihre langen schwarzen Fühler nach einer Spielerin, fängt sie ein, wickelt sie ein und beginnt, sie zu zerquetschen!
-  3. **Koop-Rettung:** Die anderen Schwestern müssen sofort auf die Fühler einschlagen oder Saturna/Stella müssen sie mit ihren Fähigkeiten trennen, um die Gefährtin zu befreien!
+  3. **Koop-Rettung:** Die anderen Schwestern müssen sofort auf die Fühler einschlagen oder Planeta/Stella müssen sie mit ihren Fähigkeiten trennen, um die Gefährtin zu befreien!
   4. **Pollenregen:** Rote Glitzerpartikel regnen herab, die man per Ausweichsprung meiden muss.
 
 ---
 
 ## 6. 4-Spieler Koop-Features
 * **Kombinierte Attacken:**
-  * Wenn Saturna einen Boss mit Ringen festhält, richtet Solanas Solarstrahl doppelten Schaden an!
+  * Wenn Planeta einen Boss mit Ringen festhält, richtet Sols Solarstrahl doppelten Schaden an!
   * Lunas Schwerkraftfeld lässt alle 4 Schwestern gemeinsam weite Obby-Abgründe überspringen.
 * **Wiederbelebung:** Fällt eine Schwester um, können die anderen zu ihr eilen und sie durch "Sternen-Highfive" wieder aufwecken.

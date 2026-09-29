@@ -24,6 +24,80 @@ export const SISTER_STYLES = [
   }
 ];
 
+// ---------- Painted anime eye (one textured plane instead of 7 meshes) ----------
+const eyeTexCache = new Map();
+export function getEyeTexture(iris, brows = false, side = 1) {
+  const key = `${iris}-${brows}-${side}`;
+  if (eyeTexCache.has(key)) return eyeTexCache.get(key);
+  const W = 128;
+  const H = 176;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const c = new THREE.Color(iris);
+  const css = (col, k = 1) => `rgb(${Math.min(255, col.r * 255 * k)}, ${Math.min(255, col.g * 255 * k)}, ${Math.min(255, col.b * 255 * k)})`;
+  const cy = H * 0.56;
+  // Sclera
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.ellipse(W / 2, cy, W * 0.42, H * 0.36, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Iris: dark top -> bright bottom
+  const g = ctx.createLinearGradient(0, cy - H * 0.3, 0, cy + H * 0.3);
+  g.addColorStop(0, css(c, 0.35));
+  g.addColorStop(0.55, css(c, 1));
+  g.addColorStop(1, css(c, 1.45));
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(W / 2, cy + H * 0.02, W * 0.33, H * 0.31, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Pupil
+  ctx.fillStyle = '#1b1433';
+  ctx.beginPath();
+  ctx.ellipse(W / 2, cy, W * 0.15, H * 0.17, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Highlights
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.ellipse(W / 2 - side * W * 0.14, cy - H * 0.12, W * 0.12, H * 0.1, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(W / 2 + side * W * 0.13, cy + H * 0.14, W * 0.06, H * 0.05, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Upper lash line with a little flick
+  ctx.strokeStyle = '#2a1d3d';
+  ctx.lineWidth = W * 0.09;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.ellipse(W / 2, cy, W * 0.42, H * 0.36, 0, Math.PI * 1.08, Math.PI * 1.92);
+  ctx.stroke();
+  ctx.beginPath();
+  const fx = W / 2 + side * W * 0.4;
+  ctx.moveTo(fx, cy - H * 0.14);
+  ctx.lineTo(fx + side * W * 0.06, cy - H * 0.22);
+  ctx.stroke();
+  if (brows) {
+    ctx.lineWidth = W * 0.08;
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - side * W * 0.34, H * 0.1);
+    ctx.lineTo(W / 2 + side * W * 0.3, H * 0.2);
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  eyeTexCache.set(key, tex);
+  return tex;
+}
+
+function createEyePlane(size, iris, brows, side) {
+  const mat = new THREE.MeshBasicMaterial({ map: getEyeTexture(iris, brows, side), alphaTest: 0.5 });
+  mat.userData.noNightGlow = true;
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(size * 2.0, size * 2.75), mat);
+  plane.position.y = size * 0.25;
+  return plane;
+}
+
 const HEAD_Y = 1.78;
 const HEAD_R = 0.44;
 
@@ -135,29 +209,15 @@ export class ChibiRig {
     const skull = this.mesh(new THREE.SphereGeometry(HEAD_R, 24, 18), M.skin, this.head);
     skull.scale.set(1, 0.95, 0.94);
 
-    // Big anime eyes (unlit layers so they always read clearly)
+    // Big anime eyes: one painted plane each (iris color swaps with the sister)
     this.eyes = [-1, 1].map(side => {
       const eye = new THREE.Group();
       eye.position.set(side * 0.155, -0.04, HEAD_R * 0.9);
       eye.rotation.y = side * 0.34;
       this.head.add(eye);
-      const layer = (geo, mat, x, y, z, sx = 1, sy = 1) => {
-        const m = new THREE.Mesh(geo, mat);
-        m.position.set(x, y, z);
-        m.scale.set(sx, sy, 1);
-        eye.add(m);
-        return m;
-      };
-      layer(new THREE.CircleGeometry(0.095, 20), M.white, 0, 0, 0, 0.9, 1.2);
-      layer(new THREE.CircleGeometry(0.07, 20), M.iris, 0, -0.012, 0.004, 0.95, 1.2);
-      layer(new THREE.CircleGeometry(0.05, 16), M.irisDark, 0, 0.012, 0.006, 0.95, 0.8);
-      layer(new THREE.CircleGeometry(0.03, 14), M.pupil, 0, -0.005, 0.008, 1, 1.25);
-      layer(new THREE.CircleGeometry(0.02, 10), M.shine, side * -0.025, 0.03, 0.01);
-      layer(new THREE.CircleGeometry(0.01, 8), M.shine, side * 0.022, -0.035, 0.01);
-      const lash = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.012, 4, 16, Math.PI), M.lash);
-      lash.position.set(0, 0.012, 0.004);
-      lash.scale.set(0.95, 1.2, 1);
-      eye.add(lash);
+      eye.userData.plane = createEyePlane(0.095, 0x7b6cf6, false, side);
+      eye.userData.side = side;
+      eye.add(eye.userData.plane);
       return eye;
     });
 
@@ -292,8 +352,7 @@ export class ChibiRig {
     M.bodice.color.setHex(st.bodice);
     M.trim.color.setHex(st.trim);
     M.boots.color.setHex(st.boots);
-    M.iris.color.setHex(st.iris);
-    M.irisDark.color.setHex(st.iris).multiplyScalar(0.45);
+    this.eyes.forEach(e => { e.userData.plane.material.map = getEyeTexture(st.iris, false, e.userData.side); });
     // Planeta's galaxy dress twinkles faintly
     M.dress.emissive = new THREE.Color(idx === 3 ? 0x2a0a55 : 0x000000);
     this.buildHairStyle(st.hairStyle);
@@ -301,7 +360,8 @@ export class ChibiRig {
   }
 
   setOpacity(alpha) {
-    Object.values(this.mats).forEach(m => {
+    const eyeMats = this.eyes.map(e => e.userData.plane.material);
+    [...Object.values(this.mats), ...eyeMats].forEach(m => {
       if (m === this.mats.blush) return;
       m.transparent = alpha < 1;
       m.opacity = alpha;
@@ -371,4 +431,72 @@ export class ChibiRig {
     this.hairSway += (sway - this.hairSway) * 0.1;
     if (this.hairBack) this.hairBack.rotation.x = this.hairSway + Math.sin(t * 2) * 0.03;
   }
+}
+
+// ==========================================
+// ANIME FACE for creatures: big glossy eyes, blush & mouth on a head sphere
+// ==========================================
+const faceMatCache = new Map();
+function faceMats(iris) {
+  if (!faceMatCache.has(iris)) {
+    faceMatCache.set(iris, {
+      white: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+      iris: new THREE.MeshBasicMaterial({ color: iris }),
+      irisDark: new THREE.MeshBasicMaterial({ color: new THREE.Color(iris).multiplyScalar(0.45) }),
+      pupil: new THREE.MeshBasicMaterial({ color: 0x1b1433 }),
+      shine: new THREE.MeshBasicMaterial({ color: new THREE.Color(1.3, 1.3, 1.3) }),
+      lash: new THREE.MeshBasicMaterial({ color: 0x2a1d3d }),
+      blush: new THREE.MeshBasicMaterial({ color: 0xff8fb1, transparent: true, opacity: 0.55, depthWrite: false }),
+      mouth: new THREE.MeshBasicMaterial({ color: 0xd9546f })
+    });
+  }
+  return faceMatCache.get(iris);
+}
+
+// Places a face on a sphere (center/radius in the parent's space), looking along +Z
+export function addAnimeFace(parent, { center, radius, spread = 0.38, eyeSize = 0.2, iris = 0x6c5ce7, blush = true, mouth = true, brows = false }) {
+  const M = faceMats(iris);
+  const face = new THREE.Group();
+  face.position.copy(center);
+  parent.add(face);
+  const onSphere = (theta, phi, lift = 0.01) => new THREE.Vector3(
+    Math.sin(theta) * Math.cos(phi) * (radius + lift),
+    Math.sin(phi) * (radius + lift),
+    Math.cos(theta) * Math.cos(phi) * (radius + lift)
+  );
+  const k = eyeSize / 0.095;
+  const eyes = [-1, 1].map(side => {
+    const eye = new THREE.Group();
+    eye.position.copy(onSphere(side * spread, 0.05));
+    eye.rotation.set(-0.05, side * spread, 0);
+    eye.scale.setScalar(k);
+    eye.add(createEyePlane(0.095, iris, brows, side));
+    face.add(eye);
+    return eye;
+  });
+  if (blush) {
+    [-1, 1].forEach(side => {
+      const b = new THREE.Mesh(new THREE.CircleGeometry(eyeSize * 0.65, 14), M.blush);
+      b.position.copy(onSphere(side * (spread + 0.42), -0.22, 0.012));
+      b.rotation.set(0.2, side * (spread + 0.42), 0);
+      b.scale.set(1.3, 0.7, 1);
+      face.add(b);
+    });
+  }
+  if (mouth) {
+    const m = new THREE.Mesh(new THREE.TorusGeometry(eyeSize * 0.45, eyeSize * 0.12, 4, 12, Math.PI), M.mouth);
+    m.position.copy(onSphere(0, -0.32, 0.012));
+    m.rotation.set(0.32, 0, Math.PI);
+    face.add(m);
+  }
+  face.userData.eyes = eyes;
+  face.userData.blinkSeed = Math.random() * 10;
+  return face;
+}
+
+// Occasional blinks for creature faces
+export function blinkFace(face, time) {
+  const cycle = (time * 0.31 + face.userData.blinkSeed) % 4.2;
+  const lid = cycle < 0.13 ? 0.12 : 1;
+  face.userData.eyes.forEach(e => { e.scale.y += (lid * e.scale.x - e.scale.y) * 0.5; });
 }
