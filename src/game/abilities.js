@@ -46,6 +46,7 @@ export const abilityMethods = {
     const current = SISTERS[this.activeSisterIdx];
     this.cooldown1 = current.ability1.cooldown * this.progression.cooldownMul;
     this.coop.sendCast(1);
+    if (this.shrine) this.shrine.onCast(this.activeSisterIdx, 1, this.playerGroup.position);
 
     if (this.activeSisterIdx === 0) {
       sfx.magicSkill(0);
@@ -54,14 +55,16 @@ export const abilityMethods = {
       const lp = this.playerGroup.position;
       this.fx.ringWave(lp, new THREE.Color(0.8, 1.5, 2.4), 4.5, 0.6);
       this.fx.burst(lp.clone().setY(lp.y + 1.4), [new THREE.Color(1.0, 1.4, 2.4), new THREE.Color(2.0, 2.0, 2.4)], 36, { speed: 3.5, up: 1.2, size: 0.35 });
-      this.showFloatingText("🌙 Mond-Schild (7s) aktiv!", this.playerGroup.position, "#90e0ef");
-      setTimeout(() => {
+      const shieldSeconds = this.progression.has('luna_shield') ? 11 : 7;
+      this.showFloatingText(`🌙 Mond-Schild (${shieldSeconds}s) aktiv!`, this.playerGroup.position, "#90e0ef");
+      clearTimeout(this.shieldTimeout);
+      this.shieldTimeout = setTimeout(() => {
         this.shieldMesh.material.opacity = 0;
-      }, 7000);
+      }, shieldSeconds * 1000);
 
     } else if (this.activeSisterIdx === 1) {
       sfx.arrowShoot();
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.playerGroup.quaternion);
+      const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.playerGroup.quaternion);
       this.showFloatingText("🏹 Sternen-Bogen!", this.playerGroup.position, "#ffe066");
 
       this.spawnStarArrows(this.playerGroup.position, forward, false);
@@ -70,13 +73,21 @@ export const abilityMethods = {
       sfx.magicSkill(2);
       this.showFloatingText("☀️ SUPERNOVA!", this.playerGroup.position, "#ff7b00");
       this.createSupernovaParticles(this.playerGroup.position);
-      this.damageInRadius(this.playerGroup.position, 9, this.scaledDamage(45));
+      const novaRadius = this.progression.has('sol_nova') ? 13 : 9;
+      if (novaRadius > 9) this.fx.ringWave(this.playerGroup.position, new THREE.Color(1.9, 0.9, 0.25), novaRadius, 0.7);
+      this.damageInRadius(this.playerGroup.position, novaRadius, this.scaledDamage(45));
 
     } else if (this.activeSisterIdx === 3) {
       sfx.magicSkill(3);
       this.showFloatingText("🪐 Planeten-Ringe!", this.playerGroup.position, "#9d4edd");
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.playerGroup.quaternion);
+      const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.playerGroup.quaternion);
       this.spawnPlanetRing(this.playerGroup.position, forward, false);
+      if (this.progression.has('planeta_rings')) {
+        setTimeout(() => {
+          const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.playerGroup.quaternion);
+          this.spawnPlanetRing(this.playerGroup.position, fwd, false);
+        }, 380);
+      }
     }
   },
 
@@ -84,7 +95,8 @@ export const abilityMethods = {
   // Stella's star arrows; remote = visual only (the caster's client does the damage)
   spawnStarArrows(origin, forward, remote) {
     forward = forward.clone().setY(0).normalize();
-    for (let i = -1.5; i <= 1.5; i += 1.0) {
+    const spread = !remote && this.progression.has('stella_arrows') ? 2.5 : 1.5;
+    for (let i = -spread; i <= spread; i += 1.0) {
       const arrowMesh = new THREE.Group();
       const head = new THREE.Mesh(
         new THREE.OctahedronGeometry(0.32, 0),
@@ -108,6 +120,7 @@ export const abilityMethods = {
         speed: 0.75,
         life: 65,
         damage: remote ? 0 : this.scaledDamage(25),
+        kind: 'arrow',
         remote,
         trail: new THREE.Color(2.2, 1.7, 0.5)
       });
@@ -141,6 +154,7 @@ export const abilityMethods = {
       speed: 0.5,
       life: 80,
       damage: remote ? 0 : this.scaledDamage(32),
+      kind: 'ring',
       remote,
       pullRadius: 7,
       trail: new THREE.Color(1.4, 0.7, 2.4),
@@ -155,19 +169,21 @@ export const abilityMethods = {
     const current = SISTERS[this.activeSisterIdx];
     this.cooldown2 = current.ability2.cooldown * this.progression.cooldownMul;
     this.coop.sendCast(2);
+    if (this.shrine) this.shrine.onCast(this.activeSisterIdx, 2, this.playerGroup.position);
 
     if (this.activeSisterIdx === 0) {
       sfx.heal();
-      this.playerHP = Math.min(this.maxPlayerHP, this.playerHP + 50);
+      const healAmount = this.progression.has('luna_heal') ? 75 : 50;
+      this.playerHP = Math.min(this.maxPlayerHP, this.playerHP + healAmount);
       this.updateHPBar();
       this.createHealParticles(this.playerGroup.position);
-      this.showFloatingText("💚 HEILUNG! +50 HP", this.playerGroup.position, "#2ecc71");
+      this.showFloatingText(`💚 HEILUNG! +${healAmount} HP`, this.playerGroup.position, "#2ecc71");
 
     } else if (this.activeSisterIdx === 1) {
       // Stella: Safe Sub-stepped Star-Dash
       sfx.magicSkill(1);
-      const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.playerGroup.quaternion);
-      const dashDist = 7.5;
+      const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.playerGroup.quaternion);
+      const dashDist = this.progression.has('stella_dash') ? 11 : 7.5;
       const steps = 6;
       const stepDist = dashDist / steps;
       const pRad = 0.42;
@@ -213,17 +229,18 @@ export const abilityMethods = {
 
     } else if (this.activeSisterIdx === 2) {
       sfx.petrify();
-      this.petrifyEnemies(4.0);
+      const stoneSeconds = this.progression.has('sol_stone') ? 7 : 4;
+      this.petrifyEnemies(stoneSeconds);
       this.fx.ringWave(this.playerGroup.position, new THREE.Color(1.4, 1.1, 0.8), 22, 1.0);
-      this.showFloatingText("🪨 VERSTEINERUNG! (4s)", this.playerGroup.position, "#e67e22");
+      this.showFloatingText(`🪨 VERSTEINERUNG! (${stoneSeconds}s)`, this.playerGroup.position, "#e67e22");
 
     } else if (this.activeSisterIdx === 3) {
       sfx.invisible();
       this.fx.burst(this.playerGroup.position.clone().setY(this.playerGroup.position.y + 1.2), [new THREE.Color(1.6, 0.8, 2.6), new THREE.Color(2.2, 1.6, 2.6)], 40, { speed: 2.5, up: 1, size: 0.35, gravity: -1 });
       this.isPlayerInvisible = true;
-      this.invisibleTimer = 5.0;
+      this.invisibleTimer = this.progression.has('planeta_veil') ? 9.0 : 5.0;
       this.playerRig.setOpacity(0.25);
-      this.showFloatingText("👻 UNSICHTBAR! (5s)", this.playerGroup.position, "#c77dff");
+      this.showFloatingText(`👻 UNSICHTBAR! (${Math.round(this.invisibleTimer)}s)`, this.playerGroup.position, "#c77dff");
     }
   },
 
@@ -253,6 +270,7 @@ export const abilityMethods = {
     if (this.morvanta.hittable && pos.distanceTo(this.morvanta.hitPoint) < radius + 3.5) {
       this.morvanta.hit(dmg);
     }
+    this.glaciel.areaHit(pos, radius, dmg);
     this.slimes.forEach(slime => {
       if (slime.userData.alive && pos.distanceTo(slime.position) < radius) {
         slime.userData.hp -= dmg;
@@ -332,6 +350,14 @@ export const abilityMethods = {
           const jitter = new THREE.Vector3((Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.3);
           this.fx.emit(p.mesh.position.clone().add(jitter), jitter.multiplyScalar(0.5), p.trail, { size: 0.32, life: 0.35 });
         }
+      }
+
+      if (!p.remote && this.glaciel.tryHit(p.mesh.position, p.damage)) {
+        this.fx.flash(p.mesh.position, p.trail || new THREE.Color(2, 2, 2), 3, 0.25);
+        this.fx.burst(p.mesh.position, [p.trail || new THREE.Color(2, 2, 2), new THREE.Color(1.4, 2.4, 3.0)], 20, { speed: 4, up: 1.5, size: 0.35 });
+        this.scene.remove(p.mesh);
+        this.projectiles.splice(i, 1);
+        continue;
       }
 
       if (!p.remote && this.morvanta.hittable && p.mesh.position.distanceTo(this.morvanta.hitPoint) < 4.6) {

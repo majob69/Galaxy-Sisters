@@ -35,6 +35,44 @@ function createNameTag(name, color) {
 
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
+// Speech bubble: up to two lines of text on a rounded card
+function createBubble(text) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 160;
+  const ctx = canvas.getContext('2d');
+  ctx.font = '700 34px "Segoe UI", sans-serif';
+  const words = String(text).split(' ');
+  const lines = [''];
+  words.forEach(w => {
+    const cur = lines[lines.length - 1];
+    if (ctx.measureText(cur + ' ' + w).width > 450 && lines.length < 3) lines.push(w);
+    else lines[lines.length - 1] = cur ? cur + ' ' + w : w;
+  });
+  const h = 26 + lines.length * 42;
+  const y0 = 150 - h;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+  ctx.strokeStyle = 'rgba(120, 90, 200, 0.9)';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.roundRect(8, y0, 496, h, 26);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#2b1d4a';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  lines.forEach((l, i) => ctx.fillText(l, 256, y0 + 33 + i * 42));
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
+  mat.userData.noNightGlow = true;
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(4.4, 1.375, 1);
+  sprite.position.y = 4.5;
+  sprite.renderOrder = 11;
+  return sprite;
+}
+
 class RemotePlayer {
   constructor(game, info) {
     this.game = game;
@@ -66,6 +104,9 @@ class RemotePlayer {
 
     this.target = new THREE.Vector3();
     this.targetRy = 0;
+    this.buffer = []; // recent { t, pos, ry } samples; we draw ~110 ms in the past for smooth motion
+    this.bubble = null;
+    this.bubbleTimer = 0;
     this.flags = { moving: false, grounded: true, swimming: false, velY: 0 };
   }
 
@@ -87,6 +128,8 @@ class RemotePlayer {
   applyState(m) {
     this.target.set(m.x, m.y, m.z);
     this.targetRy = m.ry;
+    this.buffer.push({ t: performance.now(), pos: this.target.clone(), ry: m.ry });
+    if (this.buffer.length > 12) this.buffer.shift();
     const wasDowned = this.downed;
     this.downed = !!m.dn;
     this.flags = { moving: !!m.mv, grounded: !!m.gr, swimming: !!m.sw, velY: m.vy, downed: this.downed };
@@ -113,13 +156,55 @@ class RemotePlayer {
     this.shield.material.opacity = 0.75;
   }
 
+  // Position at `renderTime`, interpolated between the two samples around it
+  sample(renderTime) {
+    const b = this.buffer;
+    if (b.length === 0) return { pos: this.target, ry: this.targetRy };
+    if (renderTime <= b[0].t) return { pos: b[0].pos, ry: b[0].ry };
+    for (let i = b.length - 1; i > 0; i--) {
+      const s0 = b[i - 1];
+      const s1 = b[i];
+      if (renderTime >= s0.t && renderTime <= s1.t) {
+        const u = (renderTime - s0.t) / Math.max(1, s1.t - s0.t);
+        // big jumps (dash, being carried away, respawn) are not smoothed
+        if (s0.pos.distanceToSquared(s1.pos) > 144) return { pos: u < 0.5 ? s0.pos : s1.pos, ry: s1.ry };
+        this._tmp = this._tmp || new THREE.Vector3();
+        return { pos: this._tmp.lerpVectors(s0.pos, s1.pos, u), ry: s0.ry + wrapAngle(s1.ry - s0.ry) * u };
+      }
+    }
+    const last = b[b.length - 1];
+    return { pos: last.pos, ry: last.ry };
+  }
+
+  say(text) {
+    if (this.bubble) {
+      this.group.remove(this.bubble);
+      this.bubble.material.map.dispose();
+      this.bubble.material.dispose();
+    }
+    this.bubble = createBubble(text);
+    this.group.add(this.bubble);
+    this.bubbleTimer = 5.5;
+  }
+
   update(delta) {
     if (!this.hasState) return;
-    const k = 1 - Math.exp(-14 * delta);
-    // Snap when far away (respawn, dash, lag spike)
-    if (this.group.position.distanceToSquared(this.target) > 400) this.group.position.copy(this.target);
-    else this.group.position.lerp(this.target, k);
-    this.group.rotation.y += wrapAngle(this.targetRy - this.group.rotation.y) * k;
+    const k = 1 - Math.exp(-18 * delta);
+    const { pos, ry } = this.sample(performance.now() - 110);
+    if (this.group.position.distanceToSquared(pos) > 400) this.group.position.copy(pos);
+    else this.group.position.lerp(pos, k);
+    this.group.rotation.y += wrapAngle(ry - this.group.rotation.y) * k;
+    if (this.bubbleTimer > 0) {
+      this.bubbleTimer -= delta;
+      if (this.bubbleTimer <= 0 && this.bubble) {
+        this.group.remove(this.bubble);
+        this.bubble.material.map.dispose();
+        this.bubble.material.dispose();
+        this.bubble = null;
+      } else if (this.bubble) {
+        this.bubble.material.opacity = Math.min(1, this.bubbleTimer / 0.6);
+      }
+    }
     this.rig.update(delta, this.flags);
     if (this.shieldTimer > 0) {
       this.shieldTimer -= delta;

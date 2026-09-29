@@ -6,6 +6,7 @@
 // ==========================================
 import * as THREE from 'three';
 import { sfx } from './game/shared.js';
+import { findFlatSpot } from './spots.js';
 
 const PLATE_RADIUS = 1.5;
 const PLATE_DISTANCE = 6;      // plates sit at +-PLATE_DISTANCE from the plaza center
@@ -50,38 +51,10 @@ export class StarGate {
     game.scene.add(this.group);
   }
 
-  // The flattest, driest, emptiest patch of meadow near the temple (same result for every player: the world is seeded)
+  // A flat, dry, empty patch of meadow (same result for every player: the world is seeded)
   findSpot() {
-    const g = this.game;
-    const target = { x: 50, z: -8 };
-    let best = null;
-    for (let x = -76; x <= 76; x += 4) {
-      for (let z = -76; z <= 60; z += 4) {
-        let score = Math.hypot(x - target.x, z - target.z) * 0.08;
-        let minH = Infinity;
-        let maxH = -Infinity;
-        let bad = false;
-        for (let dx = -10; dx <= 10 && !bad; dx += 5) {
-          for (let dz = -6; dz <= 14 && !bad; dz += 5) {
-            const px = x + dx;
-            const pz = z + dz;
-            const h = g.getTerrainHeight(px, pz);
-            minH = Math.min(minH, h);
-            maxH = Math.max(maxH, h);
-            if (g.getWaterSurface(px, pz) !== null) bad = true;
-            else if (g.checkWallCollision(px, pz, 1.2, h)) score += 6;
-          }
-        }
-        if (bad) continue;
-        score += (maxH - minH) * 5;
-        // Big tree crowns over the plaza or the chamber ruin the view
-        g.treeCanopies.forEach(t => {
-          if (Math.hypot(t.x - x, t.z - (z + 4)) < t.radius + 13) score += 12;
-        });
-        if (!best || score < best.score) best = { x, z, score };
-      }
-    }
-    return best || target;
+    const spot = findFlatSpot(this.game, { target: { x: 50, z: -8 }, radius: 14 });
+    return { x: spot.x, z: spot.z - 4, score: spot.score };
   }
 
   addCollider(c) {
@@ -220,6 +193,13 @@ export class StarGate {
     if (!this.open) this.openGate(false);
   }
 
+  // Restoring a saved game: the gate stays open
+  restoreOpen() {
+    this.open = true;
+    this.barrierCollider.minY = this.barrierCollider.maxY = 1e9;
+    this.barrier.visible = false;
+  }
+
   openGate(announce) {
     const g = this.game;
     this.open = true;
@@ -229,6 +209,7 @@ export class StarGate {
     g.fx.ringWave(new THREE.Vector3(this.center.x, this.baseY, this.center.z + 3), new THREE.Color(1.6, 0.9, 2.4), 8, 0.9);
     g.showToast('⭐ Das Sternen-Tor öffnet sich!', 4000);
     if (announce) g.coop.send({ t: 'puzzle', id: 'gate' });
+    if (g.saveGame) g.saveGame.save();
   }
 
   update(delta) {

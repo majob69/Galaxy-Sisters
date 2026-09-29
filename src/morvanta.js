@@ -7,6 +7,7 @@
 // ==========================================
 import * as THREE from 'three';
 import { sfx } from './game/shared.js';
+import { findFlatSpot } from './spots.js';
 
 const MAX_HP = 320;
 const HOVER_H = 3.6;
@@ -127,41 +128,11 @@ export class Morvanta {
     return this.game.getTerrainHeight(x, z);
   }
 
-  // Dry, open ground with few trees, away from Vortox' arena and the star gate
+  // Dry, open ground with few trees, away from the other places
   findSpot() {
     const g = this.game;
-    let best = null;
-    for (let x = -78; x <= 78; x += 6) {
-      for (let z = -78; z <= 78; z += 6) {
-        if (Math.hypot(x - 32, z - 30) < 42) continue;
-        if (g.stargate && Math.hypot(x - g.stargate.center.x, z - g.stargate.center.z) < 32) continue;
-        let score = 0;
-        let minH = Infinity;
-        let maxH = -Infinity;
-        const points = [[0, 0]];
-        for (let a = 0; a < 12; a++) {
-          const ang = (a / 12) * Math.PI * 2;
-          points.push([Math.cos(ang) * 8, Math.sin(ang) * 8], [Math.cos(ang) * ARENA_RADIUS, Math.sin(ang) * ARENA_RADIUS]);
-        }
-        points.forEach(([dx, dz]) => {
-          const px = x + dx;
-          const pz = z + dz;
-          const h = g.getTerrainHeight(px, pz);
-          minH = Math.min(minH, h);
-          maxH = Math.max(maxH, h);
-          if (g.getWaterSurface(px, pz) !== null) score += 60;
-          if (g.checkWallCollision(px, pz, 1.2, h)) score += 3;
-        });
-        score += (maxH - minH) * 4;
-        g.treeCanopies.forEach(t => {
-          if (Math.hypot(t.x - x, t.z - z) < t.radius + ARENA_RADIUS) score += 4;
-        });
-        // prefer the far corner of the valley
-        score += Math.hypot(x + 55, z + 50) * 0.05;
-        if (!best || score < best.score) best = { x, z, score };
-      }
-    }
-    return best || { x: -60, z: -50 };
+    const avoid = g.stargate ? [{ x: g.stargate.center.x, z: g.stargate.center.z, r: 16 }] : [];
+    return findFlatSpot(g, { target: { x: -55, z: -50 }, radius: ARENA_RADIUS + 1, avoid });
   }
 
   // ---------- Scene ----------
@@ -463,6 +434,16 @@ export class Morvanta {
     this.finishDeath();
   }
 
+  // Restoring a saved game: she stays beaten
+  restoreDefeated() {
+    this.d.alive = false;
+    this.d.hp = 0;
+    this.d.awake = false;
+    this.group.visible = false;
+    this.cocoon.visible = false;
+    this.banner.classList.remove('visible');
+  }
+
   // Runs on every client when she falls
   finishDeath() {
     const g = this.game;
@@ -478,6 +459,8 @@ export class Morvanta {
     sfx.victory();
     g.showFloatingText('🦋 MORVANTA BESIEGT! 🦋', g.playerGroup.position, '#ff9ee6');
     g.progression.addXp(200, 'Morvanta besiegt');
+    g.glaciel.onMorvantaDefeated();
+    if (g.saveGame) g.saveGame.save();
     g.quests.mark('morvanta', 'boss', 'Morvanta besiegt');
     for (let i = 0; i < 3; i++) g.dropLoot(this.pos.clone().setY(this.groundAt(this.pos.x, this.pos.z)), { dust: 1, heart: 1 });
   }

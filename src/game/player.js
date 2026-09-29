@@ -274,7 +274,7 @@ export const playerMethods = {
       const oldZ = this.playerGroup.position.z;
       const playerRadius = 0.42;
       const playerY = this.playerGroup.position.y;
-      const moveStep = current.speed * dtFactor * this.waterSpeedFactor;
+      const moveStep = current.speed * dtFactor * this.waterSpeedFactor * (this.slowTimer > 0 ? 0.5 : 1);
 
       // X-axis movement & collision
       const nextX = oldX + moveVec.x * moveStep;

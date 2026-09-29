@@ -10,7 +10,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Galaxy Sisters - 3D Kawaii Adventure</title>
-  <link rel="stylesheet" href="style.css?v=4.0">
+  <link rel="stylesheet" href="style.css?v=5.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700;800&display=swap" rel="stylesheet">
@@ -80,7 +80,7 @@
           <summary>📖 Anleitung – so spielst du</summary>
           <div class="howto-body">
             <h3>🎯 Ziel</h3>
-            <p>Erkunde das Himmelsgebirge, erfülle die <b>Quests</b> (📜-Knopf bzw. Feld rechts oben) und besiege zuerst <b>Vortox</b> 👾 in der Arena, danach erwacht <b>Morvanta</b> 🦋. Der <b>Kompass</b> oben zeigt dir die nächsten Ziele.</p>
+            <p>Erkunde das Himmelsgebirge, erfülle die <b>Quests</b> (📜-Knopf bzw. Feld rechts oben) und besiege nacheinander die drei Bosse: <b>Vortox</b> 👾, dann erwacht <b>Morvanta</b> 🦋 und danach der Frostgolem <b>Glaciel</b> ❄️. Dazu warten zwei Rätsel: das <b>Sternen-Tor</b> (zwei Platten) und der <b>Vier-Elemente-Schrein</b> (jede Schwester entzündet ihren Altar). Der <b>Kompass</b> oben zeigt dir die nächsten Ziele.</p>
 
             <h3>🕹️ Steuerung</h3>
             <table class="howto-table">
@@ -91,6 +91,8 @@
               <tr><td>Schwester wechseln</td><td><kbd>1</kbd>–<kbd>4</kbd> oder <kbd>Q</kbd></td><td>Symbole unten</td></tr>
               <tr><td>Kamera</td><td>Maus ziehen, Mausrad</td><td>Wischen, mit 2 Fingern zoomen</td></tr>
               <tr><td>Emotes &amp; Ping</td><td><kbd>T</kbd></td><td>💬-Knopf im Koop-Fenster</td></tr>
+              <tr><td>Angeln</td><td><kbd>F</kbd> am Ufer</td><td>🎣-Knopf am Ufer</td></tr>
+              <tr><td>Chat</td><td><kbd>Enter</kbd> (nur im Koop)</td><td>⌨️-Knopf im Koop-Fenster</td></tr>
             </table>
 
             <h3>🌙 Die Schwestern</h3>
@@ -105,12 +107,21 @@
             <ul>
               <li>Slimes und nachts Irrlichter greifen an. Sie lassen 💗 (heilt) und ✨ (Erfahrung) fallen.</li>
               <li>Bei 0 HP bist du <b>KO</b>: Eine Freundin, die kurz bei dir bleibt, hilft dir auf – sonst wachst du am Startpunkt auf.</li>
-              <li>Erfahrung bringt <b>Sterne-Level</b> (mehr Schaden, mehr Leben). Mit Quests schaltest du <b>Outfits</b> frei (👗 im Quest-Feld).</li>
+              <li>Erfahrung bringt <b>Sterne-Level</b> (mehr Schaden, mehr Leben). Ab Level 2 wählst du bei jedem Aufstieg eine von zwei <b>Fähigkeiten</b> (z. B. längerer Schild, Sechsfach-Pfeil). Mit Quests schaltest du <b>Outfits</b> frei (👗 im Quest-Feld).</li>
+              <li>Bei den Bossen gilt: <b>Morvanta</b> packt eine Schwester (Freunde schlagen zu, die Gefangene strampelt mit Springen). <b>Glaciel</b> trägt einen Eispanzer – zerschlage erst die drei Frostkristalle, dann liegt sein Kern frei.</li>
               <li>Wasser ist schwimmbar. Im Quest-Feld kannst du auch die Tageszeit weiterschalten und die Grafik wählen.</li>
             </ul>
 
+            <h3>🧭 Entdecken &amp; Wetter</h3>
+            <ul>
+              <li>Im Tal sind <b>6 Truhen</b>, <b>Wunderblumen</b> und <b>Leuchtpilze</b> versteckt (es funkelt in der Nähe). Alles landet im <b>Sammelalbum</b> (📖 im Quest-Feld).</li>
+              <li>Am Ufer kannst du <b>angeln</b>. Manche Fische beißen nur nachts, andere nur bei Regen.</li>
+              <li>Das Wetter wechselt: Regen, Nebel und Gewitter. Bei Frost-Angriffen wirst du kurz langsamer.</li>
+              <li>Das Spiel <b>speichert automatisch</b>. Im Quest-Feld kannst du den Stand als Datei sichern und laden (💾 / 📂) oder ein neues Spiel beginnen.</li>
+            </ul>
+
             <h3>👭 Zusammen spielen</h3>
-            <p>Starte den Koop-Server mit <b>start_multiplayer.bat</b>. Alle öffnen die dort angezeigte Adresse, tragen einen Namen und denselben <b>Raum-Code</b> ein und klicken „Koop spielen“ (2–4 Spieler). Löst gemeinsam das <b>Sternen-Tor</b> und befreit euch aus Morvantas Griff!</p>
+            <p>Starte den Koop-Server mit <b>start_multiplayer.bat</b>. Alle öffnen die dort angezeigte Adresse, tragen einen Namen und denselben <b>Raum-Code</b> ein und klicken „Koop spielen“ (2–4 Spieler). Mit <b>Enter</b> oder den Schnellsätzen chattet ihr, mit <b>T</b> setzt ihr Emotes und 📍 Pings. Löst gemeinsam das <b>Sternen-Tor</b> und den <b>Elemente-Schrein</b> (dafür braucht ihr alle vier Schwestern) und befreit euch aus Morvantas Griff!</p>
           </div>
         </details>
 
@@ -144,6 +155,7 @@
           <div class="xp-row">
             <span class="lvl-badge" id="lvl-badge">Lv 1</span>
             <div class="xp-bar"><div class="xp-fill" id="xp-fill"></div></div>
+            <span class="weather-badge" id="weather-badge">☀️ Klar</span>
           </div>
         </div>
       </div>
@@ -172,6 +184,11 @@
           <button class="sister-btn clickable" id="btn-boss2" style="font-size:0.75rem; padding: 4px 10px;">🦋 Boss 2 Info</button>
           <button class="sister-btn clickable" id="btn-sound" style="font-size:0.75rem; padding: 4px 10px;">🔊 Audio: An</button>
           <button class="sister-btn clickable" id="btn-graphics" style="font-size:0.75rem; padding: 4px 10px;">✨ Grafik: Hoch</button>
+          <button class="sister-btn clickable" id="btn-save-export" style="font-size:0.75rem; padding: 4px 10px;" title="Spielstand als Datei speichern">💾 Sichern</button>
+          <button class="sister-btn clickable" id="btn-save-import" style="font-size:0.75rem; padding: 4px 10px;" title="Spielstand aus Datei laden">📂 Laden</button>
+          <button class="sister-btn clickable" id="btn-save-reset" style="font-size:0.75rem; padding: 4px 10px;" title="Alles zurücksetzen">🗑️ Neues Spiel</button>
+          <input type="file" id="save-file" accept=".json,application/json" hidden>
+          <button class="sister-btn clickable" id="btn-album" style="font-size:0.75rem; padding: 4px 10px;">📖 Sammelalbum</button>
           <button class="sister-btn clickable" id="btn-wardrobe" style="font-size:0.75rem; padding: 4px 10px;" title="Outfits schaltest du mit Quests frei">👗 Outfit: Standard</button>
           <button class="sister-btn clickable" id="btn-daytime" style="font-size:0.75rem; padding: 4px 10px;" title="Zur nächsten Tageszeit springen">☀️ Tag ⏩</button>
           <button class="sister-btn clickable touch-only" id="btn-fullscreen" style="font-size:0.75rem; padding: 4px 10px;">⛶ Vollbild</button>
@@ -213,6 +230,9 @@
         </div>
       </div>
     </div>
+
+    <div id="frost-overlay" class="frost-overlay"></div>
+    <button id="btn-fish" class="fish-btn clickable" type="button">🎣 Angeln</button>
 
     <!-- Knocked out: wait for a friend (or the start point) -->
     <div id="ko-overlay" class="ko-overlay">
@@ -299,6 +319,6 @@
   </div>
 
   <!-- Main Game Script -->
-  <script type="module" src="src/main.js?v=5.0"></script>
+  <script type="module" src="src/main.js?v=6.0"></script>
 </body>
 </html>

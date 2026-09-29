@@ -17,6 +17,7 @@ const HUD_INTERVAL = 0.25;
 const HEAL_RADIUS = 9;
 const EMOTES = ['👋', '💜', '⭐', '😂', '🆘', '📍'];
 const PING_SECONDS = 20;
+const PHRASES = ['Ich heile dich! 💚', 'Achtung, Kreise!', 'Kommt zu mir!', 'Danke! 💜', 'Hilfe, ich bin gefangen!', 'Jetzt draufhauen!', 'Wartet kurz …', 'Gut gemacht! ⭐'];
 
 const r2 = (v) => Math.round(v * 100) / 100;
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -32,6 +33,7 @@ export class CoopSession {
     this.pings = [];
     this.hud = document.getElementById('coop-panel');
     this.buildWheel();
+    this.buildChat();
     this._tmpPos = new THREE.Vector3();
   }
 
@@ -104,8 +106,23 @@ export class CoopSession {
         if (m.e === '🆘') g.showToast(`🆘 ${p.name} braucht Hilfe!`, 3500);
       },
       ping: (m) => this.addPing(m.id, m.x, m.z),
-      puzzle: (m) => { if (m.id === 'gate') g.stargate.openRemote(); },
+      chat: (m) => {
+        const p = g.remotes.get(m.id);
+        if (!p) return;
+        p.say(m.text);
+        this.logChat(p.name, m.text);
+      },
+      puzzle: (m) => {
+        if (m.id === 'gate') g.stargate.openRemote();
+        if (m.id === 'shrine') g.shrine.openRemote();
+      },
       boss2: (m) => g.morvanta.onNetState(m),
+      boss3: (m) => g.glaciel.onNetState(m),
+      boss3Hit: (m) => {
+        if (m.pet) g.glaciel.petrify(m.pet);
+        if (m.dmg) g.glaciel.applyHit(m.dmg, m.cr >= 0 ? m.cr : -1);
+      },
+      weather: (m) => g.weather.setKind(m.k, false),
       boss2Hit: (m) => {
         if (m.pet) g.morvanta.petrify(m.pet);
         if (m.dmg) g.morvanta.applyHit(m.dmg);
@@ -114,6 +131,7 @@ export class CoopSession {
       close: () => {
         g.remotes.clear();
         this.wheel.classList.remove('open');
+        this.closeChat();
         this.net = null;
         this.bossMsg = null;
         this.rosterDirty = true;
@@ -127,7 +145,7 @@ export class CoopSession {
     const g = this.game;
     if (!this.active) return;
     const p = g.playerGroup.position;
-    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(g.playerGroup.quaternion);
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(g.playerGroup.quaternion);
     this.net.send({ t: 'cast', a, si: g.activeSisterIdx, x: r2(p.x), y: r2(p.y), z: r2(p.z), dx: r2(fwd.x), dz: r2(fwd.z) });
   }
 
@@ -175,6 +193,82 @@ export class CoopSession {
     return out;
   }
 
+  // ---------- Chat: text box (Enter), quick phrases and a short log ----------
+  buildChat() {
+    const log = document.createElement('div');
+    log.id = 'chat-log';
+    log.className = 'chat-log';
+    document.body.appendChild(log);
+    this.chatLog = log;
+
+    const box = document.createElement('div');
+    box.id = 'chat-box';
+    box.className = 'chat-box';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.maxLength = 80;
+    input.placeholder = 'Nachricht … (Enter sendet)';
+    input.autocomplete = 'off';
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        this.sendChat(input.value);
+        input.value = '';
+        this.closeChat();
+      } else if (e.key === 'Escape') {
+        this.closeChat();
+      }
+    });
+    const phrases = document.createElement('div');
+    phrases.className = 'chat-phrases';
+    PHRASES.forEach(text => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chat-phrase clickable';
+      b.textContent = text;
+      b.addEventListener('click', () => { this.sendChat(text); this.closeChat(); });
+      phrases.appendChild(b);
+    });
+    box.append(phrases, input);
+    document.body.appendChild(box);
+    this.chatBox = box;
+    this.chatInput = input;
+  }
+
+  openChat() {
+    if (!this.active) return;
+    this.chatBox.classList.add('open');
+    this.wheel.classList.remove('open');
+    setTimeout(() => this.chatInput.focus(), 30);
+  }
+
+  closeChat() {
+    this.chatBox.classList.remove('open');
+    this.chatInput.blur();
+  }
+
+  toggleChat() {
+    if (this.chatBox.classList.contains('open')) this.closeChat();
+    else this.openChat();
+  }
+
+  sendChat(text) {
+    const clean = String(text || '').replace(/[<>]/g, '').trim().slice(0, 80);
+    if (!clean) return;
+    this.send({ t: 'chat', text: clean });
+    this.logChat(this.name, clean, true);
+  }
+
+  logChat(name, text, mine = false) {
+    const line = document.createElement('div');
+    line.className = 'chat-line' + (mine ? ' mine' : '');
+    const who = document.createElement('b');
+    who.textContent = `${name}: `;
+    line.append(who, document.createTextNode(text));
+    this.chatLog.appendChild(line);
+    while (this.chatLog.children.length > 6) this.chatLog.firstChild.remove();
+    setTimeout(() => line.remove(), 14000);
+  }
+
   // ---------- Emote wheel (button in the roster, key T) ----------
   buildWheel() {
     const wheel = document.createElement('div');
@@ -212,6 +306,7 @@ export class CoopSession {
     if (!p) return;
     const pos = new THREE.Vector3(m.x, m.y, m.z);
     const fwd = new THREE.Vector3(m.dx, 0, m.dz);
+    g.shrine.onCast(m.si, m.a, pos);
     if (m.a === 1) {
       g.sfxCast(m.si, pos);
       if (m.si === 0) {
@@ -241,6 +336,7 @@ export class CoopSession {
   }
 
   onTime(m) {
+    if (m.w !== undefined) this.game.weather.setKind(m.w, false, true);
     const dn = this.game.dayNight;
     if (dn.skipTarget !== null) return;
     const diff = wrapAngle((m.p - dn.p) * Math.PI * 2) / (Math.PI * 2);
@@ -285,10 +381,15 @@ export class CoopSession {
         t.boss2 = BOSS_INTERVAL;
         this.net.send(g.morvanta.netState());
       }
+      t.boss3 = (t.boss3 || 0) - delta;
+      if (t.boss3 <= 0) {
+        t.boss3 = BOSS_INTERVAL;
+        this.net.send(g.glaciel.netState());
+      }
       t.time -= delta;
       if (t.time <= 0) {
         t.time = TIME_INTERVAL;
-        this.net.send({ t: 'time', p: r2(g.dayNight.p * 1000) / 1000 });
+        this.net.send({ t: 'time', p: r2(g.dayNight.p * 1000) / 1000, w: g.weather.kind });
       }
     } else if (this.bossMsg) {
       this.updateBossPuppet(delta, dtFactor);
@@ -382,6 +483,7 @@ export class CoopSession {
     html += row('me', SISTER_ICONS[g.activeSisterIdx], this.name, this.net.id === hostId);
     g.remotes.list.forEach((p) => { html += row(p.id, SISTER_ICONS[p.sister], p.name, p.id === hostId); });
     html += '<button type="button" class="coop-emote-fab clickable" id="btn-emote-wheel">💬 Emotes & Ping (T)</button>';
+    html += '<button type="button" class="coop-emote-fab clickable" id="btn-chat">⌨️ Chat & Sätze (Enter)</button>';
     this.hud.innerHTML = html;
 
     // Names go in as text, never as markup
@@ -390,6 +492,10 @@ export class CoopSession {
     g.remotes.list.forEach((p, i) => { names[i + 1].textContent = p.name; });
     this.hud.querySelector('#btn-emote-wheel').addEventListener('click', (ev) => {
       this.toggleWheel();
+      ev.currentTarget.blur();
+    });
+    this.hud.querySelector('#btn-chat').addEventListener('click', (ev) => {
+      this.toggleChat();
       ev.currentTarget.blur();
     });
   }

@@ -110,6 +110,8 @@ export const uiMethods = {
       if (e.key === '3') this.switchSister(2);
       if (e.key === '4') this.switchSister(3);
       if (e.key.toLowerCase() === 't') this.coop.toggleWheel();
+      if (e.key.toLowerCase() === 'f') this.collectibles.onFishKey();
+      if (e.key === 'Enter') this.coop.openChat();
       if (e.key === 'Escape') this.coop.toggleWheel(false);
       if (e.key.toLowerCase() === 'q') {
         this.switchSister((this.activeSisterIdx + 1) % 4);
@@ -285,6 +287,7 @@ export const uiMethods = {
         sfx.startBGM();
         introScreen.classList.add('hidden');
         this.perf.arm();
+        this.progression.checkOffer();
         if (this.isTouch) {
           this.enterFullscreen();
           if (window.matchMedia('(orientation: portrait)').matches) {

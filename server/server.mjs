@@ -32,7 +32,7 @@ const MIME = {
   '.ico': 'image/x-icon',
   '.webp': 'image/webp'
 };
-const PUBLIC_DIRS = ['src', 'public'];
+const PUBLIC_DIRS = ['src', 'public', 'tests'];
 const PUBLIC_FILES = ['index.html', 'style.css', 'intro.jpg'];
 
 function serveStatic(req, res) {
@@ -176,6 +176,14 @@ function cleanRoom(raw) {
 }
 
 const num = (v, lim = 400) => (Number.isFinite(v) ? Math.max(-lim, Math.min(lim, v)) : 0);
+// Player positions stay inside the valley (+ its mountains); anything else is clamped
+const pos = (v) => num(v, 110);
+const height = (v) => (Number.isFinite(v) ? Math.max(-30, Math.min(90, v)) : 0);
+
+// Chat text: no control characters or angle brackets, trimmed and short
+function cleanChat(raw) {
+  return String(raw || '').replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80);
+}
 
 // Sanitizes free-form game payloads (boss 2 state etc.): short keys, numbers clamped, short strings,
 // small arrays / objects only. Nothing else gets relayed.
@@ -213,7 +221,7 @@ function handleMessage(room, player, msg) {
       player.sister = msg.si | 0;
       broadcast(room, {
         t: 's', id: player.id,
-        x: num(msg.x), y: num(msg.y), z: num(msg.z), ry: num(msg.ry, 10),
+        x: pos(msg.x), y: height(msg.y), z: pos(msg.z), ry: num(msg.ry, 10),
         si: player.sister, mv: msg.mv ? 1 : 0, gr: msg.gr ? 1 : 0, sw: msg.sw ? 1 : 0,
         vy: num(msg.vy, 5), inv: msg.inv ? 1 : 0, hp: num(msg.hp, 1000), mhp: num(msg.mhp, 1000),
         dn: msg.dn ? 1 : 0, vr: Math.max(0, Math.min(2, msg.vr | 0))
@@ -222,7 +230,7 @@ function handleMessage(room, player, msg) {
     case 'cast': // ability visuals
       broadcast(room, {
         t: 'cast', id: player.id, a: msg.a | 0, si: msg.si | 0,
-        x: num(msg.x), y: num(msg.y), z: num(msg.z), dx: num(msg.dx, 2), dz: num(msg.dz, 2)
+        x: pos(msg.x), y: height(msg.y), z: pos(msg.z), dx: num(msg.dx, 2), dz: num(msg.dz, 2)
       }, player.id);
       break;
     case 'boss': // host-authoritative boss state
@@ -247,6 +255,26 @@ function handleMessage(room, player, msg) {
     case 'puzzle':
       broadcast(room, { t: 'puzzle', id: String(msg.id).slice(0, 12) }, player.id);
       break;
+    case 'boss3': // host-authoritative state of boss 3
+      if (hostOf(room) === player) broadcast(room, { ...clean(msg), t: 'boss3' }, player.id);
+      break;
+    case 'boss3Hit': {
+      const host = hostOf(room);
+      if (host && host !== player) host.conn.send(JSON.stringify({ ...clean(msg), t: 'boss3Hit', id: player.id }));
+      break;
+    }
+    case 'weather':
+      if (hostOf(room) === player) broadcast(room, { t: 'weather', k: Math.max(0, Math.min(3, msg.k | 0)) }, player.id);
+      break;
+    case 'chat': {
+      const now = Date.now();
+      if (now - (player.lastChat || 0) < 600) break; // at most ~1.5 messages per second
+      const text = cleanChat(msg.text);
+      if (!text) break;
+      player.lastChat = now;
+      broadcast(room, { t: 'chat', id: player.id, text }, player.id);
+      break;
+    }
     case 'boss2': // host-authoritative state of boss 2
       if (hostOf(room) === player) broadcast(room, { ...clean(msg), t: 'boss2' }, player.id);
       break;
@@ -260,7 +288,7 @@ function handleMessage(room, player, msg) {
       broadcast(room, { t: 'slime', i: msg.i | 0 }, player.id);
       break;
     case 'time': // host shares the time of day
-      if (hostOf(room) === player) broadcast(room, { t: 'time', p: num(msg.p, 2), night: msg.night ? 1 : 0 }, player.id);
+      if (hostOf(room) === player) broadcast(room, { t: 'time', p: num(msg.p, 2), night: msg.night ? 1 : 0, w: Math.max(0, Math.min(3, msg.w | 0)) }, player.id);
       break;
     case 'skipTime':
       broadcast(room, { t: 'skipTime' }, player.id);

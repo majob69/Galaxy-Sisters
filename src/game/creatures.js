@@ -325,6 +325,7 @@ export const creatureMethods = {
 
     // Day/night cycle, quests and the soundscape around the player
     this.dayNight.update(delta);
+    this.weather.update(delta);
     this.quests.update(delta);
     this.compass.update(delta);
     const pp = this.playerGroup.position;
@@ -335,6 +336,8 @@ export const creatureMethods = {
       waterfallDist: Math.sqrt(fallDx * fallDx + fallDz * fallDz),
       altitude: pp.y,
       night: this.dayNight.night,
+      rain: this.weather.rain,
+      storm: this.weather.storm,
       swimming: this.isSwimming
     });
     this.updateDaytimeButton();

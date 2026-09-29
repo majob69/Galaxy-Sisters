@@ -76,6 +76,13 @@ Ein farbenfrohes 3D-Action-Adventure / Platformer im Kawaii-Anime-Stil, direkt i
 * **⭐ Stern-Level & Outfits:** XP aus Gegnern, Quests, Kisten und Bossen. Jedes Level = mehr Schaden, kürzere Abklingzeit, mehr Leben (bis Lv 6). Mit Quests schaltest du pro Schwester zwei Outfits frei (👗-Knopf): ab 3 Quests das erste, mit allen Quests das zweite. Freunde sehen dein Outfit.
 * **🚪 Sternen-Tor (Koop-Rätsel):** Am Wiesenplatz liegen zwei Sternenplatten. Beide gleichzeitig drücken – zu zweit, oder allein mit Stella: auf einer Platte stehen und die andere mit einem Sternenpfeil treffen (bleibt 6 s an). Dahinter wartet eine Schatzkiste (Quest).
 * **🦋 Boss 2 – Morvanta:** Der Totenkopf-Falter schläft in einem Kokon, bis Vortox besiegt ist. Angriffe: *Schuppenstaub* (markierte Kreise ausweichen), *Sturzflug* und der **Fühler-Griff**: Er hebt eine Schwester in die Luft – Freunde schlagen auf Morvanta ein, die Gefangene strampelt mit der Sprung-Taste. Ist sie befreit, ist Morvanta benommen (doppelter Schaden). Ab halber Lebensleiste wird sie schneller.
+* **❄️ Boss 3 – Glaciel:** Der Frostgolem erwacht nach Morvanta. Sein Eispanzer schluckt fast allen Schaden; drei Frostkristalle speisen ihn – zerschlagt sie, dann liegt der Kern 9 s frei (1,5-facher Schaden), danach wachsen sie nach. Angriffe: Eisdornen (Linien am Boden), Schneehagel (markierte Kreise, machen langsam) und ein Sprungangriff mit Schockwelle zum Überspringen.
+* **🔮 Vier-Elemente-Schrein:** Vier Altäre – einer pro Schwester. Luna und Sol zünden ihren Altar mit ihrer Magie in der Nähe, Stella mit einem Pfeil, Planeta mit einem Ring oder ihrer Tarnung. Alle vier müssen gleichzeitig brennen (15 s). Allein wechselst du zwischen den Schwestern, zu viert übernimmt jede eine.
+* **⭐ Fähigkeiten-Wahl:** Bei jedem Level-Aufstieg (ab Lv 2) bietet das Spiel zwei Perks zur Wahl, z. B. längerer Mondschild, Sechsfach-Pfeil, Riesen-Nova, Doppelringe.
+* **🧭 Entdecken:** 6 versteckte Truhen, 12 Wunderblumen und 10 Leuchtpilze im Tal, Angeln (Taste `F`) mit 6 Fischarten (manche nur nachts oder bei Regen) und ein **Sammelalbum** (📖). Alles zählt für die Quests „Verborgene Truhen“ und „Sammelalbum“.
+* **🌧️ Wetter:** Regen, Nebel und Gewitter (mit Blitz und Donner) wechseln sich ab; Licht, Sicht, Musik und Geräusche passen sich an. Im Koop bestimmt der Gastgeber das Wetter.
+* **💾 Speichern:** Bossbesiege, Tor, Schrein, Position und Tageszeit werden automatisch gespeichert (zusätzlich zu Quests und Level). Im Quest-Feld: Sichern (Datei), Laden, Neues Spiel.
+* **⌨️ Chat:** Im Koop mit `Enter` schreiben oder Schnellsätze antippen; Nachrichten erscheinen als Sprechblase über der Schwester und im Verlauf. Freunde bewegen sich dank Zwischenspeicher weich.
 * **💬 Koop-Komfort:** Emote-Rad (Taste `T` oder Knopf im Koop-Fenster) mit 👋 💜 ⭐ 😂 🆘 und 📍 **Ping** (Markierung für alle auf dem Kompass). Zauber von Freunden hört man räumlich: leiser mit Entfernung und auf der Seite, auf der sie stehen.
 
 ---
@@ -120,9 +127,22 @@ Im Dokument [GDD_Galaxy_Sisters.md](file:///c:/Users/Mario/Coding/Galaxy-Sisters
 |---|---|
 | `main.js` | Spielklasse: Konstruktor, Spielschleife, Quest-Anbindung |
 | `game/*.js` | Aufgeteilt nach Bereichen (Welt, Kreaturen, Boss 1, Fähigkeiten, Spieler, UI, KO, Gegner) – Methoden werden in die Spielklasse gemischt |
-| `morvanta.js`, `stargate.js` | Boss 2 und das Koop-Rätsel |
+| `morvanta.js`, `glaciel.js` | Boss 2 (Falter) und Boss 3 (Frostgolem) |
+| `stargate.js`, `shrine.js` | Die Rätsel: Sternen-Tor und Vier-Elemente-Schrein |
+| `collectibles.js`, `spots.js`, `props.js` | Truhen, Blumen, Pilze, Angeln, Album; Platzsuche; Kisten-Vorlage |
+| `weather.js`, `savegame.js` | Wetter und Speicherstand (Export/Import) |
 | `progression.js` | Stern-Level, XP, Outfits |
 | `coop.js`, `network.js`, `remote.js` | Koop-Sitzung, WebSocket-Client, Fremdspieler |
 | `landscape.js`, `atmosphere.js`, `water.js`, `bridges.js` | Gelände, Himmel, Wasser, Brücken |
 | `audio.js`, `daynight.js`, `quests.js`, `compass.js`, `magicfx.js`, `characters.js`, `perf.js` | Sound, Tag/Nacht, Quests, Kompass, Zaubereffekte, Figuren, Grafik-Regler |
 | `../server/server.mjs` | Koop-Server (Spieldateien + WebSocket-Relay) |
+
+## ✅ Tests
+
+```bash
+npm test          # Server-Protokoll und reine Logik (Node 22, keine Pakete nötig)
+```
+
+Für die Spielmodule (Bosse, Rätsel, KO, Speichern, Wetter, Chat …): Server starten und im Browser
+`http://localhost:8080/tests/browser.html` öffnen. Die Seite startet das Spiel in einem Rahmen, führt alle Tests aus
+und zeigt am Ende `RESULT: … bestanden, … fehlgeschlagen` an (ca. 1–2 Minuten).

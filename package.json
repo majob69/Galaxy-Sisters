@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "start": "vite --open",
-    "coop": "node server/server.mjs"
+    "coop": "node server/server.mjs",
+    "test": "node --test tests/server.test.mjs tests/logic.test.mjs"
   },
   "dependencies": {
     "three": "^0.160.0"

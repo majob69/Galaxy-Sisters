@@ -10,6 +10,11 @@ import { CoopSession } from './coop.js';
 import { Progression } from './progression.js';
 import { StarGate } from './stargate.js';
 import { Morvanta } from './morvanta.js';
+import { ElementShrine } from './shrine.js';
+import { Glaciel } from './glaciel.js';
+import { Collectibles } from './collectibles.js';
+import { WeatherSystem } from './weather.js';
+import { SaveGame } from './savegame.js';
 import { WORLD_SEED, mulberry32, sfx } from './game/shared.js';
 import { worldTerrainMethods } from './game/world-terrain.js';
 import { worldPropsMethods } from './game/world-props.js';
@@ -107,6 +112,17 @@ class GalaxySistersGame {
     // Co-op puzzle and the second boss (positions are found deterministically, so all players agree)
     this.stargate = new StarGate(this);
     this.morvanta = new Morvanta(this);
+    const taken = [
+      { x: this.stargate.center.x, z: this.stargate.center.z, r: 15 },
+      { x: this.morvanta.center.x, z: this.morvanta.center.z, r: 18 }
+    ];
+    this.shrine = new ElementShrine(this, taken);
+    taken.push({ x: this.shrine.center.x, z: this.shrine.center.z, r: 15 });
+    this.glaciel = new Glaciel(this, taken);
+    taken.push({ x: this.glaciel.center.x, z: this.glaciel.center.z, r: 16 });
+    this.weather = new WeatherSystem(this);
+    this.slowTimer = 0;
+    this.collectibles = new Collectibles(this, taken.map(t => ({ x: t.x, z: t.z, r: t.r + 3 })));
 
     // Day & night: sun/moon arc, palettes, night glow, fireflies
     this.dayNight = new DayNightCycle(this, {
@@ -128,13 +144,17 @@ class GalaxySistersGame {
       if (this.bossData && this.bossData.alive) {
         targets.push({ id: 'boss', icon: '👾', label: 'Vortox', x: this.bossGroup.position.x, z: this.bossGroup.position.z });
       }
-      targets.push(...this.stargate.getTargets(), ...this.morvanta.getTargets(), ...this.coop.getCompassTargets());
+      targets.push(...this.stargate.getTargets(), ...this.morvanta.getTargets(), ...this.shrine.getTargets(), ...this.glaciel.getTargets(), ...this.coop.getCompassTargets());
       return targets;
     });
 
     this.setupUI();
     this.setupEvents();
     this.setupRobloxControls();
+
+    // Saved world progress (boss defeats, gate, shrine, position ...)
+    this.saveGame = new SaveGame(this);
+    this.saveGame.restore();
     this.animate();
   }
 
@@ -255,6 +275,16 @@ class GalaxySistersGame {
     this.updateDowned(delta);
     this.stargate.update(delta);
     this.morvanta.update(delta);
+    this.shrine.update(delta);
+    this.glaciel.update(delta);
+    this.saveGame.update(delta);
+    this.collectibles.update(delta);
+    if (this.slowTimer > 0) this.slowTimer = Math.max(0, this.slowTimer - delta);
+    const frosty = this.slowTimer > 0;
+    if (frosty !== this.frostShown) {
+      this.frostShown = frosty;
+      document.getElementById('frost-overlay').classList.toggle('active', frosty);
+    }
 
     // 9.3 Boss Vortox AI & Attacks
     this.updateBossAI(delta);

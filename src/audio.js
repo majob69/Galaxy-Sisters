@@ -196,6 +196,8 @@ export class AudioEngine {
     this.fallBed = bed('lowpass', 520, 0.4);
     this.fallHiss = bed('highpass', 2400, 0.3);
     this.windBed = bed('bandpass', 420, 1.1);
+    this.rainBed = bed('highpass', 1600, 0.4);
+    this.rainLow = bed('lowpass', 800, 0.4);
 
     // Slow gusts
     const lfo = ctx.createOscillator();
@@ -208,18 +210,21 @@ export class AudioEngine {
   }
 
   // Called every frame by the game with the listener's surroundings
-  updateAmbience({ waterDist, waterfallDist, altitude, night, swimming }) {
+  updateAmbience({ waterDist, waterfallDist, altitude, night, swimming, rain = 0, storm = 0 }) {
     if (!this.ctx || !this.bgmPlaying) return;
     const t = this.ctx.currentTime;
     this.night = night;
     // Gentle babbling only right next to the water; the waterfall fades in within ~26 m
     const river = Math.pow(Math.max(0, 1 - Math.max(0, waterDist) / 5), 2) * 0.05 + (swimming ? 0.03 : 0);
     const fall = Math.pow(Math.max(0, 1 - waterfallDist / 26), 3);
-    const wind = 0.02 + Math.min(1, Math.max(0, altitude - 6) / 35) * 0.45 + night * 0.02;
+    const wind = 0.02 + Math.min(1, Math.max(0, altitude - 6) / 35) * 0.45 + night * 0.02 + storm * 0.12;
     this.riverBed.gain.gain.setTargetAtTime(river, t, 0.35);
     this.fallBed.gain.gain.setTargetAtTime(fall * 1.0, t, 0.35);
     this.fallHiss.gain.gain.setTargetAtTime(fall * 0.18, t, 0.35);
     this.windBed.gain.gain.setTargetAtTime(wind, t, 0.8);
+    this.rainBed.gain.gain.setTargetAtTime(rain * 0.1, t, 1.2);
+    this.rainLow.gain.gain.setTargetAtTime(rain * 0.09 + storm * 0.05, t, 1.2);
+    this.musicBus.gain.setTargetAtTime(0.5 * (1 - 0.35 * storm - 0.12 * rain), t, 1.5);
   }
 
   // ---------- Music sequencer ----------
@@ -734,6 +739,15 @@ export class AudioEngine {
     this.init();
     if (!this.ctx) return;
     this.sparkle([72, 76, 79, 84, 88], 0.09, 0.04, 1.4);
+  }
+
+  thunder() {
+    this.init();
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.noiseBurst('lowpass', 420, 2.6, 0.5, t, 60);
+    this.sweep('sine', 95, 32, 1.8, 0.35, t);
+    this.noiseBurst('bandpass', 160, 1.2, 0.3, t + 0.35, 50);
   }
 
   victory() {

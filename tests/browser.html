@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Galaxy Sisters – Spieltests</title>
+  <style>
+    body { font-family: Consolas, monospace; background: #15101f; color: #eee; margin: 16px; }
+    h1 { font-size: 1.1rem; }
+    #out div { padding: 2px 0; }
+    .pass { color: #7dffb0; }
+    .fail { color: #ff8fa3; font-weight: bold; }
+    .info { color: #9fb8ff; }
+    #summary { margin: 12px 0; font-size: 1.1rem; font-weight: bold; }
+    iframe { width: 640px; height: 360px; border: 1px solid #555; }
+  </style>
+</head>
+<body>
+  <h1>🧪 Galaxy Sisters – Spieltests</h1>
+  <p>Startet das Spiel in einem Rahmen und prüft Bosse, Rätsel, Speichern, Wetter, Chat u. v. m.
+     Voraussetzung: der Server läuft (<code>start_multiplayer.bat</code> oder <code>python serve.py</code>). Dauer: ca. 1–2 Minuten.</p>
+  <div id="summary">Läuft …</div>
+  <div id="out"></div>
+  <iframe id="game" title="Spiel"></iframe>
+
+<script>
+// ---------- tiny test runner ----------
+const out = document.getElementById('out');
+const summary = document.getElementById('summary');
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+let passed = 0;
+let failed = 0;
+const tests = [];
+const test = (name, fn) => tests.push({ name, fn });
+function assert(cond, msg) { if (!cond) throw new Error(msg || 'Bedingung nicht erfüllt'); }
+function log(cls, text) {
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = text;
+  out.appendChild(d);
+}
+
+let w; let g; let V; let O3;
+const near = (a, b, eps) => Math.abs(a - b) <= eps;
+const until = async (fn, ms = 8000, step = 50) => {
+  const t0 = performance.now();
+  while (performance.now() - t0 < ms) { if (fn()) return true; await sleep(step); }
+  return false;
+};
+const heal = () => { g.playerHP = g.maxPlayerHP; g.isDowned = false; };
+const stand = (x, z) => { g.playerGroup.position.set(x, g.getTerrainHeight(x, z), z); g.playerVelY = 0; };
+
+// ---------- tests ----------
+test('Spiel startet, Welt ist aufgebaut', async () => {
+  assert(g, 'kein Spiel');
+  assert(g.slimes.length === 21, `Slimes: ${g.slimes.length}`);
+  assert(g.stargate && g.morvanta && g.shrine && g.glaciel && g.collectibles && g.weather, 'Systeme fehlen');
+  assert(w.__gsReady === true, 'nicht bereit');
+});
+
+test('Alle Bosse, Rätsel und Sammelstücke haben eigene, freie Plätze', async () => {
+  const { LANDMARKS } = await import('../src/spots.js');
+  const places = [['Sternen-Tor', g.stargate.center, 12], ['Morvanta', g.morvanta.center, 16], ['Schrein', g.shrine.center, 10], ['Glaciel', g.glaciel.center, 15]];
+  places.forEach(([name, c, r]) => {
+    LANDMARKS.forEach(l => assert(Math.hypot(c.x - l.x, c.z - l.z) > l.r + r * 0.5, `${name} liegt auf einem festen Ort (${l.x},${l.z})`));
+  });
+  for (let i = 0; i < places.length; i++) for (let j = i + 1; j < places.length; j++) {
+    const [n1, c1, r1] = places[i]; const [n2, c2, r2] = places[j];
+    assert(Math.hypot(c1.x - c2.x, c1.z - c2.z) > (r1 + r2) * 0.9, `${n1} und ${n2} überlappen`);
+  }
+  assert(g.collectibles.items.filter(i => i.kind === 'chest').length === 6, 'Truhen');
+  assert(g.collectibles.items.filter(i => i.kind === 'flower').length === 12, 'Blumen');
+  assert(g.collectibles.items.filter(i => i.kind === 'mushroom').length === 10, 'Pilze');
+});
+
+test('Sternen-Tor: eine Platte reicht nicht, zwei öffnen, Kiste gibt Quest', async () => {
+  const sg = g.stargate; const [pa, pb] = sg.plates;
+  stand(pa.x, pa.z);
+  await sleep(1000);
+  assert(!sg.open, 'Tor darf mit einer Platte nicht aufgehen');
+  const f = g.remotes.add({ id: 71, name: 'Testfreundin', sister: 1 });
+  f.applyState({ x: pb.x, y: pb.y, z: pb.z, ry: 0, mv: 0, gr: 1, sw: 0, vy: 0, si: 1, inv: 0, hp: 100, mhp: 100 });
+  assert(await until(() => sg.open, 3000), 'Tor öffnet nicht');
+  assert(sg.barrierCollider.minY > 1e8, 'Kollision bleibt');
+  stand(sg.chestPos.x, sg.chestPos.z - 1.5);
+  assert(await until(() => g.quests.state.done.gate, 3000), 'Kisten-Quest nicht erfüllt');
+  g.remotes.remove(71);
+});
+
+test('KO: allein wacht man am Startpunkt auf', async () => {
+  heal(); g.playerHP = 0;
+  assert(await until(() => g.isDowned, 2000), 'nicht KO');
+  assert(w.document.getElementById('ko-overlay').classList.contains('visible'), 'Overlay fehlt');
+  g.doJump(); g.castAbility1();
+  assert(g.cooldown1 === 0, 'KO darf nicht zaubern');
+  assert(await until(() => !g.isDowned, 8000), 'kein Respawn');
+  assert(g.playerHP > 0, 'HP nach Respawn');
+});
+
+test('KO: eine Freundin in der Nähe holt einen zurück', async () => {
+  heal(); g.playerHP = 0;
+  assert(await until(() => g.isDowned, 2000), 'nicht KO');
+  const pp = g.playerGroup.position;
+  const f = g.remotes.add({ id: 72, name: 'Retterin', sister: 0 });
+  f.applyState({ x: pp.x + 1.5, y: pp.y, z: pp.z, ry: 0, mv: 0, gr: 1, sw: 0, vy: 0, si: 0, inv: 0, hp: 100, mhp: 100 });
+  assert(await until(() => !g.isDowned, 5000), 'nicht wiederbelebt');
+  g.remotes.remove(72);
+});
+
+test('Slimes jagen, beißen, lassen Beute und XP fallen', async () => {
+  heal();
+  const s = g.slimes[4]; const u = s.userData;
+  u.alive = true; u.hp = 30; s.visible = true;
+  stand(s.position.x + 4, s.position.z);
+  const hp0 = g.playerHP;
+  await sleep(3500);
+  assert(g.playerHP < hp0, 'kein Biss');
+  const xp0 = g.progression.state.xp; const loot0 = g.loot.length;
+  u.hp = 1; g.damageInRadius(s.position, 3, 50);
+  assert(!u.alive, 'Slime lebt');
+  assert(g.progression.state.xp - xp0 >= 10, 'kein XP');
+  assert(g.loot.length >= loot0, 'Beute');
+  heal();
+});
+
+test('Irrlichter erscheinen nachts und verschwinden bei Treffer', async () => {
+  g.dayNight.p = 0.75; g.dayNight.update(0.01); g.wispTimer = 0; heal();
+  assert(await until(() => g.wisps.length > 0, 4000), 'kein Irrlicht');
+  const xp0 = g.progression.state.xp;
+  g.hitWisps(g.wisps[0].position, 3, 99);
+  assert(g.progression.state.xp > xp0, 'kein XP');
+  g.dayNight.p = 0.3;
+});
+
+test('Pfeile fliegen in Blickrichtung (nicht nach hinten)', async () => {
+  heal(); stand(0, 8); g.switchSister(1);
+  g.playerGroup.rotation.y = 1.2; // facing (sin, 0, cos)
+  const face = new V(0, 0, 1).applyQuaternion(g.playerGroup.quaternion);
+  g.cooldown1 = 0; const n = g.projectiles.length; g.castAbility1();
+  const dir = g.projectiles[n].dir.clone().setY(0).normalize();
+  assert(dir.dot(face) > 0.9, `Pfeil geht gegen die Blickrichtung (dot=${dir.dot(face).toFixed(2)})`);
+  const eye = new V(); g.playerRig.eyes[0].getWorldPosition(eye);
+  assert(eye.sub(g.playerGroup.position).setY(0).normalize().dot(face) > 0.8, 'Figur schaut nicht in Blickrichtung');
+});
+
+test('Level-Aufstieg bietet zwei Fähigkeiten an, Wahl wirkt', async () => {
+  const p = g.progression;
+  p.state.xp = 0; p.state.perks = []; p.state.offer = [];
+  p.addXp(60);
+  assert(p.level === 2, `Level ${p.level}`);
+  const modal = w.document.getElementById('perk-modal');
+  assert(modal.classList.contains('open') && modal.querySelectorAll('.perk-card').length === 2, 'Auswahl fehlt');
+  const id = p.state.offer[0];
+  modal.querySelector('.perk-card').click();
+  assert(p.has(id), 'Fähigkeit nicht gewählt');
+  assert(!modal.classList.contains('open'), 'Auswahl bleibt offen');
+  p.state.perks = ['stella_arrows', 'luna_shield'];
+  g.switchSister(1); g.cooldown1 = 0;
+  const n0 = g.projectiles.length; g.castAbility1();
+  assert(g.projectiles.length - n0 === 6, 'Sechsfach-Pfeil wirkt nicht');
+  p.state.perks = []; p.state.xp = 0;
+});
+
+test('Outfits sind an Quests gebunden', async () => {
+  const p = g.progression;
+  const done = { ...g.quests.state.done };
+  g.quests.state.done = {};
+  assert(!p.isSkinUnlocked(1), 'Outfit 1 zu früh frei');
+  ['shards', 'spring', 'bridges', 'fireflies'].forEach(k => { g.quests.state.done[k] = true; });
+  assert(p.isSkinUnlocked(1) && !p.isSkinUnlocked(2), 'Schwellen falsch');
+  g.quests.state.done = done;
+});
+
+test('Vier-Elemente-Schrein: alle vier Altäre gleichzeitig öffnen ihn', async () => {
+  const sh = g.shrine; const [a0, a1, a2, a3] = sh.altars;
+  const P = (a) => ({ x: a.x, z: a.z });
+  sh.onCast(0, 1, P(a0));
+  sh.onCast(2, 1, P(a2));
+  const mk = (kind, a) => {
+    const mesh = new O3(); mesh.position.set(a.x, a.y + 1.6, a.z);
+    g.projectiles.push({ mesh, dir: new V(0, 0, 0), speed: 0, life: 60, damage: 0, kind, remote: true });
+  };
+  mk('arrow', a1);
+  mk('ring', a3);
+  assert(await until(() => sh.solved, 3000), 'Schrein nicht gelöst');
+  stand(sh.chestPos.x, sh.chestPos.z - 1.5);
+  assert(await until(() => g.quests.state.done.elements, 4000), 'Quest nicht erfüllt');
+});
+
+test('Morvanta: erwacht, greift an, Befreiung macht sie benommen, Sieg', async () => {
+  const m = g.morvanta;
+  m.onVortoxDefeated();
+  stand(m.center.x, m.center.z + 6); heal();
+  assert(await until(() => m.d.st === 'hover', 10000), 'erwacht nicht');
+  m.setState('dust');
+  assert(await until(() => m.d.zones.length > 0, 3000), 'keine Staub-Zonen');
+  m.setState('grab');
+  assert(await until(() => m.d.cp === 0, 8000), 'greift nicht zu');
+  assert(await until(() => g.isGrabbed, 2000), 'Spielerin nicht gepackt');
+  for (let i = 0; i < 20; i++) { g.doJump(); heal(); await sleep(30); }
+  assert(await until(() => m.d.st === 'dizzy', 3000), 'Befreiung wirkt nicht');
+  assert(!g.isGrabbed, 'noch gepackt');
+  const hp0 = m.d.hp; m.applyHit(50);
+  assert(hp0 - m.d.hp >= 79, `Benommen = 1,6x Schaden (${hp0 - m.d.hp})`);
+  m.applyHit(99999);
+  assert(!m.d.alive && g.quests.state.done.morvanta, 'Sieg zählt nicht');
+  assert(g.glaciel.morvantaDown, 'Glaciel wird nicht freigeschaltet');
+});
+
+test('Glaciel: Panzer, drei Kristalle, Kern frei, Sieg', async () => {
+  const gl = g.glaciel;
+  assert(await until(() => gl.d.st === 'idle', 10000), 'erwacht nicht');
+  heal();
+  const hp0 = gl.d.hp; gl.applyHit(100);
+  assert(hp0 - gl.d.hp <= 12, `Panzer schluckt Schaden (${hp0 - gl.d.hp})`);
+  for (let i = 0; i < 3; i++) gl.applyHit(60, i);
+  assert(gl.d.st === 'stunned', 'nicht benommen');
+  const hp1 = gl.d.hp; gl.applyHit(100);
+  assert(hp1 - gl.d.hp === 150, `Kern = 1,5x Schaden (${hp1 - gl.d.hp})`);
+  gl.applyHit(99999);
+  assert(!gl.d.alive && g.quests.state.done.glaciel, 'Sieg zählt nicht');
+});
+
+test('Sammelstücke: Blume, Truhe, Angeln füllen Album und Quests', async () => {
+  const col = g.collectibles;
+  const flower = col.items.find(i => i.kind === 'flower');
+  stand(flower.spot.x, flower.spot.z);
+  assert(await until(() => g.quests.state.items['album:' + flower.key], 2000), 'Blume nicht gepflückt');
+  const chest = col.items.find(i => i.kind === 'chest');
+  stand(chest.spot.x, chest.spot.z);
+  assert(await until(() => g.quests.state.items['chests:' + chest.key], 2000), 'Truhe nicht geöffnet');
+  stand(0, 8);
+  col.startCast(new V(0, 0, 4));
+  col.fish.timer = 0;
+  assert(await until(() => col.fish && col.fish.state === 'bite', 2000), 'kein Biss');
+  col.onFishKey();
+  assert(col.fish === null, 'Fang nicht abgeschlossen');
+  assert(Object.keys(g.quests.state.items).some(k => k.startsWith('album:fish-')), 'kein Fisch im Album');
+  col.toggleAlbum(true);
+  assert(w.document.querySelectorAll('.album-cell.found').length >= 2, 'Album zeigt nichts');
+  col.toggleAlbum(false);
+});
+
+test('Wetter: Regen, Nebel, Gewitter verändern Welt und Licht', async () => {
+  const wt = g.weather;
+  wt.timer = 1e9;
+  const baseFog = g.scene.fog.density;
+  wt.setKind(3, false, true);
+  assert(await until(() => wt.rain > 0.7, 9000), 'Regen kommt nicht');
+  assert(wt.rainLines.visible, 'Regen unsichtbar');
+  wt.strike();
+  assert(wt.lightning > 0.9, 'kein Blitz');
+  await sleep(300);
+  assert(g.scene.fog.density > baseFog, 'Nebel nicht dichter');
+  wt.setKind(0, false, true);
+  assert(await until(() => wt.rain < 0.02, 14000), 'Regen hört nicht auf');
+  assert(await until(() => !wt.rainLines.visible, 1000), 'Regen bleibt sichtbar');
+});
+
+test('Freunde bewegen sich weich (Interpolation)', async () => {
+  const r = g.remotes.add({ id: 73, name: 'Läufer', sister: 2 });
+  r.applyState({ x: 0, y: 0, z: 0, ry: 0, mv: 1, gr: 1, sw: 0, vy: 0, si: 2, inv: 0, hp: 100, mhp: 100 });
+  r.buffer = [{ t: 1000, pos: new V(0, 0, 0), ry: 0 }, { t: 1100, pos: new V(10, 0, 0), ry: 0 }];
+  const mid = r.sample(1050);
+  assert(near(mid.pos.x, 5, 0.01), `Mitte ${mid.pos.x}`);
+  r.buffer = [{ t: 1000, pos: new V(0, 0, 0), ry: 0 }, { t: 1100, pos: new V(60, 0, 0), ry: 0 }];
+  assert(r.sample(1090).pos.x === 60, 'große Sprünge werden nicht geglättet');
+  g.remotes.remove(73);
+});
+
+test('Chat: Sprechblase, Log ohne HTML-Einschleusung', async () => {
+  const r = g.remotes.add({ id: 74, name: 'Plauderin', sister: 3 });
+  r.applyState({ x: 3, y: 0, z: 3, ry: 0, mv: 0, gr: 1, sw: 0, vy: 0, si: 3, inv: 0, hp: 100, mhp: 100 });
+  r.say('Hallo, wie geht es euch heute allen zusammen?');
+  assert(r.bubble && r.group.children.includes(r.bubble), 'keine Sprechblase');
+  g.coop.logChat('Test', '<img src=x onerror=alert(1)>');
+  assert(w.document.querySelector('#chat-log img') === null, 'HTML im Chat!');
+  assert(w.document.querySelector('#chat-log').textContent.includes('<img'), 'Text fehlt');
+  g.remotes.remove(74);
+});
+
+test('Speichern: Auto-Speicherstand, Import bereinigt Fremddaten', async () => {
+  g.saveGame.save();
+  const raw = JSON.parse(w.localStorage.getItem('gs-save-v1'));
+  assert(raw && raw.v === 1 && typeof raw.pos.x === 'number', 'Speicherstand fehlt');
+  const evil = JSON.stringify({
+    game: 'galaxy-sisters', version: 1,
+    save: { pos: { x: 1e9, z: -1e9 }, sister: 99, dayP: 5, vortox: 'ja' },
+    quests: { items: { 'ok:1': true, 'böse key!': true, x: 'evil' }, done: { shards: true, '<script>': true } },
+    progress: { xp: -5, perks: ['luna_shield', 'hax'], skins: [9, -3, 1, 'x'] }
+  });
+  const p = g.saveGame.parseImport(evil);
+  assert(p.save.pos.x === 96 && p.save.pos.z === -96, 'Position nicht begrenzt');
+  assert(p.save.sister === 3 && p.save.dayP <= 0.9999, 'Werte nicht begrenzt');
+  assert(p.quests.items['ok:1'] && !p.quests.items['böse key!'] && !p.quests.items.x, 'Quest-Schlüssel nicht gefiltert');
+  assert(!p.quests.done['<script>'], 'Skript-Schlüssel nicht gefiltert');
+  assert(p.progress.xp === 0 && p.progress.perks.length === 1 && p.progress.skins[0] === 2 && p.progress.skins[1] === 0, 'Fortschritt nicht bereinigt');
+  let threw = false;
+  try { g.saveGame.parseImport('{"game":"anderes"}'); } catch (e) { threw = true; }
+  assert(threw, 'Fremde Datei akzeptiert');
+});
+
+test('Speicherstand stellt Bosse, Tor und Schrein wieder her', async () => {
+  const s = g.saveGame;
+  s.snapshot(); // must not throw
+  const before = s.snapshot();
+  assert(before.gate && before.shrine && before.morvanta && before.glaciel, 'Snapshot unvollständig');
+  s.save();
+  const restored = s.read();
+  assert(restored.gate && restored.shrine && restored.morvanta && restored.glaciel, 'Lesen unvollständig');
+});
+
+test('Server-Nachrichten: Boss-3-Zustand hat das erwartete Format', async () => {
+  const st = g.glaciel.netState();
+  assert(st.t === 'boss3' && Array.isArray(st.cr) && st.cr.length === 3 && Array.isArray(st.zs), 'boss3-Format');
+  const st2 = g.morvanta.netState();
+  assert(st2.t === 'boss2' && Array.isArray(st2.zs), 'boss2-Format');
+});
+
+// ---------- run ----------
+async function main() {
+  try { localStorage.clear(); } catch (e) { /* ignore */ }
+  const frame = document.getElementById('game');
+  frame.src = '../index.html';
+  await new Promise(r => { frame.onload = r; });
+  w = frame.contentWindow;
+  const ok = await until(() => w.__gsReady && w.galaxyGame, 60000, 200);
+  if (!ok) { log('fail', 'FAIL  Spiel wurde nicht bereit'); failed++; return finish(); }
+  g = w.galaxyGame; V = g.playerGroup.position.constructor; O3 = g.playerGroup.constructor;
+  // work in a background tab too: timers instead of requestAnimationFrame
+  w.requestAnimationFrame = (cb) => w.setTimeout(() => cb(w.performance.now()), 16);
+  g.animate();
+  w.document.getElementById('btn-start-game').click();
+  await sleep(500);
+  const errors = [];
+  w.addEventListener('error', e => errors.push(e.message));
+  for (const t of tests) {
+    const t0 = performance.now();
+    try {
+      await t.fn();
+      passed++;
+      log('pass', `PASS  ${t.name}  (${Math.round(performance.now() - t0)} ms)`);
+    } catch (e) {
+      failed++;
+      log('fail', `FAIL  ${t.name}: ${e.message}`);
+    }
+    heal();
+  }
+  if (errors.length) { failed++; log('fail', `FAIL  Laufzeitfehler im Spiel: ${errors.slice(0, 3).join(' | ')}`); }
+  else { passed++; log('pass', 'PASS  keine Laufzeitfehler im Spiel'); }
+  finish();
+}
+
+function finish() {
+  summary.textContent = `RESULT: ${passed} bestanden, ${failed} fehlgeschlagen`;
+  summary.className = failed ? 'fail' : 'pass';
+  document.title = failed ? `FAIL (${failed})` : `OK (${passed})`;
+  window.__testsDone = { passed, failed };
+}
+main();
+</script>
+</body>
+</html>

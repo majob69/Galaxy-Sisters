@@ -131,6 +131,11 @@ export const bossMethods = {
 
   petrifyEnemies(duration) {
     this.petrifyWisps(duration);
+    if (this.glaciel.hittable && this.glaciel.pos.distanceTo(this.playerGroup.position) < 26) {
+      if (this.coop.puppetBoss) this.coop.send({ t: 'boss3Hit', dmg: 0, pet: duration });
+      else this.glaciel.petrify(duration);
+      this.showFloatingText("🪨 GLACIEL VERSTEINERT!", this.glaciel.pos, "#bdc3c7");
+    }
     if (this.morvanta.hittable && this.morvanta.pos.distanceTo(this.playerGroup.position) < 26) {
       if (this.coop.puppetBoss) this.coop.send({ t: 'boss2Hit', dmg: 0, pet: duration });
       else this.morvanta.petrify(duration);
@@ -157,6 +162,16 @@ export const bossMethods = {
     });
   },
 
+
+  // Restoring a saved game: Vortox stays beaten
+  restoreVortoxDefeated() {
+    this.bossData.alive = false;
+    this.bossData.hp = 0;
+    this.bossGroup.visible = false;
+    this.updateBossBar();
+    document.getElementById('boss-banner').classList.remove('visible');
+    document.getElementById('boss-state-text').textContent = "Besiegt! Das Himmelsgebirge ist gerettet!";
+  },
 
   petrifyBoss(duration) {
     if (this.bossData.alive) this.bossData.petrifiedTimer = Math.min(10, duration);
@@ -202,6 +217,7 @@ export const bossMethods = {
     this.showFloatingText("🎉 VORTOX BESIEGT! VICTORY! 🎉", this.playerGroup.position, "#ffe066");
     document.getElementById('boss-state-text').textContent = "Besiegt! Das Himmelsgebirge ist gerettet!";
     this.progression.addXp(100, 'Vortox besiegt');
+    if (this.saveGame) this.saveGame.save();
     this.morvanta.onVortoxDefeated();
     this.dropLoot(this.bossGroup.position, { dust: 1, heart: 1 });
     this.dropLoot(this.bossGroup.position, { dust: 1, heart: 0.6 });
