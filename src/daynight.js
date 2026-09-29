@@ -76,6 +76,7 @@ export class DayNightCycle {
       if (!obj.isMesh) return;
       const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
       mats.forEach(m => {
+        if (m.userData.noNightGlow) return;
         if (m.emissive && m.emissiveIntensity > 0 && m.emissive.getHex() !== 0 && !this.glowMats.has(m)) {
           this.glowMats.set(m, m.emissiveIntensity);
         }
@@ -99,8 +100,8 @@ export class DayNightCycle {
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     this.fireflyMat = new THREE.PointsMaterial({
       map: createSoftSpriteTexture(),
-      color: new THREE.Color(1.3, 2.6, 0.35),
-      size: 0.9,
+      color: new THREE.Color(0.9, 1.8, 0.3),
+      size: 0.5,
       transparent: true,
       opacity: 0,
       depthWrite: false,

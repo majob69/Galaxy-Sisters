@@ -12,8 +12,21 @@ import { buildMoonBridge, buildRomanBridge, buildRopeBridge, buildStarBridge, br
 import { bakeStaticGroup } from './bake.js';
 import { AudioEngine } from './audio.js';
 import { DayNightCycle } from './daynight.js';
+import { ChibiRig } from './characters.js';
+import { QuestSystem, QUEST_DEFS } from './quests.js';
 
 applyCelShading();
+
+// Deterministic PRNG: the world (trees, flowers, stones ...) looks the same on every visit
+const WORLD_SEED = 20260929;
+function mulberry32(seed) {
+  return function () {
+    seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 // ==========================================
 // 1. SOUND SYSTEM (Web Audio API Synthesizer & Dynamic BGM)
@@ -163,10 +176,18 @@ class GalaxySistersGame {
     // Landscape heightfield: noise mountains + carved river, matches the terrain mesh exactly
     this.heightfield = new Heightfield(250, 360);
 
-    this.initScene();
-    this.buildWorld();
-    this.createPlayerMesh();
-    this.createBossVortox();
+    // Build the world with a seeded Math.random, then restore real randomness for gameplay
+    const nativeRandom = Math.random;
+    Math.random = mulberry32(WORLD_SEED);
+    try {
+      this.initScene();
+      this.buildWorld();
+      this.createPlayerMesh();
+      this.createBossVortox();
+      this.buildWorldQuests();
+    } finally {
+      Math.random = nativeRandom;
+    }
 
     // Day & night: sun/moon arc, palettes, night glow, fireflies
     this.dayNight = new DayNightCycle(this, {
@@ -2453,33 +2474,15 @@ class GalaxySistersGame {
     const spawnY = this.getTerrainHeight(0, 8);
     this.playerGroup.position.set(0, spawnY, 8);
 
-    this.playerDressMat = new THREE.MeshLambertMaterial({ color: SISTERS[0].dressColor });
-    this.playerDress = new THREE.Mesh(new THREE.ConeGeometry(0.65, 1.3, 8), this.playerDressMat);
-    this.playerDress.position.y = 1.0;
-    this.playerDress.castShadow = true;
-    this.playerGroup.add(this.playerDress);
+    // Chibi anime sister (see characters.js)
+    this.playerRig = new ChibiRig();
+    this.playerGroup.add(this.playerRig.group);
+    this.playerDress = this.playerRig.skirt;
+    this.playerDressMat = this.playerRig.mats.dress;
+    this.playerHairMat = this.playerRig.mats.hair;
+    this.playerRig.group.traverse(o => { if (o.isMesh) o.castShadow = true; });
 
-    const skinMat = new THREE.MeshLambertMaterial({ color: 0xffdfba });
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.48, 16, 16), skinMat);
-    head.position.y = 1.95;
-    head.castShadow = true;
-    this.playerGroup.add(head);
-
-    this.playerHairMat = new THREE.MeshLambertMaterial({ color: SISTERS[0].hairColor });
-    this.playerHair = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 12), this.playerHairMat);
-    this.playerHair.position.set(0, 2.05, -0.05);
-    this.playerGroup.add(this.playerHair);
-
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x22223b });
-    const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), eyeMat);
-    eye1.position.set(-0.16, 1.98, 0.42);
-    const eye2 = eye1.clone();
-    eye2.position.x = 0.16;
-    this.playerGroup.add(eye1, eye2);
-
-    this.accessoryGroup = new THREE.Group();
-    this.accessoryGroup.position.set(0, 2.65, 0);
-    this.playerGroup.add(this.accessoryGroup);
+    this.accessoryGroup = this.playerRig.accessorySlot;
     this.updateSisterAccessory();
 
     const shieldGeo = new THREE.SphereGeometry(1.6, 16, 16);
@@ -2502,9 +2505,7 @@ class GalaxySistersGame {
       this.accessoryGroup.remove(this.accessoryGroup.children[0]);
     }
 
-    const current = SISTERS[this.activeSisterIdx];
-    this.playerDressMat.color.setHex(current.dressColor);
-    this.playerHairMat.color.setHex(current.hairColor);
+    this.playerRig.setStyle(this.activeSisterIdx);
 
     if (this.activeSisterIdx === 0) {
       const moon = new THREE.Mesh(
@@ -2690,7 +2691,7 @@ class GalaxySistersGame {
     if (this.activeSisterIdx === 0) {
       sfx.heal();
       this.playerHP = Math.min(this.maxPlayerHP, this.playerHP + 50);
-      document.getElementById('player-hp-bar').style.width = `${(this.playerHP / this.maxPlayerHP) * 100}%`;
+      this.updateHPBar();
       this.createHealParticles(this.playerGroup.position);
       this.showFloatingText("💚 HEILUNG! +50 HP", this.playerGroup.position, "#2ecc71");
 
@@ -2744,10 +2745,7 @@ class GalaxySistersGame {
       sfx.invisible();
       this.isPlayerInvisible = true;
       this.invisibleTimer = 5.0;
-      this.playerDressMat.transparent = true;
-      this.playerDressMat.opacity = 0.25;
-      this.playerHairMat.transparent = true;
-      this.playerHairMat.opacity = 0.25;
+      this.playerRig.setOpacity(0.25);
       this.showFloatingText("👻 UNSICHTBAR! (5s)", this.playerGroup.position, "#c77dff");
     }
   }
@@ -3168,16 +3166,19 @@ class GalaxySistersGame {
       this.invisibleTimer = Math.max(0, this.invisibleTimer - delta);
       if (this.invisibleTimer <= 0) {
         this.isPlayerInvisible = false;
-        this.playerDressMat.transparent = false;
-        this.playerDressMat.opacity = 1.0;
-        this.playerHairMat.transparent = false;
-        this.playerHairMat.opacity = 1.0;
+        this.playerRig.setOpacity(1.0);
         this.showFloatingText("✨ Wieder sichtbar!", this.playerGroup.position, "#c77dff");
       }
     }
 
     // 9.1 Player Movement with verified physics
     this.updatePlayerMovement(delta, dtFactor);
+    this.playerRig.update(delta, {
+      moving: this.playerIsMoving,
+      grounded: this.isGrounded,
+      swimming: this.isSwimming,
+      velY: this.playerVelY
+    });
 
     // 9.2 Projectiles & Particles
     this.updateProjectiles();
@@ -3194,7 +3195,8 @@ class GalaxySistersGame {
       sfx.setBGMMode(dist < 28 ? 'boss' : 'peaceful');
     }
 
-    // Camera follow
+    // Camera follow (undo last frame's collision push so the chosen zoom is kept)
+    if (this.cameraDesired) this.camera.position.copy(this.cameraDesired);
     const playerPos = this.playerGroup.position;
     if (!this.prevPlayerPos) {
       this.prevPlayerPos = playerPos.clone();
@@ -3209,6 +3211,9 @@ class GalaxySistersGame {
       0.22
     );
     this.controls.update();
+    if (!this.cameraDesired) this.cameraDesired = new THREE.Vector3();
+    this.cameraDesired.copy(this.camera.position);
+    this.resolveCameraCollision();
 
     // Sky dome stays centered on the camera
     this.skyDome.position.copy(this.camera.position);
@@ -3217,6 +3222,41 @@ class GalaxySistersGame {
       this.postFX.render();
     } else {
       this.renderer.render(this.scene, this.camera);
+    }
+  }
+
+  // Keep the camera out of hills, cliffs and water: pull it in along the view ray
+  resolveCameraCollision() {
+    const target = this.controls.target;
+    const cam = this.camera.position;
+    const dir = this._camDir || (this._camDir = new THREE.Vector3());
+    dir.subVectors(cam, target);
+    const dist = dir.length();
+    if (dist < 0.01) return;
+    dir.divideScalar(dist);
+
+    let allowed = dist;
+    const samples = 18;
+    for (let i = 1; i <= samples; i++) {
+      const d = (i / samples) * dist;
+      const px = target.x + dir.x * d;
+      const pz = target.z + dir.z * d;
+      if (target.y + dir.y * d < this.getTerrainHeight(px, pz) + 0.5) {
+        allowed = Math.max(1.4, d - dist / samples);
+        break;
+      }
+    }
+    // Snap in quickly when blocked, glide back out smoothly
+    if (this.camAllowed === undefined || allowed < this.camAllowed) this.camAllowed = allowed;
+    else this.camAllowed += (allowed - this.camAllowed) * 0.08;
+
+    cam.copy(target).addScaledVector(dir, Math.min(dist, this.camAllowed));
+    const ground = this.getTerrainHeight(cam.x, cam.z) + 0.5;
+    const water = this.getWaterSurface(cam.x, cam.z);
+    const floor = water !== null ? Math.max(ground, water + 0.4) : ground;
+    if (cam.y < floor) {
+      cam.y = floor;
+      this.camera.lookAt(target);
     }
   }
 
@@ -3247,6 +3287,41 @@ class GalaxySistersGame {
       }
     }
     return false;
+  }
+
+  // River & night quests (see quests.js); every finished quest adds +10 max HP
+  buildWorldQuests() {
+    this.quests = new QuestSystem(this, {
+      onCollect: (text) => {
+        this.showFloatingText(text, this.playerGroup.position, '#9ff3ff');
+        sfx.collect();
+      },
+      onQuestDone: (quest) => {
+        this.applyQuestRewards(true);
+        this.showFloatingText(`🏆 Quest geschafft: ${quest.name}! +10 max. HP`, this.playerGroup.position, '#ffd166');
+        this.createSupernovaParticles(this.playerGroup.position.clone());
+        sfx.victory();
+      },
+      onAllDone: () => {
+        setTimeout(() => {
+          this.showFloatingText('🌟 Alle Quests geschafft – die Himmelsgebirge danken dir!', this.playerGroup.position, '#ffb3ec');
+          sfx.victory();
+        }, 1500);
+      }
+    });
+    this.applyQuestRewards(false);
+  }
+
+  applyQuestRewards(heal) {
+    const done = QUEST_DEFS.filter(q => this.quests.state.done[q.id]).length;
+    this.maxPlayerHP = 100 + done * 10;
+    this.playerHP = heal ? this.maxPlayerHP : Math.min(this.playerHP, this.maxPlayerHP);
+    this.updateHPBar();
+  }
+
+  updateHPBar() {
+    const bar = document.getElementById('player-hp-bar');
+    if (bar) bar.style.width = `${(this.playerHP / this.maxPlayerHP) * 100}%`;
   }
 
   onEnterWater(waterY) {
@@ -3368,6 +3443,7 @@ class GalaxySistersGame {
     }
 
     const isMoving = (moveX !== 0 || moveZ !== 0);
+    this.playerIsMoving = isMoving;
 
     if (isMoving) {
       const moveVec = new THREE.Vector3(moveX, 0, moveZ);
@@ -3411,7 +3487,7 @@ class GalaxySistersGame {
       const targetAngle = Math.atan2(moveVec.x, moveVec.z);
       this.playerGroup.rotation.y = targetAngle;
 
-      this.playerDress.rotation.z = Math.sin(Date.now() * 0.015) * 0.08;
+      this.playerDress.rotation.z = Math.sin(Date.now() * 0.015) * 0.04;
 
       if (this.isSwimming) {
         this.spawnSwimRipple(false);
@@ -3621,7 +3697,7 @@ class GalaxySistersGame {
           this.showFloatingText("🛡️ Mond-Schild blockt Wirbel!", this.playerGroup.position, "#90e0ef");
         } else {
           this.playerHP = Math.max(0, this.playerHP - 0.4);
-          document.getElementById('player-hp-bar').style.width = `${this.playerHP}%`;
+          this.updateHPBar();
         }
       }
 
@@ -3665,8 +3741,9 @@ class GalaxySistersGame {
       if (cloud.position.x > 110) cloud.position.x = -110;
     }
 
-    // Day/night cycle and the soundscape around the player
+    // Day/night cycle, quests and the soundscape around the player
     this.dayNight.update(delta);
+    this.quests.update(delta);
     const pp = this.playerGroup.position;
     const fallDx = pp.x - WATERFALL.x;
     const fallDz = pp.z - (this.waterfallLipZ + 2);

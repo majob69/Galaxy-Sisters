@@ -46,6 +46,14 @@ Ein farbenfrohes 3D-Action-Adventure / Platformer im Kawaii-Anime-Stil, direkt i
   * ✨ **Anime-Look:** Cel-Shading, Farbverlauf-Himmel mit Sonne, Bloom-Leuchten (Laternen, Kristalle, Wasserglitzern).
   * 🔋 **Grafik-Schalter:** Button „Grafik: Hoch/Niedrig“ im Quest-Panel (Niedrig = ohne Bloom, für Handy/Tablet).
 * **Tag & Nacht:** Sonne und Mond ziehen über den Himmel (ein Tag dauert ca. 7 Minuten). Abends glüht alles orange-rosa, nachts erscheinen Sternenhimmel mit Milchstraße, Glühwürmchen und hell leuchtende Laternen & Kristalle. Mit dem Button „☀️ Tag ⏩“ springst du zur nächsten Tageszeit.
+* **Chibi-Schwestern:** Alle vier Schwestern als Anime-Figuren im Look des Intro-Bildes: große glänzende Augen mit Blinzeln, eigene Frisuren (Luna lang, Stella wellig, Sol Zöpfe, Planeta wallend), Kleider mit Emblem sowie Animationen fürs Laufen, Springen, Schwimmen und Stehen.
+* **Fluss- & Nacht-Quests** (Fortschritt wird gespeichert, jede Quest gibt +10 max. HP):
+  * 💎 5 Sternensplitter in tiefem Wasser – hinschwimmen
+  * ⛲ Die Kristallquelle über dem Wasserfall finden (goldener Lichtstrahl, volle Heilung)
+  * 🌉 Alle 4 Brücken überqueren
+  * ✨ 8 goldene Sternenglühwürmchen fangen (nur nachts, manche hoch – springen!)
+  * 🌸 5 Mondblumen am Flussufer pflücken (blühen nur nachts)
+* **Kamera & Welt:** Die Kamera weicht Hügeln, Klippen und Wasser aus; die Welt (Bäume, Blumen, Steine) sieht bei jedem Besuch gleich aus.
 * **Neuer Sound:** Eigene Musik für Tag, Nacht und Bosskampf (mit Hall & Echo), Umgebungsgeräusche (Fluss, Wasserfall erst in der Nähe, Wind auf den Bergen, Vögel am Tag, Grillen & Eule nachts), Schritte auf Gras/Holz/Stein/Wasser/Kristall und neu gestaltete Zauber-Effekte.
 
 ---

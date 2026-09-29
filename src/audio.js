@@ -698,6 +698,12 @@ export class AudioEngine {
     }
   }
 
+  collect() {
+    this.init();
+    if (!this.ctx) return;
+    this.sparkle([84, 88, 91, 96], 0.05, 0.07, 0.6);
+  }
+
   nightfall() {
     this.init();
     if (!this.ctx) return;

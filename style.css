@@ -153,6 +153,45 @@ body, html {
   margin-bottom: 4px;
 }
 
+.quest-sub {
+  color: #9ff3ff;
+  font-weight: bold;
+  font-size: 0.8rem;
+  margin: 8px 0 4px;
+}
+
+.quest-row .quest-progress {
+  color: #ffde59;
+  font-weight: bold;
+  margin-left: 2px;
+}
+
+.quest-row.done {
+  color: #a8f0c0;
+  opacity: 0.85;
+}
+
+.quest-row .quest-tag {
+  font-size: 0.7rem;
+  color: #b8c4ff;
+  background: rgba(90, 100, 200, 0.35);
+  border-radius: 8px;
+  padding: 1px 6px;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+.quest-reset {
+  margin-top: 2px;
+  background: none;
+  border: none;
+  color: #c9b8ff;
+  font-size: 0.7rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
 /* Boss Health Bar (Centered top) */
 .boss-banner {
   position: absolute;
