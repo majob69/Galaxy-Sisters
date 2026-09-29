@@ -8,13 +8,15 @@
 import * as THREE from 'three';
 import { NetClient } from './network.js';
 import { SISTER_ICONS } from './remote.js';
+import { sfx } from './game/shared.js';
 
 const STATE_INTERVAL = 1 / 15;
 const BOSS_INTERVAL = 1 / 10;
 const TIME_INTERVAL = 2;
 const HUD_INTERVAL = 0.25;
 const HEAL_RADIUS = 9;
-const EMOTES = ['👋', '💜', '⭐', '❗'];
+const EMOTES = ['👋', '💜', '⭐', '😂', '🆘', '📍'];
+const PING_SECONDS = 20;
 
 const r2 = (v) => Math.round(v * 100) / 100;
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -27,7 +29,9 @@ export class CoopSession {
     this.timers = { state: 0, boss: 0, time: 0, hud: 0 };
     this.bossMsg = null;
     this.rosterDirty = true;
+    this.pings = [];
     this.hud = document.getElementById('coop-panel');
+    this.buildWheel();
     this._tmpPos = new THREE.Vector3();
   }
 
@@ -95,10 +99,21 @@ export class CoopSession {
       skipTime: () => g.dayNight.skipToNextPhase(),
       emote: (m) => {
         const p = g.remotes.get(m.id);
-        if (p) g.showFloatingText(`${p.name} ${m.e}`, p.group.position.clone().setY(p.group.position.y + 3.6), '#ffffff');
+        if (!p) return;
+        g.showFloatingText(`${p.name} ${m.e}`, p.group.position.clone().setY(p.group.position.y + 3.6), '#ffffff');
+        if (m.e === '🆘') g.showToast(`🆘 ${p.name} braucht Hilfe!`, 3500);
       },
+      ping: (m) => this.addPing(m.id, m.x, m.z),
+      puzzle: (m) => { if (m.id === 'gate') g.stargate.openRemote(); },
+      boss2: (m) => g.morvanta.onNetState(m),
+      boss2Hit: (m) => {
+        if (m.pet) g.morvanta.petrify(m.pet);
+        if (m.dmg) g.morvanta.applyHit(m.dmg);
+      },
+      boss2Free: (m) => g.morvanta.applyFree(m.n || 1),
       close: () => {
         g.remotes.clear();
+        this.wheel.classList.remove('open');
         this.net = null;
         this.bossMsg = null;
         this.rosterDirty = true;
@@ -118,8 +133,76 @@ export class CoopSession {
 
   sendEmote(e) {
     const g = this.game;
+    if (e === '📍') {
+      const p = g.playerGroup.position;
+      this.send({ t: 'ping', x: r2(p.x), z: r2(p.z) });
+      this.addPing(this.net ? this.net.id : 0, p.x, p.z);
+      return;
+    }
     this.send({ t: 'emote', e });
     g.showFloatingText(e, g.playerGroup.position.clone().setY(g.playerGroup.position.y + 3.2), '#ffffff');
+  }
+
+  // ---------- Pings and compass markers for friends ----------
+  addPing(id, x, z) {
+    const g = this.game;
+    const mine = this.net && id === this.net.id;
+    const p = g.remotes.get(id);
+    const name = mine ? 'Du' : p ? p.name : 'Freund';
+    this.pings = this.pings.filter(pg => pg.id !== id);
+    this.pings.push({ id, name, x, z, until: performance.now() + PING_SECONDS * 1000 });
+    if (!mine) {
+      g.showToast(`📍 ${name}: Hier!`, 3000);
+      sfx.collect();
+    }
+    g.fx.ringWave(new THREE.Vector3(x, g.getTerrainHeight(x, z), z), new THREE.Color(2.4, 1.8, 0.5), 5, 1.2);
+  }
+
+  // Friends (and pings) on the compass; a friend in need is named in the label
+  getCompassTargets() {
+    const g = this.game;
+    const out = [];
+    const now = performance.now();
+    this.pings = this.pings.filter(pg => pg.until > now);
+    this.pings.forEach(pg => out.push({ id: `ping:${pg.id}`, icon: '📍', label: `${pg.name}: Hier!`, x: pg.x, z: pg.z }));
+    g.remotes.list.forEach(r => {
+      if (!r.hasState) return;
+      out.push({
+        id: `friend:${r.id}`, icon: r.downed ? '🆘' : SISTER_ICONS[r.sister], label: r.downed ? `${r.name} ist KO!` : r.name,
+        x: r.group.position.x, z: r.group.position.z, noLabel: !r.downed
+      });
+    });
+    return out;
+  }
+
+  // ---------- Emote wheel (button in the roster, key T) ----------
+  buildWheel() {
+    const wheel = document.createElement('div');
+    wheel.id = 'emote-wheel';
+    wheel.className = 'emote-wheel';
+    EMOTES.forEach((e, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'emote-item clickable';
+      b.textContent = e;
+      const ang = -Math.PI / 2 + (i / EMOTES.length) * Math.PI * 2;
+      b.style.setProperty('--x', `${Math.cos(ang) * 84}px`);
+      b.style.setProperty('--y', `${Math.sin(ang) * 84}px`);
+      b.title = e === '📍' ? 'Markierung setzen' : e === '🆘' ? 'Hilfe rufen' : 'Emote';
+      b.addEventListener('click', () => {
+        this.sendEmote(e);
+        this.toggleWheel(false);
+      });
+      wheel.appendChild(b);
+    });
+    document.body.appendChild(wheel);
+    this.wheel = wheel;
+  }
+
+  toggleWheel(force) {
+    if (!this.active && force !== false) return;
+    const open = force === undefined ? !this.wheel.classList.contains('open') : force;
+    this.wheel.classList.toggle('open', open);
   }
 
   // ---------- Incoming ----------
@@ -129,9 +212,8 @@ export class CoopSession {
     if (!p) return;
     const pos = new THREE.Vector3(m.x, m.y, m.z);
     const fwd = new THREE.Vector3(m.dx, 0, m.dz);
-    const near = pos.distanceTo(g.playerGroup.position) < 32;
     if (m.a === 1) {
-      if (near) g.sfxCast(m.si);
+      g.sfxCast(m.si, pos);
       if (m.si === 0) {
         p.showShield(7);
         g.fx.ringWave(pos, new THREE.Color(0.8, 1.5, 2.4), 4.5, 0.6);
@@ -145,7 +227,7 @@ export class CoopSession {
     } else if (m.a === 2) {
       if (m.si === 0) {
         g.createHealParticles(pos);
-        if (near) g.sfxCast(-1);
+        g.sfxCast(-1, pos);
         // Luna's heal also reaches friends standing close by
         if (pos.distanceTo(g.playerGroup.position) < HEAL_RADIUS) g.healPlayer(30, p.name);
       } else if (m.si === 1) {
@@ -182,7 +264,8 @@ export class CoopSession {
       this.net.send({
         t: 's', x: r2(p.x), y: r2(p.y), z: r2(p.z), ry: r2(g.playerGroup.rotation.y),
         si: g.activeSisterIdx, mv: g.playerIsMoving ? 1 : 0, gr: g.isGrounded ? 1 : 0, sw: g.isSwimming ? 1 : 0,
-        vy: r2(g.playerVelY), inv: g.isPlayerInvisible ? 1 : 0, hp: Math.round(g.playerHP), mhp: g.maxPlayerHP
+        vy: r2(g.playerVelY), inv: g.isPlayerInvisible ? 1 : 0, hp: Math.round(g.playerHP), mhp: g.maxPlayerHP,
+        dn: g.isDowned ? 1 : 0, vr: g.progression.getSkin(g.activeSisterIdx)
       });
     }
 
@@ -196,6 +279,11 @@ export class CoopSession {
           t: 'boss', x: r2(bp.x), z: r2(bp.z), ry: r2(wrapAngle(g.bossGroup.rotation.y)),
           st: b.state, hp: b.hp, al: b.alive ? 1 : 0, pet: r2(b.petrifiedTimer)
         });
+      }
+      t.boss2 = (t.boss2 || 0) - delta;
+      if (t.boss2 <= 0) {
+        t.boss2 = BOSS_INTERVAL;
+        this.net.send(g.morvanta.netState());
       }
       t.time -= delta;
       if (t.time <= 0) {
@@ -293,15 +381,16 @@ export class CoopSession {
     let html = `<div class="coop-room">Raum ${this.net.room}</div>`;
     html += row('me', SISTER_ICONS[g.activeSisterIdx], this.name, this.net.id === hostId);
     g.remotes.list.forEach((p) => { html += row(p.id, SISTER_ICONS[p.sister], p.name, p.id === hostId); });
-    html += `<div class="coop-emotes">${EMOTES.map((e) => `<button type="button" class="coop-emote clickable" data-emote="${e}">${e}</button>`).join('')}</div>`;
+    html += '<button type="button" class="coop-emote-fab clickable" id="btn-emote-wheel">💬 Emotes & Ping (T)</button>';
     this.hud.innerHTML = html;
 
     // Names go in as text, never as markup
     const names = this.hud.querySelectorAll('.coop-name');
     names[0].textContent = `${this.name} (Du)`;
     g.remotes.list.forEach((p, i) => { names[i + 1].textContent = p.name; });
-    this.hud.querySelectorAll('.coop-emote').forEach((btn) => {
-      btn.addEventListener('click', () => { this.sendEmote(btn.dataset.emote); btn.blur(); });
+    this.hud.querySelector('#btn-emote-wheel').addEventListener('click', (ev) => {
+      this.toggleWheel();
+      ev.currentTarget.blur();
     });
   }
 }

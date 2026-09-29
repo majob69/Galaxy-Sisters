@@ -71,6 +71,13 @@ Ein farbenfrohes 3D-Action-Adventure / Platformer im Kawaii-Anime-Stil, direkt i
   * Der Gastgeber (zuerst beigetretener Spieler 👑) steuert den Boss Vortox; Treffer aller Spieler zählen, der Boss jagt die nächste sichtbare Schwester. Verlässt der Gastgeber das Spiel, übernimmt automatisch der nächste.
   * Tageszeit ist synchron; Lunas Heilung stärkt auch Freunde in der Nähe; besiegte Slimes verschwinden für alle.
 
+* **💫 KO & Wiederbeleben:** Bei 0 HP geht eine Schwester zu Boden. Eine Freundin, die ca. 3 s in der Nähe bleibt (oder Lunas Heilung), holt sie zurück; allein oder ohne Hilfe wacht sie nach kurzer Zeit am Startpunkt auf. Freunde in Not stehen mit 🆘 auf dem Kompass.
+* **👾 Mehr Gegner & Beute:** Slime-Rudel im ganzen Tal jagen und beißen (kommen nach einer Weile wieder), nachts spuken **Schatten-Irrlichter**. Sie lassen 💗 Herzen (heilen) und ✨ Sternenstaub (XP) fallen.
+* **⭐ Stern-Level & Outfits:** XP aus Gegnern, Quests, Kisten und Bossen. Jedes Level = mehr Schaden, kürzere Abklingzeit, mehr Leben (bis Lv 6). Mit Quests schaltest du pro Schwester zwei Outfits frei (👗-Knopf): ab 3 Quests das erste, mit allen Quests das zweite. Freunde sehen dein Outfit.
+* **🚪 Sternen-Tor (Koop-Rätsel):** Am Wiesenplatz liegen zwei Sternenplatten. Beide gleichzeitig drücken – zu zweit, oder allein mit Stella: auf einer Platte stehen und die andere mit einem Sternenpfeil treffen (bleibt 6 s an). Dahinter wartet eine Schatzkiste (Quest).
+* **🦋 Boss 2 – Morvanta:** Der Totenkopf-Falter schläft in einem Kokon, bis Vortox besiegt ist. Angriffe: *Schuppenstaub* (markierte Kreise ausweichen), *Sturzflug* und der **Fühler-Griff**: Er hebt eine Schwester in die Luft – Freunde schlagen auf Morvanta ein, die Gefangene strampelt mit der Sprung-Taste. Ist sie befreit, ist Morvanta benommen (doppelter Schaden). Ab halber Lebensleiste wird sie schneller.
+* **💬 Koop-Komfort:** Emote-Rad (Taste `T` oder Knopf im Koop-Fenster) mit 👋 💜 ⭐ 😂 🆘 und 📍 **Ping** (Markierung für alle auf dem Kompass). Zauber von Freunden hört man räumlich: leiser mit Entfernung und auf der Seite, auf der sie stehen.
+
 ---
 
 ## 🚀 Spiel starten
@@ -81,12 +88,14 @@ Einfach die Datei **`start_game.bat`** doppelt anklicken. Der Browser öffnet si
 ### Option 2 (Über Terminal):
 ```bash
 # Im Projektordner c:\Users\Mario\Coding\Galaxy-Sisters ausführen:
-python -m http.server 8080
+python serve.py 8080   # wie http.server, aber ohne Browser-Cache
 # Danach im Browser öffnen: http://localhost:8080/index.html
 ```
 
 ### Option 3 – Koop mit Freunden (Node.js nötig):
 Doppelklick auf **`start_multiplayer.bat`** (oder `node server/server.mjs` / `npm run coop`). Der Server liefert das Spiel aus und verbindet die Spieler; kein `npm install` nötig. Im Fenster stehen die Adressen, z. B. `http://192.168.x.x:8080/` – Freunde im gleichen WLAN öffnen diese Adresse (auch Handys) und tragen denselben Raum-Code ein. Wer außerhalb des eigenen Netzes mitspielen soll, braucht z. B. eine Portfreigabe oder einen Tunnel; der Server hat keine Anmeldung, also nur mit Leuten teilen, die du kennst.
+
+> **Startet das Spiel nach einem Update nicht?** Der Browser hat dann oft alte Dateien im Cache. Seite mit `Strg + F5` neu laden. Mit `start_game.bat` (nutzt `serve.py`) oder `start_multiplayer.bat` passiert das nicht; auf dem Startbildschirm erscheint bei einem Ladefehler auch ein Hinweis.
 
 Oder alternativ mit Vite:
 ```bash
@@ -102,3 +111,18 @@ Im Dokument [GDD_Galaxy_Sisters.md](file:///c:/Users/Mario/Coding/Galaxy-Sisters
 1. **Multiplayer (bis zu 4 Spieler):** Anbindung über WebSockets (Colyseus oder Socket.io / Node.js).
 2. **Godot Engine Option:** Falls das Spiel später nativ für Steam/Konsolen kompiliert werden soll.
 3. **Weitere Obby-Level & Rätsel-Mechaniken.**
+
+---
+
+## 🧱 Projektstruktur (`src/`)
+
+| Datei | Inhalt |
+|---|---|
+| `main.js` | Spielklasse: Konstruktor, Spielschleife, Quest-Anbindung |
+| `game/*.js` | Aufgeteilt nach Bereichen (Welt, Kreaturen, Boss 1, Fähigkeiten, Spieler, UI, KO, Gegner) – Methoden werden in die Spielklasse gemischt |
+| `morvanta.js`, `stargate.js` | Boss 2 und das Koop-Rätsel |
+| `progression.js` | Stern-Level, XP, Outfits |
+| `coop.js`, `network.js`, `remote.js` | Koop-Sitzung, WebSocket-Client, Fremdspieler |
+| `landscape.js`, `atmosphere.js`, `water.js`, `bridges.js` | Gelände, Himmel, Wasser, Brücken |
+| `audio.js`, `daynight.js`, `quests.js`, `compass.js`, `magicfx.js`, `characters.js`, `perf.js` | Sound, Tag/Nacht, Quests, Kompass, Zaubereffekte, Figuren, Grafik-Regler |
+| `../server/server.mjs` | Koop-Server (Spieldateien + WebSocket-Relay) |

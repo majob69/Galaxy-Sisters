@@ -8,7 +8,7 @@ echo Zum Beenden dieses Fensters einfach schliessen.
 echo.
 
 start http://localhost:8080/index.html
-python -m http.server 8080
+python serve.py 8080
 if %errorlevel% neq 0 (
   echo Python nicht gefunden, starte mit npx serve...
   npx --yes serve -l 8080 .

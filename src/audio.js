@@ -554,20 +554,40 @@ export class AudioEngine {
   }
 
   // ---------- Sound effects (API used by the game) ----------
+  // Effects connect to this.out: normally the SFX bus, or a temporary distance/pan stage (see spatial)
+  get out() {
+    return this._out || this.sfxBus;
+  }
+
+  // Play any effect as if it came from somewhere: `volume` (0..1) follows the distance, `pan` (-1..1) the side
+  spatial(volume, pan, play) {
+    this.init();
+    if (!this.ctx) return;
+    const g = this.ctx.createGain();
+    g.gain.value = volume;
+    const p = this.ctx.createStereoPanner();
+    p.pan.value = pan;
+    g.connect(p);
+    p.connect(this.sfxBus);
+    this._out = g;
+    try { play(); } finally { this._out = null; }
+    setTimeout(() => { g.disconnect(); p.disconnect(); }, 4000);
+  }
+
   playTone(freq, type = 'sine', duration = 0.15, gainVal = 0.1) {
     this.init();
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     const g = this.ctx.createGain();
     this.env(g, t, 0.005, gainVal, duration);
-    g.connect(this.sfxBus);
+    g.connect(this.out);
     this.osc(type, freq, t, t + duration + 0.05, g);
   }
 
   sweep(type, f0, f1, dur, level, t = this.ctx.currentTime) {
     const g = this.ctx.createGain();
     this.env(g, t, 0.005, level, dur);
-    g.connect(this.sfxBus);
+    g.connect(this.out);
     const o = this.osc(type, f0, t, t + dur + 0.05, g);
     o.frequency.exponentialRampToValueAtTime(f1, t + dur);
   }
@@ -582,7 +602,7 @@ export class AudioEngine {
     this.env(g, t, 0.004, level, dur);
     src.connect(filter);
     filter.connect(g);
-    g.connect(this.sfxBus);
+    g.connect(this.out);
     src.start(t, Math.random());
     src.stop(t + dur + 0.05);
   }
@@ -592,7 +612,7 @@ export class AudioEngine {
     notes.forEach((m, i) => {
       const g = this.ctx.createGain();
       this.env(g, t + i * gap, 0.003, level, decay);
-      g.connect(this.sfxBus);
+      g.connect(this.out);
       this.osc('sine', mtof(m), t + i * gap, t + i * gap + decay + 0.05, g);
       const h = this.ctx.createGain();
       h.gain.value = 0.25;

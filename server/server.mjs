@@ -177,6 +177,21 @@ function cleanRoom(raw) {
 
 const num = (v, lim = 400) => (Number.isFinite(v) ? Math.max(-lim, Math.min(lim, v)) : 0);
 
+// Sanitizes free-form game payloads (boss 2 state etc.): short keys, numbers clamped, short strings,
+// small arrays / objects only. Nothing else gets relayed.
+function clean(v, depth = 0) {
+  if (typeof v === 'number') return num(v, 2000);
+  if (typeof v === 'boolean') return v ? 1 : 0;
+  if (typeof v === 'string') return v.slice(0, 12);
+  if (Array.isArray(v) && depth < 3) return v.slice(0, 10).map((x) => clean(x, depth + 1));
+  if (v && typeof v === 'object' && depth < 2) {
+    const out = {};
+    Object.keys(v).slice(0, 20).forEach((k) => { if (/^\w{1,8}$/.test(k)) out[k] = clean(v[k], depth + 1); });
+    return out;
+  }
+  return 0;
+}
+
 function broadcast(room, obj, exceptId = null) {
   const text = JSON.stringify(obj);
   room.players.forEach((p) => { if (p.id !== exceptId) p.conn.send(text); });
@@ -200,7 +215,8 @@ function handleMessage(room, player, msg) {
         t: 's', id: player.id,
         x: num(msg.x), y: num(msg.y), z: num(msg.z), ry: num(msg.ry, 10),
         si: player.sister, mv: msg.mv ? 1 : 0, gr: msg.gr ? 1 : 0, sw: msg.sw ? 1 : 0,
-        vy: num(msg.vy, 5), inv: msg.inv ? 1 : 0, hp: num(msg.hp, 1000), mhp: num(msg.mhp, 1000)
+        vy: num(msg.vy, 5), inv: msg.inv ? 1 : 0, hp: num(msg.hp, 1000), mhp: num(msg.mhp, 1000),
+        dn: msg.dn ? 1 : 0, vr: Math.max(0, Math.min(2, msg.vr | 0))
       }, player.id);
       break;
     case 'cast': // ability visuals
@@ -223,6 +239,21 @@ function handleMessage(room, player, msg) {
       if (host && host !== player) {
         host.conn.send(JSON.stringify({ t: msg.t, id: player.id, dmg: num(msg.dmg, 200), dur: num(msg.dur, 10) }));
       }
+      break;
+    }
+    case 'ping':
+      broadcast(room, { t: 'ping', id: player.id, x: num(msg.x), z: num(msg.z) }, player.id);
+      break;
+    case 'puzzle':
+      broadcast(room, { t: 'puzzle', id: String(msg.id).slice(0, 12) }, player.id);
+      break;
+    case 'boss2': // host-authoritative state of boss 2
+      if (hostOf(room) === player) broadcast(room, { ...clean(msg), t: 'boss2' }, player.id);
+      break;
+    case 'boss2Hit':
+    case 'boss2Free': {
+      const host = hostOf(room);
+      if (host && host !== player) host.conn.send(JSON.stringify({ ...clean(msg), t: msg.t, id: player.id }));
       break;
     }
     case 'slime':

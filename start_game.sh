@@ -13,4 +13,4 @@ elif which google-chrome > /dev/null; then
   google-chrome http://localhost:8080 &
 fi
 
-python3 -m http.server 8080 || python -m http.server 8080 || npx serve -l 8080 .
+python3 serve.py 8080 || python serve.py 8080 || npx serve -l 8080 .

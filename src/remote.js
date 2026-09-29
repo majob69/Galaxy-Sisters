@@ -44,6 +44,8 @@ class RemotePlayer {
     this.hp = 100;
     this.maxHp = 100;
     this.invisible = false;
+    this.downed = false;
+    this.variant = 0;
     this.hasState = false;
     this.shieldTimer = 0;
 
@@ -52,7 +54,7 @@ class RemotePlayer {
     this.rig = new ChibiRig();
     this.group.add(this.rig.group);
     this.rig.group.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-    game.applySisterLook(this.rig, this.sister);
+    game.applySisterLook(this.rig, this.sister, 0);
 
     this.shield = new THREE.Mesh(new THREE.SphereGeometry(1.6, 24, 16), createShieldMaterial());
     this.shield.position.y = 1.5;
@@ -67,10 +69,13 @@ class RemotePlayer {
     this.flags = { moving: false, grounded: true, swimming: false, velY: 0 };
   }
 
-  setSister(idx) {
-    if (idx === this.sister) return;
+  setSister(idx, variant = 0) {
+    if (idx === this.sister && variant === this.variant) return;
+    const sisterChanged = idx !== this.sister;
     this.sister = idx;
-    this.game.applySisterLook(this.rig, idx);
+    this.variant = variant;
+    this.game.applySisterLook(this.rig, idx, variant);
+    if (!sisterChanged) return;
     this.tag.material.map.dispose();
     this.group.remove(this.tag);
     this.tag.material.dispose();
@@ -82,10 +87,13 @@ class RemotePlayer {
   applyState(m) {
     this.target.set(m.x, m.y, m.z);
     this.targetRy = m.ry;
-    this.flags = { moving: !!m.mv, grounded: !!m.gr, swimming: !!m.sw, velY: m.vy };
+    const wasDowned = this.downed;
+    this.downed = !!m.dn;
+    this.flags = { moving: !!m.mv, grounded: !!m.gr, swimming: !!m.sw, velY: m.vy, downed: this.downed };
+    if (this.downed && !wasDowned) this.game.showToast(`🆘 ${this.name} ist KO – lauf hin und hilf!`, 4000);
     this.hp = m.hp;
     this.maxHp = m.mhp || 100;
-    this.setSister(m.si | 0);
+    this.setSister(m.si | 0, m.vr | 0);
     const inv = !!m.inv;
     if (inv !== this.invisible) {
       this.invisible = inv;

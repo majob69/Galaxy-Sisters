@@ -13,7 +13,9 @@ export const QUEST_DEFS = [
   { id: 'spring', icon: '⛲', name: 'Finde die Kristallquelle', hint: 'Folge dem Fluss hinauf zum Wasserfall', total: 1 },
   { id: 'bridges', icon: '🌉', name: 'Überquere alle Brücken', hint: 'Mond-, Römer-, Hänge- & Sternenbrücke', total: 4 },
   { id: 'fireflies', icon: '✨', name: 'Fange Sternenglühwürmchen', hint: 'Die goldenen fliegen nachts über der Wiese – manche hoch, spring!', total: 8, night: true },
-  { id: 'moonflowers', icon: '🌸', name: 'Pflücke Mondblumen', hint: 'Sie blühen am Flussufer', total: 5, night: true }
+  { id: 'moonflowers', icon: '🌸', name: 'Pflücke Mondblumen', hint: 'Sie blühen am Flussufer', total: 5, night: true },
+  { id: 'gate', icon: '⭐', name: 'Öffne das Sternen-Tor', hint: 'Beide Platten gleichzeitig – zu zweit oder mit Stellas Pfeil', total: 1 },
+  { id: 'morvanta', icon: '🦋', name: 'Besiege Morvanta', hint: 'Sie erwacht, sobald Vortox besiegt ist', total: 1 }
 ];
 
 const BRIDGE_NAMES = { moon: 'Mondbrücke', roman: 'Römerbrücke', rope: 'Hängebrücke', star: 'Sternenbrücke' };

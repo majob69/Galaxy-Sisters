@@ -62,8 +62,8 @@ export class Compass {
         }
       });
       // Move below the boss banner while it is shown
-      const banner = document.getElementById('boss-banner');
-      this.root.classList.toggle('lowered', !!banner && banner.classList.contains('visible'));
+      const banners = ['boss-banner', 'boss2-banner'].map(id => document.getElementById(id));
+      this.root.classList.toggle('lowered', banners.some(b => b && b.classList.contains('visible')));
     }
 
     g.camera.getWorldDirection(this.dir);
@@ -89,13 +89,14 @@ export class Compass {
       const dist = Math.sqrt(dx * dx + dz * dz);
       const rel = wrap(Math.atan2(dx, -dz) - heading);
       const m = this.marker(t.id, t.icon);
+      m.el.textContent = t.icon;
       const clamped = Math.max(-SPAN / 2, Math.min(SPAN / 2, rel));
       const behind = Math.abs(rel) > SPAN / 2;
       m.el.classList.toggle('edge', behind);
       m.el.dataset.side = rel < 0 ? 'left' : 'right';
       m.el.style.opacity = behind ? 0.75 : Math.max(0.45, 1 - dist / 140);
       place(m.el, clamped * 0.97);
-      if (dist < nearestDist) {
+      if (!t.noLabel && dist < nearestDist) {
         nearestDist = dist;
         nearest = { t, m, rel };
       }

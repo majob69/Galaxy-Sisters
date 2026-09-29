@@ -24,6 +24,30 @@ export const SISTER_STYLES = [
   }
 ];
 
+// Unlockable outfits per sister (index 0 = the standard style above); only the listed colors change
+export const SKIN_VARIANTS = [
+  [
+    null,
+    { name: 'Mondgala', dress: 0x6f7fe8, bodice: 0xffe9a8, trim: 0xffd166 },
+    { name: 'Mitternachtsmond', dress: 0x1b1f5c, bodice: 0x3a3f9c, trim: 0xa5b4ff, hair: 0x8f7bff, hairShade: 0x6a58d6 }
+  ],
+  [
+    null,
+    { name: 'Zuckerstern', dress: 0xffc1e3, bodice: 0xfff0f8, trim: 0xff7eb6 },
+    { name: 'Sternennacht', dress: 0x24305e, bodice: 0x2f3f7d, trim: 0xffd35c, boots: 0xe9dfc4 }
+  ],
+  [
+    null,
+    { name: 'Abendrot', dress: 0xff5f6d, bodice: 0xff9b73, trim: 0xffe08a },
+    { name: 'Glutkönigin', dress: 0x7a1f2b, bodice: 0xb0324a, trim: 0xffb84d, hair: 0xff5a1f, hairShade: 0xd63f00, boots: 0x4a1017 }
+  ],
+  [
+    null,
+    { name: 'Ringnebel', dress: 0x2cb8c9, bodice: 0x5fdbe6, trim: 0xd7fbff },
+    { name: 'Dunkle Materie', dress: 0x111133, bodice: 0x2b1b66, trim: 0xff8ad8, hair: 0x5b2bb0, hairShade: 0x3f1c85, boots: 0x1a1240 }
+  ]
+];
+
 // ---------- Painted anime eye (one textured plane instead of 7 meshes) ----------
 const eyeTexCache = new Map();
 export function getEyeTexture(iris, brows = false, side = 1) {
@@ -135,6 +159,7 @@ export class ChibiRig {
 
     this.buildBody();
     this.buildHead();
+    this.downAmt = 0;
     this.setStyle(0);
   }
 
@@ -339,8 +364,8 @@ export class ChibiRig {
     }
   }
 
-  setStyle(idx) {
-    const st = SISTER_STYLES[idx];
+  setStyle(idx, variant = 0) {
+    const st = { ...SISTER_STYLES[idx], ...(SKIN_VARIANTS[idx][variant] || {}) };
     const M = this.mats;
     M.skin.color.setHex(st.skin);
     // Soft self-light keeps anime faces bright even on the shadow side
@@ -412,6 +437,19 @@ export class ChibiRig {
       bob = Math.sin(t * 2.2) * 0.012;
       this.walkPhase = 0;
     }
+
+    // Knocked out: lie down on the back with limp arms and legs
+    if (state.downed) {
+      legSwing = 0;
+      armSwing = 0;
+      armLift = 0.35;
+      legTuck = 0;
+      lean = 0;
+      bob = 0;
+    }
+    this.downAmt += ((state.downed ? 1 : 0) - this.downAmt) * Math.min(1, delta * 8);
+    this.group.rotation.x = -1.45 * this.downAmt;
+    this.group.position.y = 0.32 * this.downAmt;
 
     this.hips.position.y = bob;
     this.hips.rotation.x += (lean - this.hips.rotation.x) * 0.2;
