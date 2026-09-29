@@ -10,184 +10,15 @@ import {
 import { WaterSurface, createWaterfall, MistParticles, createRainbow } from './water.js';
 import { buildMoonBridge, buildRomanBridge, buildRopeBridge, buildStarBridge, bridgeDeckY } from './bridges.js';
 import { bakeStaticGroup } from './bake.js';
+import { AudioEngine } from './audio.js';
+import { DayNightCycle } from './daynight.js';
 
 applyCelShading();
 
 // ==========================================
 // 1. SOUND SYSTEM (Web Audio API Synthesizer & Dynamic BGM)
 // ==========================================
-class SoundFX {
-  constructor() {
-    this.ctx = null;
-    this.enabled = true;
-    this.bgmPlaying = false;
-    this.bgmMode = 'peaceful'; // 'peaceful' or 'boss'
-    this.bgmStep = 0;
-    this.bgmTimer = null;
-  }
-
-  init() {
-    if (!this.ctx) {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (AudioCtx) this.ctx = new AudioCtx();
-    }
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
-  }
-
-  startBGM() {
-    this.init();
-    if (!this.enabled || !this.ctx || this.bgmPlaying) return;
-    this.bgmPlaying = true;
-    this.runBGMStep();
-  }
-
-  setBGMMode(mode) {
-    this.bgmMode = mode;
-  }
-
-  runBGMStep() {
-    if (!this.bgmPlaying || !this.ctx || !this.enabled) {
-      this.bgmTimer = setTimeout(() => this.runBGMStep(), 300);
-      return;
-    }
-
-    const isBoss = this.bgmMode === 'boss';
-    const intervalMs = isBoss ? 160 : 340;
-
-    // Peaceful: Pentatonic calming tones (C, D, E, G, A) in gentle octave
-    const peacefulNotes = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.25];
-    // Boss: Driving dramatic minor bassline and adventurous lead
-    const bossBass = [73.42, 82.41, 87.31, 98.00, 110.00, 130.81];
-    const bossLead = [293.66, 311.13, 349.23, 392.00, 440.00, 466.16, 523.25, 587.33];
-
-    try {
-      if (isBoss) {
-        // Dramatic adventurous boss pulse
-        const bassFreq = bossBass[this.bgmStep % bossBass.length];
-        this.playTone(bassFreq, 'sawtooth', 0.16, 0.14);
-
-        if (this.bgmStep % 2 === 0) {
-          const leadFreq = bossLead[(this.bgmStep * 3) % bossLead.length];
-          this.playTone(leadFreq, 'triangle', 0.2, 0.12);
-        }
-      } else {
-        // Calm, gentle meadow ambience
-        if (this.bgmStep % 2 === 0) {
-          const n = peacefulNotes[(this.bgmStep + Math.floor(this.bgmStep / 8)) % peacefulNotes.length];
-          this.playTone(n, 'sine', 0.35, 0.045);
-        } else if (this.bgmStep % 4 === 1) {
-          const n2 = peacefulNotes[(this.bgmStep * 2) % peacefulNotes.length];
-          this.playTone(n2 * 1.5, 'triangle', 0.25, 0.025);
-        }
-      }
-    } catch (e) {}
-
-    this.bgmStep++;
-    this.bgmTimer = setTimeout(() => this.runBGMStep(), intervalMs);
-  }
-
-  playTone(freq, type = 'sine', duration = 0.15, gainVal = 0.1) {
-    if (!this.enabled || !this.ctx) return;
-    try {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-      gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start();
-      osc.stop(this.ctx.currentTime + duration);
-    } catch (e) {}
-  }
-
-  jump() {
-    this.init();
-    if (!this.ctx) return;
-    try {
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(280, this.ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(560, this.ctx.currentTime + 0.18);
-      gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.18);
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.start();
-      osc.stop(this.ctx.currentTime + 0.18);
-    } catch (e) {}
-  }
-
-  arrowShoot() {
-    this.init();
-    this.playTone(660, 'sine', 0.08, 0.14);
-    setTimeout(() => this.playTone(880, 'triangle', 0.12, 0.12), 35);
-  }
-
-  heal() {
-    this.init();
-    [440, 554, 659, 880, 1108].forEach((f, i) => {
-      setTimeout(() => this.playTone(f, 'sine', 0.25, 0.1), i * 50);
-    });
-  }
-
-  petrify() {
-    this.init();
-    this.playTone(180, 'sawtooth', 0.35, 0.2);
-    setTimeout(() => this.playTone(95, 'triangle', 0.45, 0.22), 70);
-  }
-
-  invisible() {
-    this.init();
-    [587, 493, 440, 329].forEach((f, i) => {
-      setTimeout(() => this.playTone(f, 'sine', 0.3, 0.09), i * 50);
-    });
-  }
-
-  magicSkill(sisterIdx) {
-    this.init();
-    if (!this.ctx) return;
-    const freqs = [
-      [330, 440, 660],       // Luna
-      [523, 659, 784, 1046], // Stella
-      [220, 330, 440, 880],  // Sol
-      [180, 270, 360, 540]   // Planeta
-    ][sisterIdx] || [440, 880];
-
-    freqs.forEach((f, i) => {
-      setTimeout(() => this.playTone(f, 'triangle', 0.15, 0.1), i * 40);
-    });
-  }
-
-  hit() {
-    this.init();
-    this.playTone(140, 'sawtooth', 0.15, 0.18);
-  }
-
-  bossSpin() {
-    this.init();
-    this.playTone(90, 'sawtooth', 0.4, 0.15);
-  }
-
-  splash() {
-    this.playTone(620, 'sine', 0.12, 0.06);
-    setTimeout(() => this.playTone(420, 'triangle', 0.16, 0.05), 50);
-    setTimeout(() => this.playTone(760, 'sine', 0.1, 0.035), 110);
-  }
-
-  victory() {
-    this.init();
-    [440, 554, 659, 880].forEach((f, i) => {
-      setTimeout(() => this.playTone(f, 'triangle', 0.3, 0.15), i * 90);
-    });
-  }
-}
-
-const sfx = new SoundFX();
+const sfx = new AudioEngine();
 
 // ==========================================
 // 2. SISTERS DATA & CONFIG
@@ -336,6 +167,21 @@ class GalaxySistersGame {
     this.buildWorld();
     this.createPlayerMesh();
     this.createBossVortox();
+
+    // Day & night: sun/moon arc, palettes, night glow, fireflies
+    this.dayNight = new DayNightCycle(this, {
+      dayLength: 480,
+      start: 0.1,
+      onNightfall: () => {
+        this.showFloatingText('🌙 Die Nacht bricht an …', this.playerGroup.position, '#b8c4ff');
+        sfx.nightfall();
+      },
+      onSunrise: () => {
+        this.showFloatingText('☀️ Guten Morgen!', this.playerGroup.position, '#ffd166');
+        sfx.sunrise();
+      }
+    });
+
     this.setupUI();
     this.setupEvents();
     this.setupRobloxControls();
@@ -441,6 +287,7 @@ class GalaxySistersGame {
     // Warm Anime Fantasy Lighting
     const hemiLight = new THREE.HemisphereLight(0xffffff, 0x7289da, 0.85);
     this.scene.add(hemiLight);
+    this.hemiLight = hemiLight;
 
     const dirLight = new THREE.DirectionalLight(0xfffaed, 1.35);
     dirLight.position.set(45, 65, 35);
@@ -480,11 +327,13 @@ class GalaxySistersGame {
     const moonMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.25, 1.22, 1.1), fog: false });
     const moon = new THREE.Mesh(moonGeo, moonMat);
     moon.position.set(-150, 120, -260);
+    this.moonMesh = moon;
     this.scene.add(moon);
 
     // Floating Golden Celestial Stars
     const starGeo = new THREE.OctahedronGeometry(1.2, 0);
     const starMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.15, 0.45) });
+    this.skyStarMat = starMat;
     for (let i = 0; i < 28; i++) {
       const star = new THREE.Mesh(starGeo, starMat);
       star.position.set(
@@ -815,6 +664,7 @@ class GalaxySistersGame {
     this.mist = new MistParticles(new THREE.Vector3(WATERFALL.x, WATER_LEVEL, lipZ + 3.0), 4.6, 80);
     this.scene.add(this.mist.points);
     const rainbow = createRainbow(3.3, 4.2);
+    this.rainbow = rainbow;
     rainbow.position.set(WATERFALL.x, WATER_LEVEL, lipZ + 5.2);
     rainbow.scale.setScalar(1.25);
     this.scene.add(rainbow);
@@ -3097,6 +2947,14 @@ class GalaxySistersGame {
       });
     }
 
+    const daytimeBtn = document.getElementById('btn-daytime');
+    if (daytimeBtn) {
+      daytimeBtn.addEventListener('click', () => {
+        this.dayNight.skipToNextPhase();
+        daytimeBtn.blur();
+      });
+    }
+
     const graphicsBtn = document.getElementById('btn-graphics');
     if (graphicsBtn) {
       graphicsBtn.textContent = this.graphicsQuality === 'high' ? '✨ Grafik: Hoch' : '🔋 Grafik: Niedrig';
@@ -3417,6 +3275,32 @@ class GalaxySistersGame {
     }
   }
 
+  playFootstep(moveStep) {
+    this.stepDistance = (this.stepDistance || 0) + moveStep;
+    const stride = this.isSwimming ? 2.2 : 1.15;
+    if (this.stepDistance < stride) return;
+    this.stepDistance = 0;
+    if (this.isSwimming) {
+      sfx.swim();
+      return;
+    }
+    if (!this.isGrounded) return;
+    let surface = 'grass';
+    if (this.currentBridge) surface = this.currentBridge.kind || 'wood';
+    else if (this.waterSpeedFactor < 1) surface = 'water';
+    else if (this.standingOnPlatform) surface = this.standingOnPlatform.type === 'cylinder' && this.standingOnPlatform.crystal ? 'crystal' : 'stone';
+    sfx.step(surface);
+  }
+
+  updateDaytimeButton() {
+    const btn = document.getElementById('btn-daytime');
+    if (!btn) return;
+    const ph = this.dayNight.phase;
+    if (ph === this.lastPhaseShown) return;
+    this.lastPhaseShown = ph;
+    btn.textContent = `${ph.icon} ${ph.name} ⏩`;
+  }
+
   spawnSwimRipple(force) {
     const now = this.clock.elapsedTime;
     if (!force && now - (this.lastRippleTime || 0) < 0.28) return;
@@ -3534,6 +3418,7 @@ class GalaxySistersGame {
       } else if (this.isGrounded) {
         this.spawnRunningParticle();
       }
+      this.playFootstep(moveStep);
     } else {
       this.playerDress.rotation.z = 0;
     }
@@ -3595,8 +3480,10 @@ class GalaxySistersGame {
     const wasSwimming = this.isSwimming;
 
     this.currentBridge = null;
+    this.standingOnPlatform = null;
     if (bestPlatform && this.playerVelY <= 0.1) {
       if (bestPlatform.type === 'bridge') this.currentBridge = bestPlatform;
+      else this.standingOnPlatform = bestPlatform;
       this.playerGroup.position.y = bestTopY;
       this.playerVelY = 0;
       this.isGrounded = true;
@@ -3777,6 +3664,20 @@ class GalaxySistersGame {
       cloud.position.x += cloud.userData.driftSpeed;
       if (cloud.position.x > 110) cloud.position.x = -110;
     }
+
+    // Day/night cycle and the soundscape around the player
+    this.dayNight.update(delta);
+    const pp = this.playerGroup.position;
+    const fallDx = pp.x - WATERFALL.x;
+    const fallDz = pp.z - (this.waterfallLipZ + 2);
+    sfx.updateAmbience({
+      waterDist: waterQuery(pp.x, pp.z).dist,
+      waterfallDist: Math.sqrt(fallDx * fallDx + fallDz * fallDz),
+      altitude: pp.y,
+      night: this.dayNight.night,
+      swimming: this.isSwimming
+    });
+    this.updateDaytimeButton();
 
     // Flowing water, waterfall, spray and cloud sea
     const t = this.clock.elapsedTime;
@@ -3960,6 +3861,7 @@ window.addEventListener('DOMContentLoaded', () => {
     // Handy for tweaking the world from the dev console on a local server
     if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
       window.galaxyGame = game;
+      window.galaxySfx = sfx;
     }
   }, 30));
 });

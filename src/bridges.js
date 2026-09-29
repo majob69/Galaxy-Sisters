@@ -105,6 +105,7 @@ export function buildMoonBridge(game, a, b) {
   const y0 = game.getTerrainHeight(a.x, a.z);
   const y1 = game.getTerrainHeight(b.x, b.z);
   const def = makeDef(a, b, y0, y1, 2.3, 1.2, 0.62);
+  def.kind = 'wood';
   const group = makeBridgeGroup(def);
   const W = 2.5;
 
@@ -197,6 +198,7 @@ export function buildRomanBridge(game, a, b, waterLevel, flowerTexture) {
   const y0 = game.getTerrainHeight(a.x, a.z);
   const y1 = game.getTerrainHeight(b.x, b.z);
   const def = makeDef(a, b, y0, y1, 2.1, 1.45, 0.85);
+  def.kind = 'stone';
   const group = makeBridgeGroup(def);
   const W = 3.2;
   const L = def.len;
@@ -295,6 +297,7 @@ export function buildRomanBridge(game, a, b, waterLevel, flowerTexture) {
 // ---------- 3. Rope Bridge across the waterfall gorge ----------
 export function buildRopeBridge(game, a, b, deckY0, deckY1) {
   const def = makeDef(a, b, deckY0, deckY1, -0.75, 0.9, 0.38);
+  def.kind = 'wood';
   const group = makeBridgeGroup(def);
   const W = 1.9;
 
@@ -374,7 +377,7 @@ export function buildStarBridge(game, center, dirX, dirZ, count, spacing, topY) 
     plate.userData = { baseY: topY, phase: i * 0.9, star };
     game.scene.add(plate);
     plates.push(plate);
-    game.platforms.push({ type: 'cylinder', x, z, radius: 0.85, topY });
+    game.platforms.push({ type: 'cylinder', x, z, radius: 0.85, topY, crystal: true });
   }
   return plates;
 }

@@ -254,7 +254,7 @@ export function createWaterfall({ x, topY, topZ, bottomY, reach, topHalfWidth, b
   return mesh;
 }
 
-function createSoftSpriteTexture() {
+export function createSoftSpriteTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = 64;
   canvas.height = 64;
@@ -331,7 +331,7 @@ export class MistParticles {
 export function createRainbow(inner, outer) {
   const geo = new THREE.RingGeometry(inner, outer, 64, 1, 0, Math.PI);
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uInner: { value: inner }, uOuter: { value: outer } },
+    uniforms: { uInner: { value: inner }, uOuter: { value: outer }, uStrength: { value: 1 } },
     vertexShader: `
       varying vec2 vLocal;
       void main() {
@@ -342,6 +342,7 @@ export function createRainbow(inner, outer) {
     fragmentShader: `
       uniform float uInner;
       uniform float uOuter;
+      uniform float uStrength;
       varying vec2 vLocal;
       vec3 hsv2rgb(vec3 c) {
         vec3 p = abs(fract(c.xxx + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0);
@@ -350,7 +351,7 @@ export function createRainbow(inner, outer) {
       void main() {
         float t = clamp((length(vLocal) - uInner) / (uOuter - uInner), 0.0, 1.0);
         vec3 col = hsv2rgb(vec3(0.78 * (1.0 - t), 0.75, 1.0));
-        float a = sin(t * 3.14159) * 0.32 * smoothstep(0.0, 2.5, vLocal.y);
+        float a = sin(t * 3.14159) * 0.32 * smoothstep(0.0, 2.5, vLocal.y) * uStrength;
         gl_FragColor = vec4(col * a, a);
       }
     `,

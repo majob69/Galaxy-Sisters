@@ -86,7 +86,9 @@ export function createSkyDome(sunDir) {
       uHorizon: { value: new THREE.Color(SKY_COLORS.horizon) },
       uBlush: { value: new THREE.Color(SKY_COLORS.blush) },
       uSunColor: { value: new THREE.Color(SKY_COLORS.sun) },
-      uSunDir: { value: sunDir.clone().normalize() }
+      uSunDir: { value: sunDir.clone().normalize() },
+      uNight: { value: 0 },
+      uTime: { value: 0 }
     },
     vertexShader: `
       varying vec3 vDir;
@@ -101,7 +103,26 @@ export function createSkyDome(sunDir) {
       uniform vec3 uBlush;
       uniform vec3 uSunColor;
       uniform vec3 uSunDir;
+      uniform float uNight;
+      uniform float uTime;
       varying vec3 vDir;
+      ${NOISE_GLSL}
+      float gsHash31(vec3 p) {
+        p = fract(p * 0.3183099 + 0.1);
+        p *= 17.0;
+        return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+      }
+      // Twinkling point stars on a 3D cell grid (no seams on the dome)
+      float starLayer(vec3 d, float scale, float thresh) {
+        vec3 p = d * scale;
+        vec3 c = floor(p);
+        float h = gsHash31(c);
+        if (h < thresh) return 0.0;
+        vec3 center = vec3(gsHash31(c + 1.7), gsHash31(c + 3.1), gsHash31(c + 5.3)) * 0.6 + 0.2;
+        float dist = length(fract(p) - center);
+        float twinkle = 0.6 + 0.4 * sin(uTime * (1.3 + h * 3.0) + h * 40.0);
+        return smoothstep(0.24, 0.0, dist) * twinkle * (0.4 + 0.6 * (h - thresh) / (1.0 - thresh));
+      }
       void main() {
         vec3 dir = normalize(vDir);
         float h = dir.y;
@@ -109,7 +130,24 @@ export function createSkyDome(sunDir) {
         col = mix(col, uBlush, exp(-abs(h) * 9.0) * 0.45);
         if (h < 0.0) col = uHorizon;
         float sd = max(dot(dir, normalize(uSunDir)), 0.0);
-        col += uSunColor * (pow(sd, 1400.0) * 5.0 + pow(sd, 18.0) * 0.22);
+        float sunUp = smoothstep(-0.08, 0.04, uSunDir.y) * step(0.0, h);
+        col += uSunColor * (pow(sd, 1400.0) * 5.0 + pow(sd, 18.0) * 0.22) * sunUp;
+
+        // Night: galaxy band + stars
+        if (uNight > 0.01 && h > -0.02) {
+          float above = smoothstep(-0.02, 0.18, h);
+          vec3 axis = normalize(vec3(0.35, 0.3, 0.88));
+          float b = dot(dir, axis);
+          float band = exp(-b * b * 16.0);
+          vec2 q = vec2(dir.x * 3.0 + dir.z * 1.7, dir.y * 3.0 - dir.z * 1.3);
+          float dust = gsFbm(q * 2.2 + 4.0);
+          float lanes = smoothstep(0.35, 0.75, gsFbm(q * 5.0 - 2.0));
+          vec3 galaxy = mix(vec3(0.42, 0.22, 0.75), vec3(0.95, 0.45, 0.8), dust);
+          galaxy = mix(galaxy, vec3(0.35, 0.8, 1.0), smoothstep(0.55, 0.8, dust) * 0.5);
+          col += galaxy * band * (0.25 + dust * 0.55) * (1.0 - lanes * 0.5) * uNight * above;
+          float stars = starLayer(dir, 120.0, 0.968 - band * 0.03) * 2.6 + starLayer(dir, 260.0, 0.985) * 1.4;
+          col += vec3(1.0, 0.95, 1.1) * stars * uNight * above;
+        }
         gl_FragColor = vec4(col, 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>

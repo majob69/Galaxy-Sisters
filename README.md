@@ -45,6 +45,8 @@ Ein farbenfrohes 3D-Action-Adventure / Platformer im Kawaii-Anime-Stil, direkt i
   * 🌉 **Vier Brücken:** Rote Mondbrücke mit Laternen (Teich), römische Steinbrücke mit Blume des Lebens (Tempel ↔ Dorf), Hängebrücke über der Wasserfall-Schlucht und schwebende Kristall-Sternenbrücke (Weg zum Obby).
   * ✨ **Anime-Look:** Cel-Shading, Farbverlauf-Himmel mit Sonne, Bloom-Leuchten (Laternen, Kristalle, Wasserglitzern).
   * 🔋 **Grafik-Schalter:** Button „Grafik: Hoch/Niedrig“ im Quest-Panel (Niedrig = ohne Bloom, für Handy/Tablet).
+* **Tag & Nacht:** Sonne und Mond ziehen über den Himmel (ein Tag dauert ca. 7 Minuten). Abends glüht alles orange-rosa, nachts erscheinen Sternenhimmel mit Milchstraße, Glühwürmchen und hell leuchtende Laternen & Kristalle. Mit dem Button „☀️ Tag ⏩“ springst du zur nächsten Tageszeit.
+* **Neuer Sound:** Eigene Musik für Tag, Nacht und Bosskampf (mit Hall & Echo), Umgebungsgeräusche (Fluss, Wasserfall erst in der Nähe, Wind auf den Bergen, Vögel am Tag, Grillen & Eule nachts), Schritte auf Gras/Holz/Stein/Wasser/Kristall und neu gestaltete Zauber-Effekte.
 
 ---
 
