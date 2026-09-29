@@ -60,6 +60,17 @@ Ein farbenfrohes 3D-Action-Adventure / Platformer im Kawaii-Anime-Stil, direkt i
 * **Kamera & Welt:** Die Kamera weicht Hügeln, Klippen und Wasser aus; die Welt (Bäume, Blumen, Steine) sieht bei jedem Besuch gleich aus.
 * **Neuer Sound:** Eigene Musik für Tag, Nacht und Bosskampf (mit Hall & Echo), Umgebungsgeräusche (Fluss, Wasserfall erst in der Nähe, Wind auf den Bergen, Vögel am Tag, Grillen & Eule nachts), Schritte auf Gras/Holz/Stein/Wasser/Kristall und neu gestaltete Zauber-Effekte.
 
+* **📱 Handy & Tablet:** Bei Touch-Geräten schaltet das Spiel automatisch auf ein eigenes Layout:
+  * Größerer Joystick links (Totzone, jeder Finger für sich) – mit der anderen Hand die Kamera wischen, mit zwei Fingern zoomen.
+  * Kraft- und Sprung-Knöpfe im Daumen-Bogen rechts, Schwestern als Symbolleiste, Vibration beim Zaubern.
+  * Quests & Einstellungen liegen hinter dem 📜-Knopf oben rechts; auf Wunsch Vollbild (Querformat wird empfohlen).
+  * Layout mit Notch-Rand (Safe-Area) und für Hoch- und Querformat.
+* **🤖 Automatische Grafik:** Der Button „Grafik“ wechselt zwischen *Auto*, *Hoch* und *Niedrig*. Im Auto-Modus misst das Spiel die echte Bildrate und schaltet bei Ruckeln selbstständig stufenweise herunter (Hoch → Niedrig ohne Bloom → kleinere Auflösung/Schatten). Handys starten auf „Niedrig“.
+* **👭 Koop für 2–4 Spieler:** Auf dem Startbildschirm Name und Raum-Code eintragen und „Koop spielen“ wählen. Alle im selben Raum sehen sich mit Namen, Zaubern und Lebensbalken (Liste links unter dem Status) und können Emotes schicken.
+  * Die Welt ist für alle identisch (fester Seed); Quests bleiben persönlich.
+  * Der Gastgeber (zuerst beigetretener Spieler 👑) steuert den Boss Vortox; Treffer aller Spieler zählen, der Boss jagt die nächste sichtbare Schwester. Verlässt der Gastgeber das Spiel, übernimmt automatisch der nächste.
+  * Tageszeit ist synchron; Lunas Heilung stärkt auch Freunde in der Nähe; besiegte Slimes verschwinden für alle.
+
 ---
 
 ## 🚀 Spiel starten
@@ -73,6 +84,9 @@ Einfach die Datei **`start_game.bat`** doppelt anklicken. Der Browser öffnet si
 python -m http.server 8080
 # Danach im Browser öffnen: http://localhost:8080/index.html
 ```
+
+### Option 3 – Koop mit Freunden (Node.js nötig):
+Doppelklick auf **`start_multiplayer.bat`** (oder `node server/server.mjs` / `npm run coop`). Der Server liefert das Spiel aus und verbindet die Spieler; kein `npm install` nötig. Im Fenster stehen die Adressen, z. B. `http://192.168.x.x:8080/` – Freunde im gleichen WLAN öffnen diese Adresse (auch Handys) und tragen denselben Raum-Code ein. Wer außerhalb des eigenen Netzes mitspielen soll, braucht z. B. eine Portfreigabe oder einen Tunnel; der Server hat keine Anmeldung, also nur mit Leuten teilen, die du kennst.
 
 Oder alternativ mit Vite:
 ```bash

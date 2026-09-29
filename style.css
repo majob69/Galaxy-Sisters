@@ -1004,3 +1004,558 @@ button:focus, .clickable:focus {
     width: 70vw;
   }
 }
+
+/* ==========================================
+   TOUCH / PHONE LAYOUT (html.touch)
+   ========================================== */
+html, body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+@supports (height: 100dvh) {
+  html, body, #ui-overlay, #canvas-container {
+    height: 100dvh;
+  }
+}
+
+#canvas-container {
+  touch-action: none;
+}
+
+.touch-only {
+  display: none;
+}
+
+html.touch .touch-only {
+  display: flex;
+}
+
+.menu-toggle {
+  display: none;
+}
+
+/* Toast (auto quality, hints) */
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: 22%;
+  transform: translate(-50%, 12px);
+  max-width: min(90vw, 460px);
+  padding: 10px 18px;
+  border-radius: 22px;
+  background: rgba(20, 15, 40, 0.88);
+  border: 2px solid rgba(168, 126, 255, 0.5);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-align: center;
+  z-index: 60;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+#toast.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+html.touch #ui-overlay {
+  padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+}
+
+/* Compact status card */
+html.touch .char-card {
+  padding: 6px 14px 6px 8px;
+  gap: 10px;
+  border-radius: 22px;
+  animation: none;
+}
+
+html.touch .char-avatar-ring {
+  width: 44px;
+  height: 44px;
+  font-size: 22px;
+  border-width: 2px;
+}
+
+html.touch .char-title {
+  display: none;
+}
+
+html.touch .char-name-tag {
+  font-size: 1rem;
+}
+
+html.touch .hp-bar-container {
+  width: 112px;
+  height: 10px;
+  margin-top: 2px;
+}
+
+/* Menu button + slide-in quest panel */
+html.touch .menu-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 2px solid rgba(168, 126, 255, 0.6);
+  background: rgba(20, 15, 40, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 1.3rem;
+  z-index: 45;
+  touch-action: manipulation;
+}
+
+html.touch .quest-panel {
+  display: none;
+  position: fixed;
+  top: max(66px, calc(env(safe-area-inset-top) + 56px));
+  right: max(14px, env(safe-area-inset-right));
+  width: min(340px, 72vw);
+  max-height: calc(100dvh - 84px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  z-index: 44;
+  font-size: 0.86rem;
+}
+
+html.touch.menu-open .quest-panel {
+  display: block;
+}
+
+html.touch #btn-toggle-help,
+html.touch .controls-popup {
+  display: none;
+}
+
+html.touch .quest-panel .sister-btn {
+  min-height: 40px;
+  padding: 6px 12px !important;
+  font-size: 0.82rem !important;
+}
+
+/* Bigger joystick with a generous grab area */
+html.touch .roblox-joystick-container {
+  bottom: max(18px, env(safe-area-inset-bottom));
+  left: max(22px, env(safe-area-inset-left));
+}
+
+html.touch .joystick-base {
+  width: 136px;
+  height: 136px;
+}
+
+html.touch .joystick-base::before {
+  content: '';
+  position: absolute;
+  inset: -22px;
+  border-radius: 50%;
+}
+
+html.touch .joystick-thumb {
+  width: 60px;
+  height: 60px;
+}
+
+html.touch .joystick-hint {
+  display: none;
+}
+
+/* Thumb-arc action buttons */
+html.touch .roblox-action-cluster {
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  width: 226px;
+  height: 190px;
+  display: block;
+}
+
+html.touch .action-circle {
+  position: absolute;
+}
+
+html.touch .circle-jump {
+  width: 96px;
+  height: 96px;
+  right: 0;
+  bottom: 0;
+}
+
+html.touch .circle-jump .circle-icon-wrap {
+  font-size: 2.3rem;
+}
+
+html.touch .circle-power1,
+html.touch .circle-power2 {
+  width: 80px;
+  height: 80px;
+}
+
+html.touch .circle-power1 {
+  right: 110px;
+  bottom: 4px;
+}
+
+html.touch .circle-power2 {
+  right: 46px;
+  bottom: 106px;
+}
+
+html.touch .circle-power1 .circle-icon-wrap,
+html.touch .circle-power2 .circle-icon-wrap {
+  font-size: 1.9rem;
+}
+
+html.touch .circle-power1 .circle-label,
+html.touch .circle-power2 .circle-label {
+  font-size: 0.62rem;
+  max-width: 68px;
+}
+
+/* Sister picker: icon buttons in a row */
+html.touch .bottom-bar {
+  bottom: max(12px, env(safe-area-inset-bottom));
+  gap: 0;
+}
+
+html.touch .sister-picker {
+  gap: 8px;
+  padding: 6px 10px;
+}
+
+html.touch .sister-picker .sister-btn {
+  width: 54px;
+  height: 50px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 18px;
+  touch-action: manipulation;
+}
+
+html.touch .sister-picker .sister-name,
+html.touch .sister-picker .hotkey-badge {
+  display: none;
+}
+
+html.touch .sister-picker .sister-icon {
+  font-size: 1.6rem;
+}
+
+html.touch .sister-picker .sister-btn:hover {
+  transform: none;
+}
+
+html.touch .sister-picker .sister-btn.active {
+  transform: translateY(-3px);
+}
+
+html.touch .compass {
+  top: max(10px, env(safe-area-inset-top));
+}
+
+html.touch .compass.lowered {
+  top: 118px;
+}
+
+/* Portrait phones: everything stacks, picker above the buttons */
+@media (orientation: portrait) {
+  html.touch .compass {
+    top: 76px;
+    width: 76vw;
+  }
+
+  html.touch .compass.lowered {
+    top: 130px;
+  }
+
+  html.touch .bottom-bar {
+    bottom: calc(max(18px, env(safe-area-inset-bottom)) + 206px);
+  }
+
+  html.touch .boss-banner {
+    top: 68px;
+    padding: 8px 14px;
+    max-width: 92vw;
+  }
+
+  html.touch .boss-title {
+    font-size: 0.8rem;
+  }
+
+  html.touch .boss-bar-wrap {
+    width: 62vw;
+  }
+}
+
+/* Short landscape screens */
+@media (orientation: landscape) and (max-height: 480px) {
+  html.touch .boss-banner {
+    top: 8px;
+    padding: 6px 18px;
+  }
+
+  html.touch .boss-title {
+    font-size: 0.85rem;
+    margin-bottom: 3px;
+  }
+
+  html.touch .boss-bar-wrap {
+    width: 260px;
+    height: 12px;
+  }
+
+  html.touch .compass.lowered {
+    top: 78px;
+  }
+}
+
+/* ==========================================
+   CO-OP: lobby (intro screen) and roster HUD
+   ========================================== */
+input {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.lobby {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lobby-title {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #ffde59;
+  letter-spacing: 0.4px;
+}
+
+.lobby-row {
+  display: flex;
+  gap: 8px;
+}
+
+.lobby-input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: rgba(15, 10, 30, 0.55);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  outline: none;
+}
+
+.lobby-input:focus {
+  border-color: #ffde59;
+}
+
+.lobby-input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.btn-coop {
+  background: linear-gradient(135deg, #06b6d4, #8b5cf6);
+  box-shadow: 0 8px 22px rgba(99, 102, 241, 0.5);
+  font-size: 1rem;
+  padding: 12px 20px;
+}
+
+.btn-coop:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.coop-status {
+  min-height: 1.1em;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #ffb4c8;
+}
+
+/* Roster under the status card */
+.coop-panel {
+  display: none;
+  position: absolute;
+  top: 96px;
+  left: 18px;
+  width: 190px;
+  padding: 8px 10px;
+  border-radius: 16px;
+  background: rgba(20, 15, 40, 0.65);
+  border: 1.5px solid rgba(168, 126, 255, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 6;
+}
+
+.coop-panel.active {
+  display: block;
+}
+
+.coop-room {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #ffde59;
+  margin-bottom: 4px;
+}
+
+.coop-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.coop-icon {
+  font-size: 1.2rem;
+  width: 1.5rem;
+  text-align: center;
+}
+
+.coop-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.coop-name {
+  font-size: 0.78rem;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.coop-hp {
+  height: 6px;
+  margin-top: 2px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.coop-hp-fill {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #ff6b8b, #ff8e53);
+  transition: width 0.3s ease;
+}
+
+.coop-crown {
+  font-size: 0.8rem;
+}
+
+.coop-emotes {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.coop-emote {
+  flex: 1;
+  padding: 3px 0;
+  border-radius: 10px;
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.coop-emote:active {
+  transform: scale(0.9);
+}
+
+html.touch .coop-panel {
+  top: calc(max(10px, env(safe-area-inset-top)) + 64px);
+  left: max(14px, env(safe-area-inset-left));
+  width: 156px;
+}
+
+html.touch .coop-emote {
+  min-height: 34px;
+}
+
+@media (max-height: 480px) {
+  .lobby {
+    margin-top: 8px;
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .lobby-title {
+    font-size: 0.75rem;
+  }
+  .lobby-input {
+    padding: 6px 10px;
+    font-size: 0.9rem;
+  }
+  .btn-coop {
+    padding: 8px 14px;
+    font-size: 0.9rem;
+  }
+}
+
+/* Intro screen: scrollable, and side-by-side on short landscape screens (phones) */
+.intro-screen {
+  overflow-y: auto;
+  align-items: flex-start;
+  -webkit-overflow-scrolling: touch;
+}
+
+.intro-modal {
+  margin: auto;
+}
+
+@media (orientation: landscape) and (max-height: 560px) {
+  .intro-screen {
+    padding: 8px;
+  }
+
+  .intro-modal {
+    flex-direction: row;
+    max-width: 920px;
+    border-radius: 22px;
+  }
+
+  .intro-artwork-wrapper {
+    width: 38%;
+    height: auto;
+    min-height: 100%;
+    flex-shrink: 0;
+  }
+
+  .intro-details {
+    flex: 1;
+    padding: 12px 16px;
+    gap: 6px;
+  }
+
+  .intro-title {
+    font-size: 1.3rem;
+  }
+
+  .intro-description {
+    font-size: 0.8rem;
+  }
+
+  .intro-features-grid {
+    display: none;
+  }
+}

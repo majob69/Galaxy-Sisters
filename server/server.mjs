@@ -1,0 +1,317 @@
+// ==========================================
+// GALAXY SISTERS CO-OP SERVER
+// One small Node process (no npm packages needed):
+//   - serves the game files over HTTP, so friends just open http://<your-ip>:8080
+//   - relays player state over WebSocket (path /ws) between up to 4 players per room
+// Start with: node server/server.js   (or start_multiplayer.bat)
+// ==========================================
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PORT = Number(process.env.PORT) || 8080;
+const MAX_PLAYERS = 4;
+const MAX_FRAME = 8 * 1024;
+const MAX_MSG_PER_SEC = 90;
+const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+
+// ---------- Static files ----------
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.webp': 'image/webp'
+};
+const PUBLIC_DIRS = ['src', 'public'];
+const PUBLIC_FILES = ['index.html', 'style.css', 'intro.jpg'];
+
+function serveStatic(req, res) {
+  let rel;
+  try {
+    rel = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+  } catch (e) {
+    res.writeHead(400).end('Bad request');
+    return;
+  }
+  if (rel === '/') rel = '/index.html';
+  const clean = path.posix.normalize(rel).replace(/^\/+/, '');
+  const top = clean.split('/')[0];
+  const allowed = PUBLIC_FILES.includes(clean) || (PUBLIC_DIRS.includes(top) && clean.includes('/'));
+  const file = path.join(ROOT, clean);
+  if (!allowed || !file.startsWith(ROOT + path.sep)) {
+    res.writeHead(404).end('Not found');
+    return;
+  }
+  fs.readFile(file, (err, data) => {
+    if (err) {
+      res.writeHead(404).end('Not found');
+      return;
+    }
+    res.writeHead(200, {
+      'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
+      'Cache-Control': 'no-cache'
+    });
+    res.end(data);
+  });
+}
+
+// ---------- Minimal RFC 6455 WebSocket connection ----------
+class WSConn {
+  constructor(socket, onMessage, onClose) {
+    this.socket = socket;
+    this.onMessage = onMessage;
+    this.onClose = onClose;
+    this.buffer = Buffer.alloc(0);
+    this.fragments = [];
+    this.closed = false;
+    socket.setNoDelay(true);
+    socket.on('data', (chunk) => this.receive(chunk));
+    socket.on('close', () => this.finish());
+    socket.on('error', () => this.finish());
+  }
+
+  receive(chunk) {
+    this.buffer = Buffer.concat([this.buffer, chunk]);
+    while (this.buffer.length >= 2 && !this.closed) {
+      const b0 = this.buffer[0];
+      const b1 = this.buffer[1];
+      const fin = (b0 & 0x80) !== 0;
+      const opcode = b0 & 0x0f;
+      const masked = (b1 & 0x80) !== 0;
+      let len = b1 & 0x7f;
+      let offset = 2;
+      if (len === 126) {
+        if (this.buffer.length < 4) return;
+        len = this.buffer.readUInt16BE(2);
+        offset = 4;
+      } else if (len === 127) {
+        if (this.buffer.length < 10) return;
+        len = Number(this.buffer.readBigUInt64BE(2));
+        offset = 10;
+      }
+      if (!masked || len > MAX_FRAME) return this.close(1009);
+      if (this.buffer.length < offset + 4 + len) return;
+
+      const mask = this.buffer.subarray(offset, offset + 4);
+      const payload = Buffer.from(this.buffer.subarray(offset + 4, offset + 4 + len));
+      for (let i = 0; i < payload.length; i++) payload[i] ^= mask[i & 3];
+      this.buffer = this.buffer.subarray(offset + 4 + len);
+
+      if (opcode === 0x8) return this.close(1000);
+      if (opcode === 0x9) { this.frame(0xA, payload); continue; }
+      if (opcode === 0xA) continue;
+      if (opcode === 0x1 || opcode === 0x0 || opcode === 0x2) {
+        if (opcode !== 0x0) this.fragments = [];
+        this.fragments.push(payload);
+        if (this.fragments.reduce((n, f) => n + f.length, 0) > MAX_FRAME) return this.close(1009);
+        if (fin) {
+          const text = Buffer.concat(this.fragments).toString('utf8');
+          this.fragments = [];
+          this.onMessage(text);
+        }
+      }
+    }
+  }
+
+  frame(opcode, payload) {
+    if (this.closed || this.socket.destroyed) return;
+    const len = payload.length;
+    let header;
+    if (len < 126) {
+      header = Buffer.from([0x80 | opcode, len]);
+    } else if (len < 65536) {
+      header = Buffer.alloc(4);
+      header[0] = 0x80 | opcode;
+      header[1] = 126;
+      header.writeUInt16BE(len, 2);
+    } else {
+      header = Buffer.alloc(10);
+      header[0] = 0x80 | opcode;
+      header[1] = 127;
+      header.writeBigUInt64BE(BigInt(len), 2);
+    }
+    this.socket.write(Buffer.concat([header, payload]));
+  }
+
+  send(text) {
+    this.frame(0x1, Buffer.from(text, 'utf8'));
+  }
+
+  close(code = 1000) {
+    if (this.closed) return;
+    const body = Buffer.alloc(2);
+    body.writeUInt16BE(code, 0);
+    this.frame(0x8, body);
+    this.socket.end();
+    this.finish();
+  }
+
+  finish() {
+    if (this.closed) return;
+    this.closed = true;
+    this.onClose();
+  }
+}
+
+// ---------- Rooms ----------
+const rooms = new Map(); // code -> { players: Map<id, Player>, nextId }
+
+function cleanName(raw) {
+  const s = String(raw || '').replace(/[^\p{L}\p{N} _.\-!?]/gu, '').trim().slice(0, 14);
+  return s || 'Spieler';
+}
+
+function cleanRoom(raw) {
+  return String(raw || 'GALAXY').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) || 'GALAXY';
+}
+
+const num = (v, lim = 400) => (Number.isFinite(v) ? Math.max(-lim, Math.min(lim, v)) : 0);
+
+function broadcast(room, obj, exceptId = null) {
+  const text = JSON.stringify(obj);
+  room.players.forEach((p) => { if (p.id !== exceptId) p.conn.send(text); });
+}
+
+function hostOf(room) {
+  let host = null;
+  room.players.forEach((p) => { if (!host || p.id < host.id) host = p; });
+  return host;
+}
+
+function publicInfo(p) {
+  return { id: p.id, name: p.name, sister: p.sister };
+}
+
+function handleMessage(room, player, msg) {
+  switch (msg.t) {
+    case 's': // player state (relayed to everyone else)
+      player.sister = msg.si | 0;
+      broadcast(room, {
+        t: 's', id: player.id,
+        x: num(msg.x), y: num(msg.y), z: num(msg.z), ry: num(msg.ry, 10),
+        si: player.sister, mv: msg.mv ? 1 : 0, gr: msg.gr ? 1 : 0, sw: msg.sw ? 1 : 0,
+        vy: num(msg.vy, 5), inv: msg.inv ? 1 : 0, hp: num(msg.hp, 1000), mhp: num(msg.mhp, 1000)
+      }, player.id);
+      break;
+    case 'cast': // ability visuals
+      broadcast(room, {
+        t: 'cast', id: player.id, a: msg.a | 0, si: msg.si | 0,
+        x: num(msg.x), y: num(msg.y), z: num(msg.z), dx: num(msg.dx, 2), dz: num(msg.dz, 2)
+      }, player.id);
+      break;
+    case 'boss': // host-authoritative boss state
+      if (hostOf(room) === player) {
+        broadcast(room, {
+          t: 'boss', x: num(msg.x), z: num(msg.z), ry: num(msg.ry, 20), st: String(msg.st).slice(0, 8),
+          hp: num(msg.hp, 1000), al: msg.al ? 1 : 0, pet: num(msg.pet, 20)
+        }, player.id);
+      }
+      break;
+    case 'bossHit':
+    case 'bossPetrify': {
+      const host = hostOf(room);
+      if (host && host !== player) {
+        host.conn.send(JSON.stringify({ t: msg.t, id: player.id, dmg: num(msg.dmg, 200), dur: num(msg.dur, 10) }));
+      }
+      break;
+    }
+    case 'slime':
+      broadcast(room, { t: 'slime', i: msg.i | 0 }, player.id);
+      break;
+    case 'time': // host shares the time of day
+      if (hostOf(room) === player) broadcast(room, { t: 'time', p: num(msg.p, 2), night: msg.night ? 1 : 0 }, player.id);
+      break;
+    case 'skipTime':
+      broadcast(room, { t: 'skipTime' }, player.id);
+      break;
+    case 'emote':
+      broadcast(room, { t: 'emote', id: player.id, e: String(msg.e).slice(0, 4) }, player.id);
+      break;
+    default:
+      break;
+  }
+}
+
+function onUpgrade(req, socket) {
+  const url = new URL(req.url, 'http://localhost');
+  const key = req.headers['sec-websocket-key'];
+  if (url.pathname !== '/ws' || !key) {
+    socket.destroy();
+    return;
+  }
+  const accept = crypto.createHash('sha1').update(key + WS_GUID).digest('base64');
+  socket.write(
+    'HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n' +
+    `Sec-WebSocket-Accept: ${accept}\r\n\r\n`
+  );
+
+  const code = cleanRoom(url.searchParams.get('room'));
+  let room = rooms.get(code);
+  if (!room) {
+    room = { code, players: new Map(), nextId: 1 };
+    rooms.set(code, room);
+  }
+
+  let player = null;
+  let windowStart = Date.now();
+  let windowCount = 0;
+
+  const conn = new WSConn(socket, (text) => {
+    const now = Date.now();
+    if (now - windowStart > 1000) { windowStart = now; windowCount = 0; }
+    if (++windowCount > MAX_MSG_PER_SEC || !player) return;
+    let msg;
+    try { msg = JSON.parse(text); } catch (e) { return; }
+    if (msg && typeof msg === 'object') handleMessage(room, player, msg);
+  }, () => {
+    if (!player || !room.players.has(player.id)) return;
+    const wasHost = hostOf(room) === player;
+    room.players.delete(player.id);
+    broadcast(room, { t: 'leave', id: player.id });
+    if (wasHost && room.players.size) broadcast(room, { t: 'host', id: hostOf(room).id });
+    if (!room.players.size) rooms.delete(room.code);
+    console.log(`[${room.code}] ${player.name} left (${room.players.size}/${MAX_PLAYERS})`);
+  });
+
+  if (room.players.size >= MAX_PLAYERS) {
+    conn.send(JSON.stringify({ t: 'error', reason: 'full' }));
+    conn.close(1008);
+    return;
+  }
+
+  player = {
+    id: room.nextId++,
+    name: cleanName(url.searchParams.get('name')),
+    sister: Math.max(0, Math.min(3, Number(url.searchParams.get('sister')) | 0)),
+    conn
+  };
+  room.players.set(player.id, player);
+  conn.send(JSON.stringify({
+    t: 'welcome', id: player.id, host: hostOf(room).id, room: room.code,
+    players: [...room.players.values()].map(publicInfo)
+  }));
+  broadcast(room, { t: 'join', player: publicInfo(player) }, player.id);
+  console.log(`[${room.code}] ${player.name} joined (${room.players.size}/${MAX_PLAYERS})`);
+}
+
+const server = http.createServer(serveStatic);
+server.on('upgrade', onUpgrade);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log('===================================================');
+  console.log('  Galaxy Sisters Koop-Server laeuft');
+  console.log('===================================================');
+  console.log(`  Du:      http://localhost:${PORT}/`);
+  Object.values(os.networkInterfaces()).flat().filter((n) => n && n.family === 'IPv4' && !n.internal)
+    .forEach((n) => console.log(`  Freunde: http://${n.address}:${PORT}/   (gleiches WLAN / LAN)`));
+  console.log('  Beenden mit Strg+C');
+});

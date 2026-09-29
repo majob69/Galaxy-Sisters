@@ -1,0 +1,169 @@
+// ==========================================
+// REMOTE PLAYERS: the other sisters in a co-op session.
+// Each one is a ChibiRig with a name tag, smoothed towards the last state received.
+// ==========================================
+import * as THREE from 'three';
+import { ChibiRig } from './characters.js';
+import { createShieldMaterial } from './magicfx.js';
+
+const SISTER_ICONS = ['🌙', '⭐', '☀️', '🪐'];
+const SISTER_COLORS = ['#90e0ef', '#ffe066', '#ff9f43', '#c77dff'];
+
+function createNameTag(name, color) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.font = '800 30px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 7;
+  ctx.strokeStyle = 'rgba(25, 15, 45, 0.85)';
+  ctx.strokeText(name, 128, 34);
+  ctx.fillStyle = color;
+  ctx.fillText(name, 128, 34);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: false });
+  mat.userData.noNightGlow = true;
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(2.6, 0.65, 1);
+  sprite.position.y = 3.2;
+  sprite.renderOrder = 10; // drawn after the shield bubble so the name stays readable
+  return sprite;
+}
+
+const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+
+class RemotePlayer {
+  constructor(game, info) {
+    this.game = game;
+    this.id = info.id;
+    this.name = info.name;
+    this.sister = info.sister | 0;
+    this.hp = 100;
+    this.maxHp = 100;
+    this.invisible = false;
+    this.hasState = false;
+    this.shieldTimer = 0;
+
+    this.group = new THREE.Group();
+    this.group.visible = false;
+    this.rig = new ChibiRig();
+    this.group.add(this.rig.group);
+    this.rig.group.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    game.applySisterLook(this.rig, this.sister);
+
+    this.shield = new THREE.Mesh(new THREE.SphereGeometry(1.6, 24, 16), createShieldMaterial());
+    this.shield.position.y = 1.5;
+    this.group.add(this.shield);
+
+    this.tag = createNameTag(this.name, SISTER_COLORS[this.sister] || '#ffffff');
+    this.group.add(this.tag);
+    game.scene.add(this.group);
+
+    this.target = new THREE.Vector3();
+    this.targetRy = 0;
+    this.flags = { moving: false, grounded: true, swimming: false, velY: 0 };
+  }
+
+  setSister(idx) {
+    if (idx === this.sister) return;
+    this.sister = idx;
+    this.game.applySisterLook(this.rig, idx);
+    this.tag.material.map.dispose();
+    this.group.remove(this.tag);
+    this.tag.material.dispose();
+    this.tag = createNameTag(this.name, SISTER_COLORS[idx] || '#ffffff');
+    this.group.add(this.tag);
+    if (this.invisible) this.rig.setOpacity(0.25);
+  }
+
+  applyState(m) {
+    this.target.set(m.x, m.y, m.z);
+    this.targetRy = m.ry;
+    this.flags = { moving: !!m.mv, grounded: !!m.gr, swimming: !!m.sw, velY: m.vy };
+    this.hp = m.hp;
+    this.maxHp = m.mhp || 100;
+    this.setSister(m.si | 0);
+    const inv = !!m.inv;
+    if (inv !== this.invisible) {
+      this.invisible = inv;
+      this.rig.setOpacity(inv ? 0.25 : 1);
+      this.tag.visible = !inv;
+    }
+    if (!this.hasState) {
+      this.hasState = true;
+      this.group.position.copy(this.target);
+      this.group.rotation.y = this.targetRy;
+      this.group.visible = true;
+    }
+  }
+
+  showShield(seconds) {
+    this.shieldTimer = seconds;
+    this.shield.material.opacity = 0.75;
+  }
+
+  update(delta) {
+    if (!this.hasState) return;
+    const k = 1 - Math.exp(-14 * delta);
+    // Snap when far away (respawn, dash, lag spike)
+    if (this.group.position.distanceToSquared(this.target) > 400) this.group.position.copy(this.target);
+    else this.group.position.lerp(this.target, k);
+    this.group.rotation.y += wrapAngle(this.targetRy - this.group.rotation.y) * k;
+    this.rig.update(delta, this.flags);
+    if (this.shieldTimer > 0) {
+      this.shieldTimer -= delta;
+      if (this.shieldTimer <= 0) this.shield.material.opacity = 0;
+    }
+  }
+
+  dispose() {
+    this.game.scene.remove(this.group);
+    this.tag.material.map.dispose();
+    this.tag.material.dispose();
+    this.shield.geometry.dispose();
+    this.shield.material.dispose();
+  }
+}
+
+export class RemotePlayers {
+  constructor(game) {
+    this.game = game;
+    this.players = new Map();
+  }
+
+  get list() {
+    return [...this.players.values()];
+  }
+
+  add(info) {
+    if (this.players.has(info.id)) return this.players.get(info.id);
+    const p = new RemotePlayer(this.game, info);
+    this.players.set(info.id, p);
+    return p;
+  }
+
+  remove(id) {
+    const p = this.players.get(id);
+    if (!p) return null;
+    p.dispose();
+    this.players.delete(id);
+    return p;
+  }
+
+  clear() {
+    [...this.players.keys()].forEach((id) => this.remove(id));
+  }
+
+  get(id) {
+    return this.players.get(id);
+  }
+
+  update(delta) {
+    this.players.forEach((p) => p.update(delta));
+  }
+}
+
+export { SISTER_ICONS, SISTER_COLORS };

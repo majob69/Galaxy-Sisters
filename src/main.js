@@ -16,6 +16,9 @@ import { ChibiRig, addAnimeFace, blinkFace } from './characters.js';
 import { QuestSystem, QUEST_DEFS } from './quests.js';
 import { MagicFX, createShieldMaterial } from './magicfx.js';
 import { Compass } from './compass.js';
+import { PerformanceGovernor, PERF_TIERS } from './perf.js';
+import { RemotePlayers } from './remote.js';
+import { CoopSession } from './coop.js';
 
 applyCelShading();
 
@@ -173,7 +176,13 @@ class GalaxySistersGame {
     this.isSwimming = false;
     this.waterSpeedFactor = 1;
     this.swimHintShown = false;
-    this.graphicsQuality = this.loadGraphicsQuality();
+    this.isTouch = document.documentElement.classList.contains('touch');
+    this.graphicsMode = this.loadGraphicsMode();
+    this.perfTier = this.startTier();
+    this.graphicsQuality = PERF_TIERS[this.perfTier].bloom ? 'high' : 'low';
+    this.renderScale = PERF_TIERS[this.perfTier].scale;
+    this.perf = new PerformanceGovernor(() => this.perfTier, (tier, fps) => this.onAutoTierDown(tier, fps));
+    this.perf.enabled = this.graphicsMode === 'auto';
 
     // Landscape heightfield: noise mountains + carved river, matches the terrain mesh exactly
     this.heightfield = new Heightfield(250, 360);
@@ -190,6 +199,10 @@ class GalaxySistersGame {
     } finally {
       Math.random = nativeRandom;
     }
+
+    // Co-op: other sisters and the session that syncs them (inactive until someone joins a room)
+    this.remotes = new RemotePlayers(this);
+    this.coop = new CoopSession(this);
 
     // Day & night: sun/moon arc, palettes, night glow, fireflies
     this.dayNight = new DayNightCycle(this, {
@@ -263,27 +276,81 @@ class GalaxySistersGame {
     return null;
   }
 
-  loadGraphicsQuality() {
+  // Graphics mode: 'auto' (measure the frame rate and adapt), or a fixed 'high' / 'low'
+  loadGraphicsMode() {
     try {
       const saved = localStorage.getItem('gs-graphics');
-      if (saved === 'high' || saved === 'low') return saved;
+      if (saved === 'high' || saved === 'low' || saved === 'auto') return saved;
     } catch (e) { /* storage unavailable */ }
-    const touch = 'ontouchstart' in window || navigator.maxTouchPoints > 1;
-    return touch && window.innerWidth < 1100 ? 'low' : 'high';
+    return 'auto';
   }
 
-  applyGraphicsQuality(quality) {
-    this.graphicsQuality = quality;
-    try { localStorage.setItem('gs-graphics', quality); } catch (e) { /* ignore */ }
-    const high = quality === 'high';
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, high ? 1.5 : 1.0));
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    if (high && !this.postFX) {
+  // Quality tier to begin with (see PERF_TIERS): phones and tablets start on 'Niedrig'
+  startTier() {
+    if (this.graphicsMode === 'high') return 0;
+    if (this.graphicsMode === 'low') return 1;
+    const small = this.isTouch && Math.min(window.innerWidth, window.innerHeight) < 900;
+    return small ? 1 : 0;
+  }
+
+  applyTier(tier) {
+    const t = PERF_TIERS[tier];
+    this.perfTier = tier;
+    this.graphicsQuality = t.bloom ? 'high' : 'low';
+    this.renderScale = t.scale;
+    this.applyPixelRatio();
+    const shadow = this.dirLight && this.dirLight.shadow;
+    if (shadow && shadow.mapSize.x !== t.shadow) {
+      shadow.mapSize.set(t.shadow, t.shadow);
+      shadow.dispose();
+      shadow.map = null;
+    }
+    if (t.bloom && !this.postFX) {
       this.postFX = new PostFX(this.renderer, this.scene, this.camera);
     }
     if (this.postFX) this.postFX.setSize();
+    this.updateGraphicsButton();
+  }
+
+  applyPixelRatio() {
+    const t = PERF_TIERS[this.perfTier];
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, t.cap) * this.renderScale);
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  cycleGraphicsMode() {
+    const order = ['auto', 'high', 'low'];
+    this.graphicsMode = order[(order.indexOf(this.graphicsMode) + 1) % order.length];
+    try { localStorage.setItem('gs-graphics', this.graphicsMode); } catch (e) { /* ignore */ }
+    this.perf.enabled = this.graphicsMode === 'auto';
+    this.perf.arm();
+    this.applyTier(this.startTier());
+  }
+
+  onAutoTierDown(tier, fps) {
+    this.applyTier(tier);
+    this.showToast(`🔋 Grafik automatisch angepasst: ${PERF_TIERS[tier].name} (${Math.round(fps)} FPS)`);
+  }
+
+  updateGraphicsButton() {
     const btn = document.getElementById('btn-graphics');
-    if (btn) btn.textContent = high ? '✨ Grafik: Hoch' : '🔋 Grafik: Niedrig';
+    if (!btn) return;
+    const name = PERF_TIERS[this.perfTier].name;
+    btn.textContent = this.graphicsMode === 'auto' ? `🤖 Grafik: Auto · ${name}`
+      : this.graphicsMode === 'high' ? '✨ Grafik: Hoch' : '🔋 Grafik: Niedrig';
+  }
+
+  showToast(text, ms = 4000) {
+    let el = document.getElementById('toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'toast';
+      document.body.appendChild(el);
+    }
+    el.textContent = text;
+    el.classList.add('visible');
+    clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => el.classList.remove('visible'), ms);
   }
 
   initScene() {
@@ -302,8 +369,7 @@ class GalaxySistersGame {
 
     // Renderer (Optimized pixelRatio & PCF soft shadows)
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.graphicsQuality === 'high' ? 1.5 : 1.0));
+    this.applyPixelRatio();
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(this.renderer.domElement);
@@ -315,6 +381,11 @@ class GalaxySistersGame {
     this.controls.maxPolarAngle = Math.PI / 2 - 0.05;
     this.controls.minDistance = 4.5;
     this.controls.maxDistance = 30;
+    // The camera always follows the player, so panning is pointless; on touch:
+    // one finger turns the view, two fingers pinch to zoom
+    this.controls.enablePan = false;
+    this.controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE };
+    this.controls.rotateSpeed = this.isTouch ? 0.7 : 1.0;
 
     // Warm Anime Fantasy Lighting
     const hemiLight = new THREE.HemisphereLight(0xffffff, 0x7289da, 0.85);
@@ -324,8 +395,8 @@ class GalaxySistersGame {
     const dirLight = new THREE.DirectionalLight(0xfffaed, 1.35);
     dirLight.position.set(45, 65, 35);
     dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 2048;
-    dirLight.shadow.mapSize.height = 2048;
+    this.dirLight = dirLight;
+    dirLight.shadow.mapSize.set(PERF_TIERS[this.perfTier].shadow, PERF_TIERS[this.perfTier].shadow);
     dirLight.shadow.camera.near = 0.5;
     dirLight.shadow.camera.far = 220;
     const d = 55;
@@ -2594,24 +2665,30 @@ class GalaxySistersGame {
   }
 
   updateSisterAccessory() {
-    while (this.accessoryGroup.children.length > 0) {
-      this.accessoryGroup.remove(this.accessoryGroup.children[0]);
+    this.applySisterLook(this.playerRig, this.activeSisterIdx);
+  }
+
+  // Hair/dress style plus the sister's little emblem (also used for remote players)
+  applySisterLook(rig, idx) {
+    const slot = rig.accessorySlot;
+    while (slot.children.length > 0) {
+      slot.remove(slot.children[0]);
     }
 
-    this.playerRig.setStyle(this.activeSisterIdx);
+    rig.setStyle(idx);
 
-    if (this.activeSisterIdx === 0) {
+    if (idx === 0) {
       const moon = new THREE.Mesh(
         new THREE.TorusGeometry(0.32, 0.08, 8, 16, Math.PI * 1.3),
         new THREE.MeshBasicMaterial({ color: 0xffffff })
       );
-      this.accessoryGroup.add(moon);
-    } else if (this.activeSisterIdx === 1) {
+      slot.add(moon);
+    } else if (idx === 1) {
       const star = new THREE.Mesh(
         new THREE.OctahedronGeometry(0.35, 0),
         new THREE.MeshBasicMaterial({ color: 0xffe066 })
       );
-      this.accessoryGroup.add(star);
+      slot.add(star);
 
       const bow = new THREE.Mesh(
         new THREE.TorusGeometry(0.5, 0.04, 6, 16, Math.PI),
@@ -2619,39 +2696,39 @@ class GalaxySistersGame {
       );
       bow.position.set(0.3, -0.6, -0.25);
       bow.rotation.y = Math.PI / 2;
-      this.accessoryGroup.add(bow);
-    } else if (this.activeSisterIdx === 2) {
+      slot.add(bow);
+    } else if (idx === 2) {
       const sun = new THREE.Mesh(
         new THREE.SphereGeometry(0.32, 10, 10),
         new THREE.MeshBasicMaterial({ color: 0xff7b00 })
       );
-      this.accessoryGroup.add(sun);
+      slot.add(sun);
       const corona = new THREE.Mesh(
         new THREE.RingGeometry(0.36, 0.52, 12),
         new THREE.MeshBasicMaterial({ color: 0xffc300, side: THREE.DoubleSide })
       );
-      this.accessoryGroup.add(corona);
-    } else if (this.activeSisterIdx === 3) {
+      slot.add(corona);
+    } else if (idx === 3) {
       const ring1 = new THREE.Mesh(
         new THREE.TorusGeometry(0.48, 0.05, 6, 20),
         new THREE.MeshBasicMaterial({ color: 0xc77dff })
       );
       ring1.rotation.x = Math.PI / 3;
-      this.accessoryGroup.add(ring1);
+      slot.add(ring1);
 
       const ring2 = new THREE.Mesh(
         new THREE.TorusGeometry(0.65, 0.03, 6, 20),
         new THREE.MeshBasicMaterial({ color: 0x9d4edd })
       );
       ring2.rotation.x = Math.PI / 2.5;
-      this.accessoryGroup.add(ring2);
+      slot.add(ring2);
 
       const sat = new THREE.Mesh(
         new THREE.SphereGeometry(0.08, 6, 6),
         new THREE.MeshBasicMaterial({ color: 0xffde59 })
       );
       sat.position.set(0.55, 0.1, 0);
-      this.accessoryGroup.add(sat);
+      slot.add(sat);
     }
   }
 
@@ -2694,6 +2771,7 @@ class GalaxySistersGame {
     if (this.cooldown1 > 0) return;
     const current = SISTERS[this.activeSisterIdx];
     this.cooldown1 = current.ability1.cooldown;
+    this.coop.sendCast(1);
 
     if (this.activeSisterIdx === 0) {
       sfx.magicSkill(0);
@@ -2712,34 +2790,7 @@ class GalaxySistersGame {
       const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.playerGroup.quaternion);
       this.showFloatingText("🏹 Sternen-Bogen!", this.playerGroup.position, "#ffe066");
 
-      for (let i = -1.5; i <= 1.5; i += 1.0) {
-        const arrowMesh = new THREE.Group();
-        const head = new THREE.Mesh(
-          new THREE.OctahedronGeometry(0.32, 0),
-          new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 2.1, 0.6) })
-        );
-        const shaft = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.04, 0.04, 0.6, 6),
-          new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 1.8, 1.6) })
-        );
-        shaft.rotation.x = Math.PI / 2;
-        shaft.position.z = 0.2;
-        arrowMesh.add(head, shaft);
-
-        arrowMesh.position.copy(this.playerGroup.position).add(new THREE.Vector3(0, 1.3, 0));
-        const dir = forward.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), i * 0.18);
-        arrowMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
-
-        this.projectiles.push({
-          mesh: arrowMesh,
-          dir: dir,
-          speed: 0.75,
-          life: 65,
-          damage: 25,
-          trail: new THREE.Color(2.2, 1.7, 0.5)
-        });
-        this.scene.add(arrowMesh);
-      }
+      this.spawnStarArrows(this.playerGroup.position, forward, false);
 
     } else if (this.activeSisterIdx === 2) {
       sfx.magicSkill(2);
@@ -2751,41 +2802,82 @@ class GalaxySistersGame {
       sfx.magicSkill(3);
       this.showFloatingText("🪐 Planeten-Ringe!", this.playerGroup.position, "#9d4edd");
       const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.playerGroup.quaternion);
-      const ringGroup = new THREE.Group();
-
-      const r1 = new THREE.Mesh(
-        new THREE.TorusGeometry(1.4, 0.12, 8, 32),
-        new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 0.8, 2.6) })
-      );
-      r1.rotation.x = Math.PI / 2;
-      ringGroup.add(r1);
-
-      const r2 = new THREE.Mesh(
-        new THREE.TorusGeometry(1.8, 0.08, 6, 32),
-        new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 1.0, 1.8) })
-      );
-      r2.rotation.x = Math.PI / 2.2;
-      ringGroup.add(r2);
-
-      ringGroup.position.copy(this.playerGroup.position).add(new THREE.Vector3(0, 1.5, 0));
-      this.projectiles.push({
-        mesh: ringGroup,
-        dir: forward,
-        speed: 0.5,
-        life: 80,
-        damage: 32,
-        pullRadius: 7,
-        trail: new THREE.Color(1.4, 0.7, 2.4),
-        spin: 0.12
-      });
-      this.scene.add(ringGroup);
+      this.spawnPlanetRing(this.playerGroup.position, forward, false);
     }
+  }
+
+  // Stella's star arrows; remote = visual only (the caster's client does the damage)
+  spawnStarArrows(origin, forward, remote) {
+    forward = forward.clone().setY(0).normalize();
+    for (let i = -1.5; i <= 1.5; i += 1.0) {
+      const arrowMesh = new THREE.Group();
+      const head = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.32, 0),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 2.1, 0.6) })
+      );
+      const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.04, 0.04, 0.6, 6),
+        new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 1.8, 1.6) })
+      );
+      shaft.rotation.x = Math.PI / 2;
+      shaft.position.z = 0.2;
+      arrowMesh.add(head, shaft);
+
+      arrowMesh.position.copy(origin).add(new THREE.Vector3(0, 1.3, 0));
+      const dir = forward.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), i * 0.18);
+      arrowMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
+
+      this.projectiles.push({
+        mesh: arrowMesh,
+        dir: dir,
+        speed: 0.75,
+        life: 65,
+        damage: 25,
+        remote,
+        trail: new THREE.Color(2.2, 1.7, 0.5)
+      });
+      this.scene.add(arrowMesh);
+    }
+  }
+
+  spawnPlanetRing(origin, forward, remote) {
+    forward = forward.clone().setY(0).normalize();
+    const ringGroup = new THREE.Group();
+
+    const r1 = new THREE.Mesh(
+      new THREE.TorusGeometry(1.4, 0.12, 8, 32),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 0.8, 2.6) })
+    );
+    r1.rotation.x = Math.PI / 2;
+    ringGroup.add(r1);
+
+    const r2 = new THREE.Mesh(
+      new THREE.TorusGeometry(1.8, 0.08, 6, 32),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 1.0, 1.8) })
+    );
+    r2.rotation.x = Math.PI / 2.2;
+    ringGroup.add(r2);
+
+    ringGroup.position.copy(origin).add(new THREE.Vector3(0, 1.5, 0));
+    this.projectiles.push({
+      mesh: ringGroup,
+      dir: forward,
+      speed: 0.5,
+      life: 80,
+      damage: 32,
+      remote,
+      pullRadius: 7,
+      trail: new THREE.Color(1.4, 0.7, 2.4),
+      spin: 0.12
+    });
+    this.scene.add(ringGroup);
   }
 
   castAbility2() {
     if (this.cooldown2 > 0) return;
     const current = SISTERS[this.activeSisterIdx];
     this.cooldown2 = current.ability2.cooldown;
+    this.coop.sendCast(2);
 
     if (this.activeSisterIdx === 0) {
       sfx.heal();
@@ -2862,7 +2954,8 @@ class GalaxySistersGame {
     if (this.bossData.alive) {
       const dist = this.bossGroup.position.distanceTo(this.playerGroup.position);
       if (dist < 26) {
-        this.bossData.petrifiedTimer = duration;
+        if (this.coop.puppetBoss) this.coop.send({ t: 'bossPetrify', dur: duration });
+        else this.petrifyBoss(duration);
         this.showFloatingText("🪨 VORTOX VERSTEINERT!", this.bossGroup.position, "#bdc3c7");
       }
     }
@@ -2877,6 +2970,10 @@ class GalaxySistersGame {
         }
       }
     });
+  }
+
+  petrifyBoss(duration) {
+    if (this.bossData.alive) this.bossData.petrifiedTimer = Math.min(10, duration);
   }
 
   createHealParticles(pos) {
@@ -2907,34 +3004,90 @@ class GalaxySistersGame {
         if (slime.userData.hp <= 0) {
           slime.userData.alive = false;
           slime.visible = false;
+          this.coop.send({ t: 'slime', i: this.slimes.indexOf(slime) });
           this.showFloatingText("⭐ Slime besiegt!", slime.position, "#ffe066");
         }
       }
     });
   }
 
+  // Hits go to the host, who owns the boss (solo play: this client is the host)
   hitBoss(dmg) {
+    if (!this.bossData.alive) return;
+    if (this.coop.puppetBoss) {
+      this.coop.send({ t: 'bossHit', dmg });
+      sfx.hit();
+      return;
+    }
+    this.applyBossDamage(dmg);
+  }
+
+  applyBossDamage(dmg) {
     if (!this.bossData.alive) return;
     this.bossData.hp = Math.max(0, this.bossData.hp - dmg);
     sfx.hit();
     this.showFloatingText(`-${dmg} HP!`, this.bossGroup.position, "#00f0ff");
+    this.updateBossBar();
+    if (this.bossData.hp <= 0) this.defeatBoss();
+  }
 
+  updateBossBar() {
     const pct = (this.bossData.hp / this.bossData.maxHp) * 100;
     document.getElementById('boss-hp-bar').style.width = `${pct}%`;
+  }
 
-    if (this.bossData.hp <= 0) {
-      this.bossData.alive = false;
-      this.bossGroup.visible = false;
-      sfx.victory();
-      this.showFloatingText("🎉 VORTOX BESIEGT! VICTORY! 🎉", this.playerGroup.position, "#ffe066");
-      document.getElementById('boss-state-text').textContent = "Besiegt! Das Himmelsgebirge ist gerettet!";
-    }
+  defeatBoss() {
+    if (!this.bossData.alive) return;
+    this.bossData.alive = false;
+    this.bossData.hp = 0;
+    this.updateBossBar();
+    this.bossGroup.visible = false;
+    document.getElementById('boss-banner').classList.remove('visible');
+    sfx.victory();
+    this.showFloatingText("🎉 VORTOX BESIEGT! VICTORY! 🎉", this.playerGroup.position, "#ffe066");
+    document.getElementById('boss-state-text').textContent = "Besiegt! Das Himmelsgebirge ist gerettet!";
+  }
+
+  setBossStateText() {
+    const texts = {
+      idle: "Vorsicht: Dreht sich schnell im Kreis!",
+      spin: "🌪️ TORNADO-WIRBEL! GEFAHR!",
+      dizzy: "💫 Vortox ist schwindelig! SCHLAGT JETZT ZU!"
+    };
+    document.getElementById('boss-state-text').textContent = texts[this.bossData.state] || texts.idle;
+  }
+
+  playBossSpin() {
+    sfx.bossSpin();
+  }
+
+  killSlimeRemote(i) {
+    const slime = this.slimes[i];
+    if (!slime || !slime.userData.alive) return;
+    slime.userData.alive = false;
+    slime.visible = false;
+    this.fx.burst(slime.position.clone().setY(slime.position.y + 0.7), [new THREE.Color(0.6, 2.4, 1.0), new THREE.Color(1.8, 2.4, 1.4)], 40, { speed: 4, up: 2, size: 0.4 });
+  }
+
+  healPlayer(amount, from) {
+    this.playerHP = Math.min(this.maxPlayerHP, this.playerHP + amount);
+    this.updateHPBar();
+    sfx.heal();
+    this.showFloatingText(`💚 +${amount} von ${from}`, this.playerGroup.position, "#2ecc71");
+  }
+
+  // Remote spells: a matching sound if the caster is near
+  sfxCast(si) {
+    if (si === -1) sfx.heal();
+    else if (si === 1) sfx.arrowShoot();
+    else sfx.magicSkill(si);
   }
 
   // ==========================================
   // 8. EVENT LISTENERS & UI
   // ==========================================
   setupEvents() {
+    this.setupTouchMode();
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
@@ -2943,6 +3096,7 @@ class GalaxySistersGame {
     });
 
     window.addEventListener('keydown', (e) => {
+      if (e.target && e.target.tagName === 'INPUT') return; // typing the player name / room code
       this.keys[e.code] = true;
       if (e.key === '1') this.switchSister(0);
       if (e.key === '2') this.switchSister(1);
@@ -3034,34 +3188,132 @@ class GalaxySistersGame {
     if (daytimeBtn) {
       daytimeBtn.addEventListener('click', () => {
         this.dayNight.skipToNextPhase();
+        this.coop.send({ t: 'skipTime' });
         daytimeBtn.blur();
       });
     }
 
     const graphicsBtn = document.getElementById('btn-graphics');
     if (graphicsBtn) {
-      graphicsBtn.textContent = this.graphicsQuality === 'high' ? '✨ Grafik: Hoch' : '🔋 Grafik: Niedrig';
+      this.updateGraphicsButton();
       graphicsBtn.addEventListener('click', () => {
-        this.applyGraphicsQuality(this.graphicsQuality === 'high' ? 'low' : 'high');
+        this.cycleGraphicsMode();
         graphicsBtn.blur();
       });
     }
+
+    const fullscreenBtn = document.getElementById('btn-fullscreen');
+    if (fullscreenBtn) {
+      if (!document.documentElement.requestFullscreen) fullscreenBtn.remove();
+      else fullscreenBtn.addEventListener('click', () => {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else this.enterFullscreen();
+        fullscreenBtn.blur();
+      });
+    }
+  }
+
+  // ---------- Touch devices ----------
+  setupTouchMode() {
+    const html = document.documentElement;
+    const enable = () => {
+      html.classList.add('touch');
+      this.isTouch = true;
+      this.controls.rotateSpeed = 0.7;
+    };
+    if (this.isTouch) enable();
+    // Hybrid devices: switch to the touch layout on the first real touch
+    window.addEventListener('touchstart', () => { if (!this.isTouch) enable(); }, { passive: true });
+
+    // Quest / settings panel is a slide-in menu on touch screens
+    const menuBtn = document.getElementById('btn-menu');
+    if (menuBtn) {
+      menuBtn.addEventListener('click', () => {
+        const open = html.classList.toggle('menu-open');
+        menuBtn.textContent = open ? '✕' : '📜';
+        menuBtn.blur();
+      });
+    }
+
+    // No long-press menu or accidental page gestures while playing
+    window.addEventListener('contextmenu', (e) => { if (this.isTouch) e.preventDefault(); });
+    ['gesturestart', 'gesturechange'].forEach(t =>
+      document.addEventListener(t, (e) => e.preventDefault(), { passive: false }));
+    window.addEventListener('orientationchange', () => {
+      setTimeout(() => window.dispatchEvent(new Event('resize')), 250);
+    });
+  }
+
+  enterFullscreen() {
+    const root = document.documentElement;
+    if (!root.requestFullscreen) return;
+    root.requestFullscreen({ navigationUI: 'hide' })
+      .then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape'))
+      .catch(() => { /* denied or unsupported (e.g. iPhone Safari) */ });
+  }
+
+  haptic(ms = 12) {
+    if (this.isTouch && navigator.vibrate) navigator.vibrate(ms);
   }
 
   setupRobloxControls() {
     const btnStart = document.getElementById('btn-start-game');
     const introScreen = document.getElementById('intro-screen');
     if (btnStart && introScreen) {
-      btnStart.addEventListener('click', () => {
+      const startAdventure = () => {
         sfx.startBGM();
         introScreen.classList.add('hidden');
-      });
+        this.perf.arm();
+        if (this.isTouch) {
+          this.enterFullscreen();
+          if (window.matchMedia('(orientation: portrait)').matches) {
+            this.showToast('📱 Tipp: Halte das Handy quer, dann spielt es sich besser', 6000);
+          }
+        }
+      };
+      btnStart.addEventListener('click', startAdventure);
+
+      // Co-op lobby: name + room code, then join the relay server this page came from
+      const btnCoop = document.getElementById('btn-start-coop');
+      const nameInput = document.getElementById('player-name');
+      const roomInput = document.getElementById('room-code');
+      const status = document.getElementById('coop-status');
+      if (btnCoop && nameInput && roomInput && status) {
+        try {
+          nameInput.value = localStorage.getItem('gs-player-name') || '';
+          roomInput.value = localStorage.getItem('gs-room') || 'GALAXY';
+        } catch (e) { /* storage unavailable */ }
+        const roomParam = new URLSearchParams(location.search).get('room');
+        if (roomParam) roomInput.value = roomParam;
+
+        btnCoop.addEventListener('click', async () => {
+          const name = nameInput.value.trim() || 'Spieler';
+          const room = roomInput.value.trim() || 'GALAXY';
+          try {
+            localStorage.setItem('gs-player-name', name);
+            localStorage.setItem('gs-room', room);
+          } catch (e) { /* ignore */ }
+          btnCoop.disabled = true;
+          status.textContent = '📡 Verbinde …';
+          try {
+            await this.coop.join({ name, room });
+            startAdventure();
+          } catch (err) {
+            status.textContent = err.message === 'full'
+              ? '🚫 Dieser Raum ist voll (max. 4 Spieler).'
+              : '📡 Kein Koop-Server erreichbar. Starte start_multiplayer.bat und öffne die dort angezeigte Adresse.';
+          } finally {
+            btnCoop.disabled = false;
+          }
+        });
+      }
     }
 
     const btnJump = document.getElementById('circle-jump');
     if (btnJump) {
       const handleJump = (e) => {
         e.preventDefault();
+        this.haptic(10);
         this.doJump();
         btnJump.blur();
       };
@@ -3073,6 +3325,7 @@ class GalaxySistersGame {
     if (btnP1) {
       const handleP1 = (e) => {
         e.preventDefault();
+        this.haptic(14);
         this.castAbility1();
         btnP1.blur();
       };
@@ -3084,6 +3337,7 @@ class GalaxySistersGame {
     if (btnP2) {
       const handleP2 = (e) => {
         e.preventDefault();
+        this.haptic(14);
         this.castAbility2();
         btnP2.blur();
       };
@@ -3095,15 +3349,17 @@ class GalaxySistersGame {
     const joystickThumb = document.getElementById('joystick-thumb');
     if (joystickBase && joystickThumb) {
       let isDragging = false;
+      let touchId = null; // the finger that owns the stick (the other hand turns the camera)
       let startX = 0;
       let startY = 0;
-      const maxRadius = 42;
+      let maxRadius = 42;
 
       const startJoy = (clientX, clientY) => {
         isDragging = true;
         const rect = joystickBase.getBoundingClientRect();
         startX = rect.left + rect.width / 2;
         startY = rect.top + rect.height / 2;
+        maxRadius = rect.width * 0.35;
         moveJoy(clientX, clientY);
       };
 
@@ -3117,29 +3373,46 @@ class GalaxySistersGame {
           dy = (dy / dist) * maxRadius;
         }
         joystickThumb.style.transform = `translate(${dx}px, ${dy}px)`;
-        this.joystickDelta.x = dx / maxRadius;
-        this.joystickDelta.y = dy / maxRadius;
+        // Small dead zone so a resting thumb does not creep
+        const mag = Math.hypot(dx, dy) / maxRadius;
+        const dead = 0.14;
+        const k = mag < dead ? 0 : (mag - dead) / (1 - dead) / mag;
+        this.joystickDelta.x = (dx / maxRadius) * k;
+        this.joystickDelta.y = (dy / maxRadius) * k;
       };
 
       const endJoy = () => {
         isDragging = false;
+        touchId = null;
         joystickThumb.style.transform = 'translate(0px, 0px)';
         this.joystickDelta.x = 0;
         this.joystickDelta.y = 0;
       };
 
+      const findTouch = (list) => {
+        for (let i = 0; i < list.length; i++) if (list[i].identifier === touchId) return list[i];
+        return null;
+      };
+
       joystickBase.addEventListener('touchstart', (e) => {
         e.preventDefault();
-        if (e.touches.length > 0) startJoy(e.touches[0].clientX, e.touches[0].clientY);
+        if (touchId !== null || e.changedTouches.length === 0) return;
+        const t = e.changedTouches[0];
+        touchId = t.identifier;
+        startJoy(t.clientX, t.clientY);
       }, { passive: false });
 
       window.addEventListener('touchmove', (e) => {
-        if (!isDragging) return;
-        if (e.touches.length > 0) moveJoy(e.touches[0].clientX, e.touches[0].clientY);
+        if (!isDragging || touchId === null) return;
+        const t = findTouch(e.touches);
+        if (t) moveJoy(t.clientX, t.clientY);
       }, { passive: false });
 
-      window.addEventListener('touchend', endJoy);
-      window.addEventListener('touchcancel', endJoy);
+      const touchEnd = (e) => {
+        if (touchId !== null && findTouch(e.changedTouches)) endJoy();
+      };
+      window.addEventListener('touchend', touchEnd);
+      window.addEventListener('touchcancel', touchEnd);
 
       joystickBase.addEventListener('mousedown', (e) => {
         e.preventDefault();
@@ -3214,8 +3487,10 @@ class GalaxySistersGame {
   animate() {
     requestAnimationFrame(() => this.animate());
 
-    const delta = Math.min(this.clock.getDelta(), 0.05);
+    const rawDelta = this.clock.getDelta();
+    const delta = Math.min(rawDelta, 0.05);
     const dtFactor = delta * 60; // normalized to 60fps baseline
+    this.perf.update(rawDelta);
 
     // Ability Cooldown Timers
     if (this.cooldown1 > 0) {
@@ -3270,6 +3545,9 @@ class GalaxySistersGame {
 
     // 9.3 Boss Vortox AI & Attacks
     this.updateBossAI(delta);
+
+    // 9.3b Co-op: send our state, move the other sisters, follow the host's boss
+    this.coop.update(delta, dtFactor);
 
     // 9.4 Ambient Animations (Creatures, Grass Sway, Water, Petals, Bees)
     this.updateWorldAmbience(delta);
@@ -3781,7 +4059,7 @@ class GalaxySistersGame {
         }
       }
 
-      if (this.bossData.alive && p.mesh.position.distanceTo(this.bossGroup.position) < 3.8) {
+      if (!p.remote && this.bossData.alive && p.mesh.position.distanceTo(this.bossGroup.position) < 3.8) {
         this.fx.flash(p.mesh.position, p.trail || new THREE.Color(2, 2, 2), 3, 0.25);
         this.fx.burst(p.mesh.position, [p.trail || new THREE.Color(2, 2, 2), new THREE.Color(2.2, 2.2, 2.2)], 22, { speed: 4, up: 1.5, size: 0.35 });
         this.hitBoss(p.damage);
@@ -3790,7 +4068,7 @@ class GalaxySistersGame {
         continue;
       }
 
-      this.slimes.forEach(slime => {
+      if (!p.remote) this.slimes.forEach(slime => {
         if (slime.userData.alive && p.mesh.position.distanceTo(slime.position) < 1.6) {
           slime.userData.hp -= p.damage;
           this.showFloatingText(`-${p.damage}`, slime.position, "#ffd166");
@@ -3798,6 +4076,7 @@ class GalaxySistersGame {
           if (slime.userData.hp <= 0) {
             slime.userData.alive = false;
             slime.visible = false;
+            this.coop.send({ t: 'slime', i: this.slimes.indexOf(slime) });
             this.fx.burst(slime.position.clone().setY(slime.position.y + 0.7), [new THREE.Color(0.6, 2.4, 1.0), new THREE.Color(1.8, 2.4, 1.4)], 40, { speed: 4, up: 2, size: 0.4 });
             this.fx.ringWave(slime.position, new THREE.Color(0.6, 2.2, 1.0), 3, 0.5);
           }
@@ -3822,73 +4101,90 @@ class GalaxySistersGame {
     }
   }
 
-  updateBossAI(delta) {
-    if (!this.bossData.alive) return;
+  // Nearest visible sister (local or remote): the boss chases whoever is closest
+  getBossTarget() {
+    let best = null;
+    let bestDist = Infinity;
+    const consider = (pos) => {
+      const d = pos.distanceTo(this.bossGroup.position);
+      if (d < bestDist) { bestDist = d; best = pos; }
+    };
+    if (!this.isPlayerInvisible) consider(this.playerGroup.position);
+    this.remotes.list.forEach(r => { if (r.hasState && !r.invisible) consider(r.group.position); });
+    return best;
+  }
 
-    if (this.bossData.petrifiedTimer > 0) {
-      this.bossData.petrifiedTimer -= delta;
-      document.getElementById('boss-state-text').textContent = `🪨 VERSTEINERT! (${this.bossData.petrifiedTimer.toFixed(1)}s)`;
+  updateBossAI(delta) {
+    const b = this.bossData;
+    if (!b.alive) return;
+    const puppet = this.coop.puppetBoss; // another player is the host: state arrives over the network
+
+    if (b.petrifiedTimer > 0) {
+      if (!puppet) b.petrifiedTimer -= delta;
+      document.getElementById('boss-state-text').textContent = `🪨 VERSTEINERT! (${Math.max(0, b.petrifiedTimer).toFixed(1)}s)`;
+      this.bossWasPetrified = true;
       return;
+    }
+    if (this.bossWasPetrified) {
+      this.bossWasPetrified = false;
+      this.setBossStateText();
     }
 
     const distToPlayer = this.bossGroup.position.distanceTo(this.playerGroup.position);
-    const bossBanner = document.getElementById('boss-banner');
-
-    if (distToPlayer < 24) {
-      bossBanner.classList.add('visible');
-    } else {
-      bossBanner.classList.remove('visible');
-    }
-
-    this.bossData.timer += delta;
+    document.getElementById('boss-banner').classList.toggle('visible', distToPlayer < 24);
 
     const wingFlap = Math.sin(Date.now() * 0.008) * 0.4;
     this.leftWing.rotation.y = 0.6 + wingFlap;
     this.rightWing.rotation.y = -0.6 - wingFlap;
 
-    if (this.isPlayerInvisible) {
-      return;
+    // The whirl hurts whoever is caught by it: every client checks its own sister
+    if (b.state === 'spin' && distToPlayer < 3.8) {
+      if (this.activeSisterIdx === 0 && this.shieldMesh.material.opacity > 0) {
+        this.showFloatingText("🛡️ Mond-Schild blockt Wirbel!", this.playerGroup.position, "#90e0ef");
+      } else {
+        this.playerHP = Math.max(0, this.playerHP - 0.4);
+        this.updateHPBar();
+      }
     }
 
-    if (this.bossData.state === 'idle') {
-      this.bossGroup.lookAt(this.playerGroup.position.x, this.bossGroup.position.y, this.playerGroup.position.z);
+    if (puppet) return;
 
-      if (distToPlayer < 18) {
-        this.bossData.state = 'spin';
-        this.bossData.timer = 0;
-        document.getElementById('boss-state-text').textContent = "🌪️ TORNADO-WIRBEL! GEFAHR!";
+    b.timer += delta;
+    const target = this.getBossTarget();
+    if (!target) return;
+    const distToTarget = target.distanceTo(this.bossGroup.position);
+
+    if (b.state === 'idle') {
+      this.bossGroup.lookAt(target.x, this.bossGroup.position.y, target.z);
+
+      if (distToTarget < 18) {
+        b.state = 'spin';
+        b.timer = 0;
+        this.setBossStateText();
         sfx.bossSpin();
       }
-    } else if (this.bossData.state === 'spin') {
+    } else if (b.state === 'spin') {
       this.bossGroup.rotation.y += 0.35;
-      
-      const dir = new THREE.Vector3().subVectors(this.playerGroup.position, this.bossGroup.position).normalize();
+
+      const dir = new THREE.Vector3().subVectors(target, this.bossGroup.position);
       dir.y = 0;
+      dir.normalize();
       this.bossGroup.position.addScaledVector(dir, 0.12);
 
-      if (distToPlayer < 3.8) {
-        if (this.activeSisterIdx === 0 && this.shieldMesh.material.opacity > 0) {
-          this.showFloatingText("🛡️ Mond-Schild blockt Wirbel!", this.playerGroup.position, "#90e0ef");
-        } else {
-          this.playerHP = Math.max(0, this.playerHP - 0.4);
-          this.updateHPBar();
-        }
-      }
-
-      if (this.bossData.timer > 3.5) {
-        this.bossData.state = 'dizzy';
-        this.bossData.timer = 0;
-        document.getElementById('boss-state-text').textContent = "💫 Vortox ist schwindelig! SCHLAGT JETZT ZU!";
+      if (b.timer > 3.5) {
+        b.state = 'dizzy';
+        b.timer = 0;
+        this.setBossStateText();
         this.showFloatingText("💫 Boss ist schwindelig!", this.bossGroup.position, "#ffdf6b");
       }
-    } else if (this.bossData.state === 'dizzy') {
+    } else if (b.state === 'dizzy') {
       this.bossGroup.rotation.z = Math.sin(Date.now() * 0.01) * 0.25;
-      
-      if (this.bossData.timer > 4.0) {
+
+      if (b.timer > 4.0) {
         this.bossGroup.rotation.z = 0;
-        this.bossData.state = 'idle';
-        this.bossData.timer = 0;
-        document.getElementById('boss-state-text').textContent = "Vorsicht: Dreht sich schnell im Kreis!";
+        b.state = 'idle';
+        b.timer = 0;
+        this.setBossStateText();
       }
     }
   }

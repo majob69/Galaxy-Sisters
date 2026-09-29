@@ -2,16 +2,25 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1a1528">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Galaxy Sisters - 3D Kawaii Adventure</title>
-  <link rel="stylesheet" href="style.css?v=3.2">
+  <link rel="stylesheet" href="style.css?v=3.4">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700;800&display=swap" rel="stylesheet">
   
+  <script>
+    // Touch layout from the first paint (also forceable with ?touch)
+    if (matchMedia('(pointer: coarse)').matches || /[?&]touch/.test(location.search)) {
+      document.documentElement.classList.add('touch');
+    }
+  </script>
   <script type="importmap">
   {
     "imports": {
@@ -47,6 +56,17 @@
         <button id="btn-start-game" class="btn-start clickable" type="button">
           <span>🚀</span> ABENTEUER STARTEN
         </button>
+
+        <!-- Co-op lobby: same page, same server; friends use the same room code -->
+        <div class="lobby">
+          <div class="lobby-title">👭 Zusammen spielen (2–4 Schwestern)</div>
+          <div class="lobby-row">
+            <input id="player-name" class="lobby-input" type="text" maxlength="14" placeholder="Dein Name" autocomplete="off">
+            <input id="room-code" class="lobby-input" type="text" maxlength="12" placeholder="Raum-Code" autocomplete="off">
+          </div>
+          <button id="btn-start-coop" class="btn-start btn-coop clickable" type="button"><span>👭</span> KOOP SPIELEN</button>
+          <div id="coop-status" class="coop-status"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -76,6 +96,9 @@
         <div class="boss-subtitle" id="boss-state-text">Vorsicht: Dreht sich schnell im Kreis!</div>
       </div>
 
+      <!-- Touch: opens / closes the quest & settings panel -->
+      <button id="btn-menu" class="menu-toggle clickable" type="button" aria-label="Quests & Einstellungen">📜</button>
+
       <!-- Quest / Guide Panel -->
       <div class="quest-panel clickable">
         <div class="quest-title">✨ Galaxy Quest: Himmelsberg</div>
@@ -89,6 +112,7 @@
           <button class="sister-btn clickable" id="btn-sound" style="font-size:0.75rem; padding: 4px 10px;">🔊 Audio: An</button>
           <button class="sister-btn clickable" id="btn-graphics" style="font-size:0.75rem; padding: 4px 10px;">✨ Grafik: Hoch</button>
           <button class="sister-btn clickable" id="btn-daytime" style="font-size:0.75rem; padding: 4px 10px;" title="Zur nächsten Tageszeit springen">☀️ Tag ⏩</button>
+          <button class="sister-btn clickable touch-only" id="btn-fullscreen" style="font-size:0.75rem; padding: 4px 10px;">⛶ Vollbild</button>
           <button class="sister-btn clickable" id="btn-toggle-help" style="font-size:0.75rem; padding: 4px 10px;">⌨️ Steuerung</button>
         </div>
 
@@ -128,6 +152,9 @@
       </div>
     </div>
 
+    <!-- Co-op roster (visible while connected) -->
+    <div id="coop-panel" class="coop-panel clickable"></div>
+
     <!-- Roblox On-Screen Touch Controls (Works on Mobile & Desktop Mouse) -->
     <!-- 1. Left: Virtual Joystick Run Field (Lauf-Feld) -->
     <div id="roblox-joystick-container" class="roblox-joystick-container clickable">
@@ -166,16 +193,16 @@
     <div class="bottom-bar">
       <div class="sister-picker clickable">
         <button class="sister-btn active clickable" data-sister="0" type="button">
-          <span class="hotkey-badge">1</span> 🌙 Luna
+          <span class="hotkey-badge">1</span><span class="sister-icon">🌙</span><span class="sister-name">Luna</span>
         </button>
         <button class="sister-btn clickable" data-sister="1" type="button">
-          <span class="hotkey-badge">2</span> ⭐ Stella
+          <span class="hotkey-badge">2</span><span class="sister-icon">⭐</span><span class="sister-name">Stella</span>
         </button>
         <button class="sister-btn clickable" data-sister="2" type="button">
-          <span class="hotkey-badge">3</span> ☀️ Sol
+          <span class="hotkey-badge">3</span><span class="sister-icon">☀️</span><span class="sister-name">Sol</span>
         </button>
         <button class="sister-btn clickable" data-sister="3" type="button">
-          <span class="hotkey-badge">4</span> 🪐 Planeta
+          <span class="hotkey-badge">4</span><span class="sister-icon">🪐</span><span class="sister-name">Planeta</span>
         </button>
       </div>
     </div>
@@ -203,6 +230,6 @@
   </div>
 
   <!-- Main Game Script -->
-  <script type="module" src="src/main.js?v=4.3"></script>
+  <script type="module" src="src/main.js?v=4.5"></script>
 </body>
 </html>
