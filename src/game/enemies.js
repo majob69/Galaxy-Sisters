@@ -139,6 +139,7 @@ export const enemyMethods = {
     this.coop.send({ t: 'slime', i: this.slimes.indexOf(slime) });
     slime.userData.deadAt = this.clock.elapsedTime;
     this.progression.addXp(10, 'Slime');
+    this.inventory.addCoins(1);
     this.dropLoot(slime.position, { dust: 0.8, heart: 0.25 });
   },
 
@@ -235,6 +236,7 @@ export const enemyMethods = {
         this.fx.ringWave(w.position.clone().setY(w.position.y - 0.8), new THREE.Color(1.0, 0.4, 2.0), 3, 0.5);
         sfx.hit();
         this.progression.addXp(8, 'Irrlicht');
+        this.inventory.addCoins(1);
         this.dropLoot(w.position, { dust: 0.7, heart: 0.18 });
         this.removeWisp(i);
       }

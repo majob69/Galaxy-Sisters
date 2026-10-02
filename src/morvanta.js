@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { sfx } from './game/shared.js';
 import { findFlatSpot } from './spots.js';
+import { ArenaLock } from './arenas.js';
 
 const MAX_HP = 320;
 const HOVER_H = 3.6;
@@ -459,6 +460,7 @@ export class Morvanta {
     sfx.victory();
     g.showFloatingText('🦋 MORVANTA BESIEGT! 🦋', g.playerGroup.position, '#ff9ee6');
     g.progression.addXp(200, 'Morvanta besiegt');
+    g.inventory.addCoins(80, 'Morvanta');
     g.glaciel.onMorvantaDefeated();
     if (g.saveGame) g.saveGame.save();
     g.quests.mark('morvanta', 'boss', 'Morvanta besiegt');
@@ -472,7 +474,10 @@ export class Morvanta {
 
     if (d.alive) {
       if (this.puppet) this.stepPuppet(delta);
-      else this.stepHost(delta);
+      else {
+        this.stepHost(delta);
+        if (d.awake) ArenaLock.clamp(this.pos, this.center.x, this.center.z, ARENA_RADIUS - 2);
+      }
       this.localEffects(delta);
     }
     this.applyVisual(delta);

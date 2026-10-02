@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { sfx } from './game/shared.js';
 import { findFlatSpot } from './spots.js';
 import { createSoftSpriteTexture } from './water.js';
+import { ArenaLock } from './arenas.js';
 
 const MAX_HP = 420;
 const CRYSTAL_HP = 60;
@@ -356,6 +357,7 @@ export class Glaciel {
     sfx.victory();
     g.showFloatingText('❄️ GLACIEL BESIEGT! ❄️', g.playerGroup.position, '#aee8ff');
     g.progression.addXp(300, 'Glaciel besiegt');
+    g.inventory.addCoins(120, 'Glaciel');
     g.quests.mark('glaciel', 'boss', 'Glaciel besiegt');
     if (g.saveGame) g.saveGame.save();
     for (let i = 0; i < 4; i++) g.dropLoot(this.pos.clone(), { dust: 1, heart: 1 });
@@ -365,7 +367,10 @@ export class Glaciel {
   update(delta) {
     if (this.d.alive) {
       if (this.puppet) this.stepPuppet(delta);
-      else this.stepHost(delta);
+      else {
+        this.stepHost(delta);
+        if (this.d.awake) ArenaLock.clamp(this.pos, this.center.x, this.center.z, ARENA_RADIUS - 2.5);
+      }
       this.localEffects(delta);
     }
     this.applyVisual(delta);
@@ -465,6 +470,7 @@ export class Glaciel {
         // crouch: pick the landing point
         if (target) {
           this.slamTo.set(target.pos.x, 0, target.pos.z);
+          ArenaLock.clamp(this.slamTo, this.center.x, this.center.z, ARENA_RADIUS - 2.5);
           this.faceTo(target.pos.x, target.pos.z);
         }
         this.slamFrom.copy(this.pos);
@@ -606,7 +612,7 @@ export class Glaciel {
       }
       g.playSpatial(new THREE.Vector3(z[2], 0, z[3]), () => sfx.hit());
       if (hit && mine) {
-        if (g.damagePlayer(kind === 1 ? LINE_DAMAGE : SNOW_DAMAGE)) g.slowTimer = SLOW_SECONDS;
+        if (g.damagePlayer(kind === 1 ? LINE_DAMAGE : SNOW_DAMAGE) && !(g.frostWard > 0)) g.slowTimer = SLOW_SECONDS;
       }
     });
     if (this.zoneHits.size > 60) this.zoneHits.clear();
@@ -618,7 +624,7 @@ export class Glaciel {
       const airborne = pp.y - this.groundAt(pp.x, pp.z) > 0.7;
       if (!this.slamHit && mine && !airborne && Math.abs(dist - r) < 1.2 && r < 15) {
         this.slamHit = true;
-        if (g.damagePlayer(SLAM_DAMAGE)) g.slowTimer = SLOW_SECONDS;
+        if (g.damagePlayer(SLAM_DAMAGE) && !(g.frostWard > 0)) g.slowTimer = SLOW_SECONDS;
       }
     } else {
       this.slamHit = false;

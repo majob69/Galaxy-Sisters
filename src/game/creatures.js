@@ -326,6 +326,7 @@ export const creatureMethods = {
     // Day/night cycle, quests and the soundscape around the player
     this.dayNight.update(delta);
     this.weather.update(delta);
+    if (this.forest) this.forest.applyAtmosphere();
     this.quests.update(delta);
     this.compass.update(delta);
     const pp = this.playerGroup.position;

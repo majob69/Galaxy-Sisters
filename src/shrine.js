@@ -213,6 +213,7 @@ export class ElementShrine {
     g.fx.flash(p, new THREE.Color(2.4, 1.8, 0.9), 5, 0.5);
     sfx.victory();
     g.progression.addXp(80, 'Elementar-Kiste');
+    g.inventory.addCoins(40, 'Schrein');
     for (let i = 0; i < 4; i++) g.addLoot('heart', p);
     for (let i = 0; i < 7; i++) g.addLoot('dust', p);
   }

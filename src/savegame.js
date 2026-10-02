@@ -5,11 +5,13 @@
 // Quests and XP have their own storage keys and are bundled into the export.
 // ==========================================
 import { PERKS } from './progression.js';
+import { ITEMS } from './inventory.js';
 
 const KEY = 'gs-save-v1';
 const QUEST_KEY = 'gs-quests-v1';
 const PROGRESS_KEY = 'gs-progress-v1';
 const GRAPHICS_KEY = 'gs-graphics';
+const INVENTORY_KEY = 'gs-inventory-v1';
 
 const num = (v, lo, hi, dflt = 0) => (Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : dflt);
 
@@ -30,7 +32,7 @@ export class SaveGame {
       v: 1,
       savedAt: Date.now(),
       sister: g.activeSisterIdx,
-      pos: { x: g.playerGroup.position.x, z: g.playerGroup.position.z },
+      pos: g.playerGroup.position.x > 300 ? { x: g.forest.portal.x, z: g.forest.portal.z + 3.5 } : { x: g.playerGroup.position.x, z: g.playerGroup.position.z },
       dayP: g.dayNight.p,
       vortox: !g.bossData.alive,
       gate: g.stargate.open,
@@ -109,7 +111,8 @@ export class SaveGame {
       version: 1,
       save: this.snapshot(),
       quests: read(QUEST_KEY),
-      progress: read(PROGRESS_KEY)
+      progress: read(PROGRESS_KEY),
+      inventory: read(INVENTORY_KEY)
     };
   }
 
@@ -149,7 +152,14 @@ export class SaveGame {
       perks: Array.isArray(p.perks) ? p.perks.filter(id => known.has(id)).slice(0, 8) : [],
       offer: []
     };
-    return { save, quests, progress };
+    const inv = data.inventory && typeof data.inventory === 'object' ? data.inventory : {};
+    const inventory = { items: {}, coins: num(Math.floor(Number(inv.coins) || 0), 0, 1e6) };
+    const srcItems = inv.items && typeof inv.items === 'object' ? inv.items : {};
+    Object.keys(srcItems).forEach(k => {
+      const n = Math.floor(Number(srcItems[k]));
+      if (ITEMS[k] && n > 0) inventory.items[k] = Math.min(999, n);
+    });
+    return { save, quests, progress, inventory };
   }
 
   importText(text) {
@@ -164,6 +174,7 @@ export class SaveGame {
       localStorage.setItem(KEY, JSON.stringify(parsed.save));
       localStorage.setItem(QUEST_KEY, JSON.stringify(parsed.quests));
       localStorage.setItem(PROGRESS_KEY, JSON.stringify(parsed.progress));
+      localStorage.setItem(INVENTORY_KEY, JSON.stringify(parsed.inventory));
     } catch (e) {
       this.game.showToast('⚠️ Der Browser erlaubt kein Speichern', 4500);
       return false;
@@ -176,7 +187,7 @@ export class SaveGame {
   resetAll() {
     if (!window.confirm('Wirklich alles zurücksetzen? Quests, Level, Outfits und Spielstand gehen verloren.')) return;
     try {
-      [KEY, QUEST_KEY, PROGRESS_KEY, GRAPHICS_KEY, 'gs-player-name', 'gs-room'].forEach(k => localStorage.removeItem(k));
+      [KEY, QUEST_KEY, PROGRESS_KEY, GRAPHICS_KEY, INVENTORY_KEY, 'gs-house-v1', 'gs-player-name', 'gs-room'].forEach(k => localStorage.removeItem(k));
     } catch (e) { /* ignore */ }
     this.skipSaveOnUnload = true;
     location.reload();

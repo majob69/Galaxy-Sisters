@@ -266,6 +266,15 @@ function handleMessage(room, player, msg) {
     case 'weather':
       if (hostOf(room) === player) broadcast(room, { t: 'weather', k: Math.max(0, Math.min(3, msg.k | 0)) }, player.id);
       break;
+    case 'gift': { // one item for one friend in the same room
+      const to = room.players.get(msg.to | 0);
+      const item = String(msg.item || '').replace(/[^a-z_]/g, '').slice(0, 16);
+      if (to && to !== player && item) to.conn.send(JSON.stringify({ t: 'gift', id: player.id, item, n: Math.max(1, Math.min(20, msg.n | 0)) }));
+      break;
+    }
+    case 'sleep':
+      broadcast(room, { t: 'sleep', id: player.id }, player.id);
+      break;
     case 'chat': {
       const now = Date.now();
       if (now - (player.lastChat || 0) < 600) break; // at most ~1.5 messages per second

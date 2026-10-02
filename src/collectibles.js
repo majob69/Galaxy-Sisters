@@ -197,6 +197,8 @@ export class Collectibles {
     g.fx.flash(p, new THREE.Color(2.4, 1.8, 0.7), 4, 0.4);
     sfx.victory();
     g.progression.addXp(30, 'Truhe');
+    g.inventory.addCoins(10);
+    g.inventory.add(['wood', 'stone', 'rope', 'glass', 'cloth'][Math.floor(Math.random() * 5)], 2);
     g.addLoot('heart', p);
     for (let i = 0; i < 3; i++) g.addLoot('dust', p);
   }
@@ -208,6 +210,7 @@ export class Collectibles {
     g.fx.burst(it.group.position.clone().setY(it.group.position.y + 1), [new THREE.Color(it.def.color)], 18, { speed: 2.5, up: 1.5, size: 0.3 });
     sfx.collect();
     g.progression.addXp(6);
+    g.inventory.addCoins(2);
     this.checkMilestones();
     this.renderAlbum();
   }
@@ -241,12 +244,6 @@ export class Collectibles {
     this.line.frustumCulled = false;
     this.line.visible = false;
     g.scene.add(this.line);
-    this.fishBtn = document.getElementById('btn-fish');
-    if (this.fishBtn) {
-      const press = (e) => { e.preventDefault(); this.onFishKey(); };
-      this.fishBtn.addEventListener('touchstart', press, { passive: false });
-      this.fishBtn.addEventListener('mousedown', press);
-    }
   }
 
   // The water spot in front of the player where a cast would land, or null
@@ -298,14 +295,10 @@ export class Collectibles {
   updateFishing(delta) {
     const g = this.game;
     const f = this.fish;
-    const near = !f && !!this.findCastSpotCheap();
-    if (this.fishBtn) {
-      this.fishBtn.classList.toggle('visible', near || !!f);
-      this.fishBtn.textContent = f ? (f.state === 'bite' ? '❗ Fangen!' : '🎣 …') : '🎣 Angeln';
-    }
+    const near = !f && !!this.castSpot;
     if (near && !this.fishHintShown) {
       this.fishHintShown = true;
-      g.showToast('🎣 Hier kannst du angeln: Taste F (Handy: Knopf 🎣)', 4500);
+      g.showToast('🎣 Hier kannst du angeln: Taste F (Handy: runder Aktionsknopf)', 4500);
     }
     if (!f) return;
     const pp = g.playerGroup.position;
@@ -334,8 +327,13 @@ export class Collectibles {
     attr.needsUpdate = true;
   }
 
-  findCastSpotCheap() {
-    return this.findCastSpot();
+  // For the interact key: fishing has priority while a line is out
+  getInteraction() {
+    const f = this.fish;
+    if (f) return { dist: 0, priority: 2, label: f.state === 'bite' ? '❗ Fangen!' : '🎣 Warten …', action: () => this.onFishKey() };
+    this.castSpot = this.findCastSpot();
+    if (this.castSpot) return { dist: 3.5, label: '🎣 Angeln', action: () => this.onFishKey() };
+    return null;
   }
 
   endFishing(message) {
@@ -359,7 +357,13 @@ export class Collectibles {
     g.fx.burst(f.spot.clone().setY(f.spot.y + 0.4), [new THREE.Color(1.4, 2.0, 2.6)], 22, { speed: 3, up: 3, size: 0.3, gravity: 6 });
     sfx.collect();
     const isNew = this.quests.mark('album', `fish-${fish.id}`, `${fish.name} gefangen`);
-    g.showToast(`${fish.emoji} Du fängst: ${fish.name}!${isNew ? ' (neu im Album)' : ''}`, 3500);
+    // the fish that actually swam by the bobber decides the size
+    const caught = g.riverFish ? g.riverFish.takeNearest(f.spot) : null;
+    const size = caught ? (caught.size - 0.55) / 0.8 : Math.random();
+    const item = size < 0.45 ? 'fish_small' : size < 0.8 ? 'fish_medium' : 'fish_large';
+    g.inventory.add(item, 1, true);
+    const sizeName = item === 'fish_small' ? 'klein' : item === 'fish_medium' ? 'mittel' : 'groß';
+    g.showToast(`${fish.emoji} Du fängst: ${fish.name} (${sizeName})!${isNew ? ' Neu im Album.' : ''} Im Inventar (I) kannst du ihn essen.`, 4000);
     g.progression.addXp(isNew ? 20 : 4);
     if (Math.random() < 0.35) g.addLoot('dust', g.playerGroup.position);
     this.endFishing(null);

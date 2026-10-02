@@ -1,6 +1,7 @@
 // Boss Vortox: model, AI (host / puppet), damage and defeat. Methods are mixed into the game class (see main.js), so `this` is the game.
 import * as THREE from 'three';
 import { sfx } from './shared.js';
+import { ArenaLock } from '../arenas.js';
 
 export const bossMethods = {
 
@@ -105,14 +106,28 @@ export const bossMethods = {
 
     const arenaGroup = new THREE.Group();
     arenaGroup.position.set(bx, by, bz);
-    const pillarMat = new THREE.MeshLambertMaterial({ color: 0x495057 });
-    for (let i = 0; i < 8; i++) {
-      const ang = (i / 8) * Math.PI * 2;
-      const pil = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, 6, 8), pillarMat);
+    // Ice arena in the snow biome: frozen pillars with snow caps and glowing tops on a stone ring
+    const pillarMat = new THREE.MeshLambertMaterial({ color: 0xa9d8f5, emissive: 0x1d4f7a, emissiveIntensity: 0.35, flatShading: true });
+    const capMat = new THREE.MeshLambertMaterial({ color: 0xf4f9ff });
+    const glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.2, 2.2, 2.8) });
+    glowMat.userData.noNightGlow = true;
+    for (let i = 0; i < 10; i++) {
+      const ang = (i / 10) * Math.PI * 2;
+      const pil = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.95, 6, 7), pillarMat);
       pil.position.set(Math.cos(ang) * 16, 3, Math.sin(ang) * 16);
       pil.castShadow = true;
       arenaGroup.add(pil);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.85, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), capMat);
+      cap.position.set(Math.cos(ang) * 16, 6, Math.sin(ang) * 16);
+      arenaGroup.add(cap);
+      const orb = new THREE.Mesh(new THREE.OctahedronGeometry(0.4, 0), glowMat);
+      orb.position.set(Math.cos(ang) * 16, 7.1, Math.sin(ang) * 16);
+      arenaGroup.add(orb);
     }
+    const floor = new THREE.Mesh(new THREE.RingGeometry(13.5, 16.6, 64), new THREE.MeshLambertMaterial({ color: 0xc8d6e6 }));
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = 0.08;
+    arenaGroup.add(floor);
     this.scene.add(arenaGroup);
 
     this.bossData = {
@@ -217,6 +232,7 @@ export const bossMethods = {
     this.showFloatingText("🎉 VORTOX BESIEGT! VICTORY! 🎉", this.playerGroup.position, "#ffe066");
     document.getElementById('boss-state-text').textContent = "Besiegt! Das Himmelsgebirge ist gerettet!";
     this.progression.addXp(100, 'Vortox besiegt');
+    this.inventory.addCoins(50, 'Vortox');
     if (this.saveGame) this.saveGame.save();
     this.morvanta.onVortoxDefeated();
     this.dropLoot(this.bossGroup.position, { dust: 1, heart: 1 });
@@ -319,6 +335,9 @@ export const bossMethods = {
       dir.y = 0;
       dir.normalize();
       this.bossGroup.position.addScaledVector(dir, 0.12);
+      // Vortox never leaves his arena
+      ArenaLock.clamp(this.bossGroup.position, 32, 30, 13.5);
+      this.bossGroup.position.y = this.getTerrainHeight(this.bossGroup.position.x, this.bossGroup.position.z);
 
       if (b.timer > 3.5) {
         b.state = 'dizzy';

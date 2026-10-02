@@ -15,6 +15,17 @@ import { Glaciel } from './glaciel.js';
 import { Collectibles } from './collectibles.js';
 import { WeatherSystem } from './weather.js';
 import { SaveGame } from './savegame.js';
+import { Inventory } from './inventory.js';
+import { Interactions } from './interactions.js';
+import { startIntroPortrait } from './intro.js';
+import { SnowBiome } from './snowbiome.js';
+import { ArenaLock } from './arenas.js';
+import { Market } from './market.js';
+import { RiverFish } from './riverfish.js';
+import { toolMethods } from './game/tools.js';
+import { Houses } from './houses.js';
+import { Npcs } from './npcs.js';
+import { EnchantedForest, forestHeight, FOREST } from './forest.js';
 import { WORLD_SEED, mulberry32, sfx } from './game/shared.js';
 import { worldTerrainMethods } from './game/world-terrain.js';
 import { worldPropsMethods } from './game/world-props.js';
@@ -120,9 +131,36 @@ class GalaxySistersGame {
     taken.push({ x: this.shrine.center.x, z: this.shrine.center.z, r: 15 });
     this.glaciel = new Glaciel(this, taken);
     taken.push({ x: this.glaciel.center.x, z: this.glaciel.center.z, r: 16 });
+    this.market = new Market(this, taken);
+    taken.push({ x: this.market.center.x, z: this.market.center.z, r: 11 });
+    this.houses = new Houses(this, taken);
+    taken.length = 0;
+    taken.push(...this.houses.taken);
     this.weather = new WeatherSystem(this);
     this.slowTimer = 0;
     this.collectibles = new Collectibles(this, taken.map(t => ({ x: t.x, z: t.z, r: t.r + 3 })));
+
+    // Snow biome decorations and sealed boss arenas
+    this.snowBiome = new SnowBiome(this);
+    this.arenaLock = new ArenaLock(this);
+
+    // Bag with food, materials and star coins; one interact key for everything nearby
+    this.inventory = new Inventory(this);
+    this.interactions = new Interactions(this);
+    this.interactions.register(() => {
+      const t = this.nearestAppleTree();
+      return t ? { dist: t.dist, label: '🍎 Apfel pflücken', action: () => this.pickApple(t.tree) } : null;
+    });
+    this.interactions.register(() => this.collectibles.getInteraction());
+    this.interactions.register(() => this.market.getInteraction());
+    this.interactions.register(() => this.houses.getInteraction());
+    this.npcs = new Npcs(this);
+    this.interactions.register(() => this.npcs.getInteraction());
+    // the third world: unlocked when every quest is done
+    this.forest = new EnchantedForest(this, taken);
+    this.interactions.register(() => this.forest.getInteraction());
+    this.riverFish = new RiverFish(this);
+    this.frostWard = 0;
 
     // Day & night: sun/moon arc, palettes, night glow, fireflies
     this.dayNight = new DayNightCycle(this, {
@@ -140,6 +178,7 @@ class GalaxySistersGame {
 
     // Compass with open quest goals (and the boss while he is alive)
     this.compass = new Compass(this, () => {
+      if (this.forest && this.forest.inForest) return this.forest.getTargets();
       const targets = this.quests.getTargets();
       if (this.bossData && this.bossData.alive) {
         targets.push({ id: 'boss', icon: '👾', label: 'Vortox', x: this.bossGroup.position.x, z: this.bossGroup.position.z });
@@ -147,6 +186,13 @@ class GalaxySistersGame {
       targets.push(...this.stargate.getTargets(), ...this.morvanta.getTargets(), ...this.shrine.getTargets(), ...this.glaciel.getTargets(), ...this.coop.getCompassTargets());
       return targets;
     });
+
+    // Camera: follows behind while walking unless the player is turning it (can be switched off)
+    try { this.camFollow = localStorage.getItem('gs-camfollow') !== 'off'; } catch (e) { this.camFollow = true; }
+    this.camDragging = false;
+    this.lastCamInput = 0;
+    this.controls.addEventListener('start', () => { this.camDragging = true; this.lastCamInput = performance.now(); });
+    this.controls.addEventListener('end', () => { this.camDragging = false; this.lastCamInput = performance.now(); });
 
     this.setupUI();
     this.setupEvents();
@@ -164,7 +210,27 @@ class GalaxySistersGame {
   // Precomputed heightfield (see landscape.js) - physics, flora and mesh share it
   // ==========================================
   getTerrainHeight(x, z) {
+    if (x > 300) return forestHeight(x, z); // the enchanted forest lies far to the east
     return this.heightfield.height(x, z);
+  }
+
+  // Walkable area: the valley, or the bowl of the enchanted forest
+  inWorldBounds(x, z) {
+    if (x > 300) return Math.hypot(x - FOREST.x, z - FOREST.z) < FOREST.r + 2;
+    return Math.abs(x) <= 96 && Math.abs(z) <= 96;
+  }
+
+  clampToWorld(pos) {
+    if (pos.x > 300) {
+      const dx = pos.x - FOREST.x;
+      const dz = pos.z - FOREST.z;
+      const d = Math.hypot(dx, dz);
+      const r = FOREST.r + 2;
+      if (d > r) { pos.x = FOREST.x + (dx / d) * r; pos.z = FOREST.z + (dz / d) * r; }
+      return;
+    }
+    pos.x = Math.max(-96, Math.min(96, pos.x));
+    pos.z = Math.max(-96, Math.min(96, pos.z));
   }
 
 
@@ -278,6 +344,16 @@ class GalaxySistersGame {
     this.shrine.update(delta);
     this.glaciel.update(delta);
     this.saveGame.update(delta);
+    this.updateApples(delta);
+    this.snowBiome.update(delta);
+    this.arenaLock.update(delta);
+    this.market.update(delta);
+    this.houses.update(delta);
+    this.npcs.update(delta);
+    this.forest.update(delta);
+    this.riverFish.update(delta);
+    if (this.frostWard > 0) this.frostWard = Math.max(0, this.frostWard - delta);
+    this.interactions.update();
     this.collectibles.update(delta);
     if (this.slowTimer > 0) this.slowTimer = Math.max(0, this.slowTimer - delta);
     const frosty = this.slowTimer > 0;
@@ -316,6 +392,7 @@ class GalaxySistersGame {
       new THREE.Vector3(playerPos.x, targetY, playerPos.z),
       0.22
     );
+    this.autoFollowCamera(delta);
     this.controls.update();
     if (!this.cameraDesired) this.cameraDesired = new THREE.Vector3();
     this.cameraDesired.copy(this.camera.position);
@@ -342,6 +419,7 @@ class GalaxySistersGame {
       onQuestDone: (quest) => {
         this.applyQuestRewards(true);
         this.progression.addXp(40);
+        this.inventory.addCoins(20, 'Quest');
         this.showFloatingText(`🏆 Quest geschafft: ${quest.name}! +10 max. HP`, this.playerGroup.position, '#ffd166');
         this.createSupernovaParticles(this.playerGroup.position.clone());
         sfx.victory();
@@ -376,12 +454,15 @@ Object.assign(
   playerMethods,
   uiMethods,
   downedMethods,
-  enemyMethods
+  enemyMethods,
+  toolMethods
 );
 
 
 // Start game when page loads
 window.addEventListener('DOMContentLoaded', () => {
+  // The four sisters on the start screen, rendered with the in-game models
+  try { window.__introPortrait = startIntroPortrait(); } catch (e) { console.warn('intro portrait', e); }
   const btnStart = document.getElementById('btn-start-game');
   const startLabel = btnStart ? (btnStart.dataset.label || btnStart.innerHTML) : '';
   if (btnStart) {

@@ -1,7 +1,7 @@
 // Graphics quality, HUD, input events, touch controls and toasts. Methods are mixed into the game class (see main.js), so `this` is the game.
 import { PostFX } from '../atmosphere.js';
 import { PERF_TIERS } from '../perf.js';
-import { sfx } from './shared.js';
+import { sfx, DAY_SONGS } from './shared.js';
 
 export const uiMethods = {
 
@@ -110,7 +110,9 @@ export const uiMethods = {
       if (e.key === '3') this.switchSister(2);
       if (e.key === '4') this.switchSister(3);
       if (e.key.toLowerCase() === 't') this.coop.toggleWheel();
-      if (e.key.toLowerCase() === 'f') this.collectibles.onFishKey();
+      if (e.key.toLowerCase() === 'f') this.interactions.trigger();
+      if (e.key.toLowerCase() === 'i') this.inventory.toggle();
+      if (e.key === 'Escape') this.inventory.toggle(false);
       if (e.key === 'Enter') this.coop.openChat();
       if (e.key === 'Escape') this.coop.toggleWheel(false);
       if (e.key.toLowerCase() === 'q') {
@@ -213,6 +215,36 @@ export const uiMethods = {
       });
     }
 
+    const musicBtn = document.getElementById('btn-music');
+    if (musicBtn) {
+      const label = () => {
+        const cur = DAY_SONGS.find(x => x.key === (sfx.daySong || 'day')) || DAY_SONGS[0];
+        musicBtn.textContent = `🎵 Lied: ${cur.name}`;
+      };
+      label();
+      musicBtn.addEventListener('click', () => {
+        const idx = DAY_SONGS.findIndex(x => x.key === (sfx.daySong || 'day'));
+        const next = DAY_SONGS[(idx + 1) % DAY_SONGS.length];
+        sfx.daySong = next.key;
+        try { localStorage.setItem('gs-song', next.key); } catch (e) { /* ignore */ }
+        label();
+        this.showToast(`🎵 Tages-Lied: ${next.name}${this.dayNight.night > 0.55 ? ' (spielt, sobald es Tag ist)' : ''}`, 2500);
+        musicBtn.blur();
+      });
+    }
+
+    const camBtn = document.getElementById('btn-camfollow');
+    if (camBtn) {
+      const label = () => { camBtn.textContent = this.camFollow ? '🎥 Kamera: folgt' : '🎥 Kamera: frei'; };
+      label();
+      camBtn.addEventListener('click', () => {
+        this.camFollow = !this.camFollow;
+        try { localStorage.setItem('gs-camfollow', this.camFollow ? 'on' : 'off'); } catch (e) { /* ignore */ }
+        label();
+        camBtn.blur();
+      });
+    }
+
     const wardrobeBtn = document.getElementById('btn-wardrobe');
     if (wardrobeBtn) {
       wardrobeBtn.addEventListener('click', () => {
@@ -286,6 +318,7 @@ export const uiMethods = {
       const startAdventure = () => {
         sfx.startBGM();
         introScreen.classList.add('hidden');
+        if (window.__introPortrait) { window.__introPortrait.stop(); window.__introPortrait = null; }
         this.perf.arm();
         this.progression.checkOffer();
         if (this.isTouch) {

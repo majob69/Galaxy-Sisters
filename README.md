@@ -83,6 +83,16 @@ Ein farbenfrohes 3D-Action-Adventure / Platformer im Kawaii-Anime-Stil, direkt i
 * **🌧️ Wetter:** Regen, Nebel und Gewitter (mit Blitz und Donner) wechseln sich ab; Licht, Sicht, Musik und Geräusche passen sich an. Im Koop bestimmt der Gastgeber das Wetter.
 * **💾 Speichern:** Bossbesiege, Tor, Schrein, Position und Tageszeit werden automatisch gespeichert (zusätzlich zu Quests und Level). Im Quest-Feld: Sichern (Datei), Laden, Neues Spiel.
 * **⌨️ Chat:** Im Koop mit `Enter` schreiben oder Schnellsätze antippen; Nachrichten erscheinen als Sprechblase über der Schwester und im Verlauf. Freunde bewegen sich dank Zwischenspeicher weich.
+* **🕹️ Bessere Steuerung:** weiches Beschleunigen und Drehen, Sprint mit `Shift` (Handy: Joystick ganz außen), **Doppelsprung** (zweimal springen), die Kamera schwenkt beim Laufen hinter die Figur (abschaltbar: 🎥) und kürzere Abklingzeiten der Kräfte.
+* **🌳 Echte Bäume & Äpfel:** Laubbäume und Tannen wie in echt; an Apfelbäumen wachsen Äpfel nach, die man mit `F` pflückt und isst.
+* **🎒 Inventar (`I`):** Essen, Materialien und Rätsel-Helfer; Essen heilt. Im Koop kann man Sachen verschenken.
+* **🪙 Sterntaler & Markt:** Aufgaben, Rätsel, Bosse und Truhen geben Sterntaler. Drei Marktstände (Leckereien, Baumaterial, Zauberkram) mit Tier-Händlern.
+* **🏠 Häuser:** zwei begehbare Häuser mit Bett (abends/nachts schlafen = neuer Morgen) und täglich gefüllter Truhe, ein Bauplatz für das eigene Haus mit Vorratstruhe.
+* **🐾 Sprechende Tiere:** acht Wesen in der ganzen Welt geben Tipps zu Rätseln, Bossen, Angeln und Bauen.
+* **❄️ Schneebiom:** Schneefall, Iglus, Schneemänner und verschneite Tannen rund um Vortox' Eis-Arena. Boss-Arenen werden versiegelt, bis der Boss besiegt ist, und kein Boss verlässt seine Arena.
+* **🐟 Fische im Fluss:** bunte Fische in verschiedenen Größen; ein Fang landet im Inventar und heilt beim Essen.
+* **🎵 Musik:** vier Tageslieder zur Wahl (🎵-Knopf), nachts spielt die Musik leiser.
+* **🌀 Zauberwald:** Sind alle Aufgaben erfüllt, öffnet sich ein Portal in eine dritte Welt mit lila, pinken und blauen Bäumen, ewiger Dämmerung und einem Geheimnis aus drei Mondsteinen.
 * **💬 Koop-Komfort:** Emote-Rad (Taste `T` oder Knopf im Koop-Fenster) mit 👋 💜 ⭐ 😂 🆘 und 📍 **Ping** (Markierung für alle auf dem Kompass). Zauber von Freunden hört man räumlich: leiser mit Entfernung und auf der Seite, auf der sie stehen.
 
 ---
@@ -131,6 +141,8 @@ Im Dokument [GDD_Galaxy_Sisters.md](file:///c:/Users/Mario/Coding/Galaxy-Sisters
 | `stargate.js`, `shrine.js` | Die Rätsel: Sternen-Tor und Vier-Elemente-Schrein |
 | `collectibles.js`, `spots.js`, `props.js` | Truhen, Blumen, Pilze, Angeln, Album; Platzsuche; Kisten-Vorlage |
 | `weather.js`, `savegame.js` | Wetter und Speicherstand (Export/Import) |
+| `inventory.js`, `interactions.js`, `market.js`, `houses.js`, `npcs.js`, `critters.js` | Inventar, Aktionstaste, Markt, Häuser, sprechende Tiere |
+| `biome.js`, `snowbiome.js`, `arenas.js`, `riverfish.js`, `forest.js`, `intro.js` | Schneebiom, Arena-Siegel, Fische, Zauberwald, Intro-Bild |
 | `progression.js` | Stern-Level, XP, Outfits |
 | `coop.js`, `network.js`, `remote.js` | Koop-Sitzung, WebSocket-Client, Fremdspieler |
 | `landscape.js`, `atmosphere.js`, `water.js`, `bridges.js` | Gelände, Himmel, Wasser, Brücken |

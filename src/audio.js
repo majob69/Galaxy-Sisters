@@ -19,6 +19,55 @@ const SONGS = {
       [3, 0, 79], [3, 6, 76], [3, 8, 74]
     ]
   },
+  // Extra day songs the player can pick (🎵 button)
+  waltz: {
+    bpm: 96,
+    style: 'waltz',
+    chords: [[65, 69, 72], [60, 64, 67], [62, 65, 69], [58, 62, 65]], // F C Dm Bb
+    bass: [29, 36, 26, 34],
+    melody: [
+      [0, 0, 77], [0, 4, 76], [0, 8, 74], [0, 12, 72],
+      [1, 0, 72], [1, 6, 74], [1, 8, 76],
+      [2, 0, 77], [2, 4, 81], [2, 8, 79], [2, 12, 77],
+      [3, 0, 74], [3, 8, 70], [3, 12, 72]
+    ]
+  },
+  market: {
+    bpm: 108,
+    style: 'bouncy',
+    chords: [[67, 71, 74], [64, 67, 71], [60, 64, 67], [62, 66, 69]], // G Em C D
+    bass: [31, 28, 36, 26],
+    melody: [
+      [0, 0, 79], [0, 2, 81], [0, 4, 83], [0, 8, 86], [0, 12, 83],
+      [1, 0, 79], [1, 4, 76], [1, 8, 79], [1, 10, 81],
+      [2, 0, 76], [2, 2, 79], [2, 4, 84], [2, 8, 83], [2, 12, 79],
+      [3, 0, 81], [3, 4, 78], [3, 8, 74], [3, 12, 78]
+    ]
+  },
+  clouds: {
+    bpm: 74,
+    style: 'lofi',
+    chords: [[63, 67, 70, 74], [60, 63, 67, 70], [56, 60, 63, 67], [58, 62, 65, 69]], // Ebmaj7 Cm7 Abmaj7 Bb6
+    bass: [39, 36, 32, 34],
+    melody: [
+      [0, 2, 79], [0, 8, 82], [0, 14, 79],
+      [1, 4, 77], [1, 10, 75],
+      [2, 2, 75], [2, 8, 79], [2, 12, 80],
+      [3, 4, 77], [3, 10, 74]
+    ]
+  },
+  forest: {
+    bpm: 70,
+    style: 'mystic',
+    chords: [[62, 65, 69, 76], [58, 62, 65, 69], [55, 58, 62, 69], [57, 61, 64, 67]], // Dm9 Bbmaj7 Gm9 A7
+    bass: [26, 34, 31, 33],
+    melody: [
+      [0, 0, 81], [0, 6, 84], [0, 12, 81],
+      [1, 4, 77], [1, 10, 81],
+      [2, 0, 79], [2, 8, 74],
+      [3, 2, 76], [3, 8, 73], [3, 12, 76]
+    ]
+  },
   night: {
     bpm: 66,
     chords: [[57, 60, 64, 67, 71], [53, 57, 60, 64], [48, 55, 59, 64], [52, 55, 59, 62]], // Am9 Fmaj7 Cmaj7 Em7
@@ -42,6 +91,14 @@ const SONGS = {
     ]
   }
 };
+
+// Day songs to choose from, in button order
+export const DAY_SONGS = [
+  { key: 'day', name: 'Morgentau' },
+  { key: 'waltz', name: 'Wiesenwalzer' },
+  { key: 'market', name: 'Sternenmarkt' },
+  { key: 'clouds', name: 'Wolkenreise' }
+];
 
 export class AudioEngine {
   constructor() {
@@ -224,7 +281,8 @@ export class AudioEngine {
     this.windBed.gain.gain.setTargetAtTime(wind, t, 0.8);
     this.rainBed.gain.gain.setTargetAtTime(rain * 0.1, t, 1.2);
     this.rainLow.gain.gain.setTargetAtTime(rain * 0.09 + storm * 0.05, t, 1.2);
-    this.musicBus.gain.setTargetAtTime(0.5 * (1 - 0.35 * storm - 0.12 * rain), t, 1.5);
+    // the night is calm: music plays clearly quieter after dark
+    this.musicBus.gain.setTargetAtTime(0.5 * (1 - 0.45 * night) * (1 - 0.35 * storm - 0.12 * rain), t, 1.5);
   }
 
   // ---------- Music sequencer ----------
@@ -249,7 +307,7 @@ export class AudioEngine {
     // After a hidden tab the clock jumps; restart cleanly instead of flooding notes
     if (this.nextNoteTime < now - 0.25) this.nextNoteTime = now + 0.05;
     while (this.nextNoteTime < now + 0.12) {
-      const wanted = this.bgmMode === 'boss' ? 'boss' : (this.night > 0.55 ? 'night' : 'day');
+      const wanted = this.bgmMode === 'boss' ? 'boss' : this.zone === 'forest' ? 'forest' : (this.night > 0.55 ? 'night' : (this.daySong || 'day'));
       if (wanted !== this.songKey && (wanted === 'boss' || this.songKey === 'boss')) {
         // Boss fights cut in immediately on a fresh bar
         this.seqStep = Math.ceil(this.seqStep / 16) * 16;
@@ -274,7 +332,33 @@ export class AudioEngine {
     const chord = song.chords[bar];
     const root = song.bass[bar];
 
-    if (key === 'day') {
+    if (song.style === 'mystic') {
+      // drifting pads and glassy bell arpeggios
+      if (s === 0) this.pad(chord, t, barLen, 900, 0.04);
+      if (s === 0) this.bass(mtof(root), t, barLen * 0.9, 0.12);
+      if (s % 3 === 0) this.bell(mtof(chord[(s / 3 + bar) % chord.length] + 12), t, 0.03, 2.6);
+      this.melodyAt(song, bar, s, t, (f, tt) => this.bell(f, tt, 0.035, 3.2));
+    } else if (song.style === 'waltz') {
+      // oom-pah-pah in groups of four 16ths, light and swaying
+      if (s === 0) this.pad(chord, t, barLen, 1400, 0.025);
+      if (s % 8 === 0) this.bass(mtof(s === 0 ? root : root + 7), t, s16 * 3, 0.15);
+      if (s % 8 === 3 || s % 8 === 5) chord.forEach(n => this.pluck(mtof(n + 12), t, 0.025));
+      if (s === 6 || s === 14) this.shaker(t, 0.014);
+      this.melodyAt(song, bar, s, t, (f, tt) => this.bell(f, tt, 0.05, 1.3));
+    } else if (song.style === 'bouncy') {
+      if (s % 4 === 0) this.kick(t);
+      if (s % 2 === 1) this.hat(t, false);
+      if (s % 4 === 0 || s % 4 === 3) this.bass(mtof(s % 8 === 0 ? root : root + 12), t, s16 * 1.2, 0.13);
+      if (s === 2 || s === 6 || s === 10 || s === 14) chord.forEach(n => this.pluck(mtof(n + 12), t, 0.022));
+      this.melodyAt(song, bar, s, t, (f, tt) => this.pluck(f, tt, 0.06));
+    } else if (song.style === 'lofi') {
+      if (s === 0) this.pad(chord, t, barLen, 650, 0.04);
+      if (s === 0 || s === 10) this.bass(mtof(root), t, s16 * 6, 0.14);
+      if (s === 0 || s === 8) this.kick(t);
+      if (s === 4 || s === 12) this.shaker(t, 0.02);
+      if (s % 4 === 2) this.hat(t, false);
+      this.melodyAt(song, bar, s, t, (f, tt) => this.bell(f, tt, 0.04, 2.2));
+    } else if (key === 'day') {
       if (s === 0) this.pad(chord, t, barLen, 1200, 0.03);
       if (s === 0 || s === 8) this.bass(mtof(s === 0 ? root : root + 7), t, s16 * 7, 0.16);
       if ([0, 3, 6, 8, 11, 14].includes(s)) {

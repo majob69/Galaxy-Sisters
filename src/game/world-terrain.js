@@ -8,6 +8,7 @@ import { buildMoonBridge, buildRomanBridge, buildRopeBridge, buildStarBridge } f
 import { bakeStaticGroup } from '../bake.js';
 import { MagicFX } from '../magicfx.js';
 import { PERF_TIERS } from '../perf.js';
+import { snowAt } from '../biome.js';
 
 export const worldTerrainMethods = {
 
@@ -299,7 +300,11 @@ export const worldTerrainMethods = {
         if (above < 0) sand = 1;
       }
       const tint = smoothstep(0.15, 0.75, simplex2(x * 0.035 + 7.3, z * 0.035 - 2.1)) * (1 - rock);
-      surface[i * 4] = rock;
+      // Snow biome around Vortox' arena
+      const biome = snowAt(x, z);
+      snow = Math.max(snow, biome);
+      sand *= 1 - biome;
+      surface[i * 4] = rock * (1 - biome * 0.6);
       surface[i * 4 + 1] = snow;
       surface[i * 4 + 2] = sand * (1 - rock * 0.5);
       surface[i * 4 + 3] = tint;

@@ -193,7 +193,7 @@ export const abilityMethods = {
         const nextX = this.playerGroup.position.x + forward.x * stepDist;
         const nextZ = this.playerGroup.position.z + forward.z * stepDist;
         const curY = this.playerGroup.position.y;
-        if (!this.checkWallCollision(nextX, nextZ, pRad, curY) && Math.abs(nextX) < 96 && Math.abs(nextZ) < 96) {
+        if (!this.checkWallCollision(nextX, nextZ, pRad, curY) && this.inWorldBounds(nextX, nextZ)) {
           this.playerGroup.position.x = nextX;
           this.playerGroup.position.z = nextZ;
         } else {

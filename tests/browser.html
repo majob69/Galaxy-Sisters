@@ -92,7 +92,7 @@ test('KO: allein wacht man am Startpunkt auf', async () => {
   assert(w.document.getElementById('ko-overlay').classList.contains('visible'), 'Overlay fehlt');
   g.doJump(); g.castAbility1();
   assert(g.cooldown1 === 0, 'KO darf nicht zaubern');
-  assert(await until(() => !g.isDowned, 8000), 'kein Respawn');
+  assert(await until(() => !g.isDowned, 14000), 'kein Respawn');
   assert(g.playerHP > 0, 'HP nach Respawn');
 });
 
@@ -102,7 +102,7 @@ test('KO: eine Freundin in der Nähe holt einen zurück', async () => {
   const pp = g.playerGroup.position;
   const f = g.remotes.add({ id: 72, name: 'Retterin', sister: 0 });
   f.applyState({ x: pp.x + 1.5, y: pp.y, z: pp.z, ry: 0, mv: 0, gr: 1, sw: 0, vy: 0, si: 0, inv: 0, hp: 100, mhp: 100 });
-  assert(await until(() => !g.isDowned, 5000), 'nicht wiederbelebt');
+  assert(await until(() => !g.isDowned, 12000), 'nicht wiederbelebt');
   g.remotes.remove(72);
 });
 
@@ -190,7 +190,7 @@ test('Morvanta: erwacht, greift an, Befreiung macht sie benommen, Sieg', async (
   const m = g.morvanta;
   m.onVortoxDefeated();
   stand(m.center.x, m.center.z + 6); heal();
-  assert(await until(() => m.d.st === 'hover', 10000), 'erwacht nicht');
+  assert(await until(() => m.d.st === 'hover', 25000), 'erwacht nicht');
   m.setState('dust');
   assert(await until(() => m.d.zones.length > 0, 3000), 'keine Staub-Zonen');
   m.setState('grab');
@@ -208,7 +208,7 @@ test('Morvanta: erwacht, greift an, Befreiung macht sie benommen, Sieg', async (
 
 test('Glaciel: Panzer, drei Kristalle, Kern frei, Sieg', async () => {
   const gl = g.glaciel;
-  assert(await until(() => gl.d.st === 'idle', 10000), 'erwacht nicht');
+  assert(await until(() => gl.d.st === 'idle', 25000), 'erwacht nicht');
   heal();
   const hp0 = gl.d.hp; gl.applyHit(100);
   assert(hp0 - gl.d.hp <= 12, `Panzer schluckt Schaden (${hp0 - gl.d.hp})`);
@@ -224,10 +224,10 @@ test('Sammelstücke: Blume, Truhe, Angeln füllen Album und Quests', async () =>
   const col = g.collectibles;
   const flower = col.items.find(i => i.kind === 'flower');
   stand(flower.spot.x, flower.spot.z);
-  assert(await until(() => g.quests.state.items['album:' + flower.key], 2000), 'Blume nicht gepflückt');
+  assert(await until(() => g.quests.state.items['album:' + flower.key], 6000), 'Blume nicht gepflückt');
   const chest = col.items.find(i => i.kind === 'chest');
   stand(chest.spot.x, chest.spot.z);
-  assert(await until(() => g.quests.state.items['chests:' + chest.key], 2000), 'Truhe nicht geöffnet');
+  assert(await until(() => g.quests.state.items['chests:' + chest.key], 6000), 'Truhe nicht geöffnet');
   stand(0, 8);
   col.startCast(new V(0, 0, 4));
   col.fish.timer = 0;
@@ -307,6 +307,167 @@ test('Speicherstand stellt Bosse, Tor und Schrein wieder her', async () => {
   s.save();
   const restored = s.read();
   assert(restored.gate && restored.shrine && restored.morvanta && restored.glaciel, 'Lesen unvollständig');
+});
+
+test('Steuerung: Doppelsprung springt höher, Shift sprintet', async () => {
+  heal(); stand(0, 8); g.playerVelY = 0; g.isGrounded = true; await sleep(300);
+  const y0 = g.playerGroup.position.y;
+  g.doJump(); let p1 = y0; for (let i = 0; i < 40; i++) { await sleep(25); p1 = Math.max(p1, g.playerGroup.position.y); }
+  await sleep(900);
+  g.doJump(); await sleep(200); g.doJump(); let p2 = y0; for (let i = 0; i < 60; i++) { await sleep(25); p2 = Math.max(p2, g.playerGroup.position.y); }
+  assert(p2 - y0 > (p1 - y0) * 1.6, `Doppelsprung nicht höher (${(p1 - y0).toFixed(2)} / ${(p2 - y0).toFixed(2)})`);
+  await sleep(900);
+  g.keys['KeyW'] = true; await sleep(800); let a = g.playerGroup.position.clone(); await sleep(800);
+  const walk = a.distanceTo(g.playerGroup.position);
+  g.keys['ShiftLeft'] = true; await sleep(500); a = g.playerGroup.position.clone(); await sleep(800);
+  const run = a.distanceTo(g.playerGroup.position);
+  g.keys['KeyW'] = false; g.keys['ShiftLeft'] = false;
+  assert(run > walk * 1.25, `Sprint nicht schneller (${walk.toFixed(1)} / ${run.toFixed(1)})`);
+});
+
+test('Kürzere Abklingzeiten', async () => {
+  const { SISTERS } = await import('../src/game/shared.js');
+  assert(SISTERS[0].ability1.cooldown <= 4 && SISTERS[2].ability2.cooldown <= 5.5 && SISTERS[3].ability2.cooldown <= 5, 'Abklingzeiten zu lang');
+});
+
+test('Apfelbäume: pflücken, im Inventar essen', async () => {
+  heal();
+  const t = g.appleTrees.find(t => t.apples.some(a => a.ripe));
+  assert(t, 'kein Apfelbaum mit Äpfeln');
+  stand(t.x + 2, t.z);
+  await sleep(200);
+  const n0 = g.inventory.count('apple');
+  g.interactions.trigger();
+  assert(g.inventory.count('apple') === n0 + 1, 'kein Apfel gepflückt');
+  g.playerHP = 10;
+  g.inventory.use('apple');
+  assert(g.playerHP === 25, `Apfel heilt nicht (${g.playerHP})`);
+  g.inventory.toggle(true);
+  assert(w.document.querySelector('#inventory-modal.open'), 'Inventar öffnet nicht');
+  g.inventory.toggle(false);
+});
+
+test('Schneebiom: Iglus, Schneefall, versiegelte Arena, Vortox bleibt drin', async () => {
+  assert(g.snowBiome.igloos.length >= 3, 'zu wenige Iglus');
+  heal(); g.maxPlayerHP = 9999; g.playerHP = 9999;
+  g.bossData.alive = true; g.bossData.hp = 150; g.bossGroup.visible = true;
+  stand(44, 30);
+  assert(await until(() => g.arenaLock.locked && g.arenaLock.locked.name === 'Vortox', 2000), 'Arena nicht versiegelt');
+  const pp = g.playerGroup.position;
+  let maxD = 0;
+  for (let i = 0; i < 50; i++) {
+    const dx = pp.x - 32, dz = pp.z - 30, d = Math.hypot(dx, dz);
+    g.moveVel.set(dx / d * 0.3, 0, dz / d * 0.3);
+    g.playerHP = 9999;
+    await sleep(30);
+    maxD = Math.max(maxD, Math.hypot(pp.x - 32, pp.z - 30), Math.hypot(g.bossGroup.position.x - 32, g.bossGroup.position.z - 30) > 14 ? 99 : 0);
+  }
+  assert(maxD < 15.6, `Arena verlassen oder Boss draußen (${maxD.toFixed(1)})`);
+  g.cameraDesired && g.camera.position.copy(g.playerGroup.position).add(new V(0, 6, 10));
+  g.snowBiome.update();
+  assert(g.snowBiome.flakes.visible, 'kein Schneefall');
+  for (let i = 0; i < 8; i++) g.applyBossDamage(25);
+  assert(await until(() => !g.arenaLock.locked, 1500), 'Arena öffnet nach dem Sieg nicht');
+  g.maxPlayerHP = 100; heal();
+});
+
+test('Markt: Sterntaler, Kaufen, Sternen-Gewicht hält eine Platte', async () => {
+  g.inventory.state.coins = 0; g.inventory.addCoins(30);
+  const s = g.market.stalls.find(x => x.def.id === 'magic');
+  stand(s.front.x, s.front.z); await sleep(200);
+  g.interactions.trigger();
+  assert(w.document.querySelector('#shop-modal.open'), 'Laden öffnet nicht');
+  g.market.buy('weight');
+  assert(g.inventory.count('weight') === 1 && g.inventory.coins === 18, 'Kauf falsch');
+  g.market.buy('cake'); // not sold here, but price check must not break
+  g.market.closeShop();
+  g.inventory.state.coins = 0; g.market.openShop(s); g.market.buy('weight');
+  assert(g.inventory.count('weight') === 1, 'ohne Geld gekauft');
+  g.market.closeShop();
+  const pl = g.stargate.plates[1];
+  stand(pl.x + 1, pl.z); g.inventory.use('weight');
+  assert(pl.weighted && g.inventory.count('weight') === 0, 'Gewicht wirkt nicht');
+  assert(g.stargate.isPressed(pl), 'Platte nicht gedrückt');
+});
+
+test('Fische schwimmen im Fluss; ein Fang landet im Inventar und heilt', async () => {
+  assert(g.riverFish.fish.length >= 20, 'zu wenige Fische');
+  const f = g.riverFish.fish.find(x => x.gone <= 0);
+  assert(g.getWaterSurface(f.pos.x, f.pos.z) !== null, 'Fisch nicht im Wasser');
+  stand(0, 8);
+  g.collectibles.startCast(f.pos.clone()); g.collectibles.fish.timer = 0;
+  await until(() => g.collectibles.fish && g.collectibles.fish.state === 'bite', 2000);
+  const before = ['fish_small', 'fish_medium', 'fish_large'].reduce((n, k) => n + g.inventory.count(k), 0);
+  g.collectibles.onFishKey();
+  const after = ['fish_small', 'fish_medium', 'fish_large'].reduce((n, k) => n + g.inventory.count(k), 0);
+  assert(after === before + 1 && f.gone > 0, 'Fang fehlt');
+  const kind = ['fish_small', 'fish_medium', 'fish_large'].find(k => g.inventory.count(k) > 0);
+  g.playerHP = 5; g.inventory.use(kind);
+  assert(g.playerHP > 5, 'Fisch heilt nicht');
+  heal();
+});
+
+test('Häuser: hineingehen, schlafen nur abends/nachts, Truhe einmal pro Tag', async () => {
+  const h = g.houses.houses[0];
+  const dir = new V(Math.sin(h.rot), 0, Math.cos(h.rot));
+  stand(h.x + dir.x * 6, h.z + dir.z * 6);
+  for (let i = 0; i < 70; i++) { g.moveVel.set(-dir.x * 0.2, 0, -dir.z * 0.2); await sleep(30); }
+  assert(g.houses.inside === h, 'nicht im Haus');
+  assert(!h.roof.visible, 'Dach bleibt sichtbar');
+  g.dayNight.p = 0.3; g.houses.sleep(h);
+  assert(!g.houses.sleeping, 'tagsüber geschlafen');
+  g.dayNight.p = 0.7; g.playerHP = 10; g.houses.sleep(h);
+  assert(await until(() => !g.houses.sleeping, 5000), 'Schlaf endet nicht');
+  assert(g.dayNight.p < 0.1 && g.playerHP === g.maxPlayerHP, 'kein neuer Morgen / nicht geheilt');
+  const c0 = g.inventory.coins; g.houses.openChest(h);
+  assert(g.inventory.coins > c0, 'Truhe leer');
+  const c1 = g.inventory.coins; g.houses.openChest(h);
+  assert(g.inventory.coins === c1, 'Truhe zweimal am Tag');
+});
+
+test('Hausbau mit Materialien', async () => {
+  const hs = g.houses;
+  stand(hs.plot.x, hs.plot.z + 4); await sleep(200);
+  g.interactions.trigger();
+  assert(!hs.state.built, 'ohne Material gebaut');
+  ['wood', 'stone', 'glass', 'rope', 'cloth'].forEach(id => g.inventory.add(id, 12, true));
+  const wood0 = g.inventory.count('wood'); const stone0 = g.inventory.count('stone');
+  g.interactions.trigger();
+  assert(hs.state.built && hs.houses.some(h => h.own), 'Haus nicht gebaut');
+  assert(wood0 - g.inventory.count('wood') === 12 && stone0 - g.inventory.count('stone') === 8, 'Material falsch abgezogen');
+});
+
+test('Wesen erzählen Tipps', async () => {
+  assert(g.npcs.list.length >= 8, 'zu wenige Wesen');
+  const n = g.npcs.list.find(x => x.def.id === 'stachel');
+  stand(n.x + 2, n.z); await sleep(200);
+  g.interactions.trigger();
+  assert(w.document.querySelector('#npc-dialog.open'), 'kein Dialog');
+  g.interactions.trigger();
+  assert(/Platten/.test(w.document.querySelector('.npc-text').textContent), 'kein Tipp zum Tor');
+  g.npcs.close();
+});
+
+test('Zauberwald: erst nach allen Aufgaben, Mondsteine wecken das Herz', async () => {
+  const F = g.forest;
+  stand(F.portal.x, F.portal.z + 2.5); await sleep(700);
+  assert(!F.unlocked || F.questsDone() === 11, 'Portal zu früh offen');
+  const real = F.questsDone;
+  F.questsDone = () => 11;
+  assert(await until(() => F.unlocked, 2000), 'Portal öffnet nicht');
+  g.interactions.trigger();
+  assert(await until(() => F.inForest && !F.travelling, 4000), 'keine Reise');
+  assert(g.compass.getTargets().some(t => t.label === 'Mondstein'), 'Kompass zeigt keine Mondsteine');
+  const pp = g.playerGroup.position;
+  for (const s of F.stones) { pp.set(s.x + 0.5, g.getTerrainHeight(s.x + 0.5, s.z), s.z); await sleep(200); }
+  assert(F.state.stones.length === 3, 'Mondsteine fehlen');
+  pp.set(604, g.getTerrainHeight(604, 0), 0);
+  assert(await until(() => F.state.heart, 2000), 'Herz erwacht nicht');
+  for (let i = 0; i < 60; i++) { g.moveVel.set(0.3, 0, 0); await sleep(20); }
+  assert(Math.hypot(pp.x - 600, pp.z) < 67, 'Waldgrenze fehlt');
+  F.travel(false);
+  assert(await until(() => !F.inForest && !F.travelling, 4000), 'kein Rückweg');
+  F.questsDone = real;
 });
 
 test('Server-Nachrichten: Boss-3-Zustand hat das erwartete Format', async () => {

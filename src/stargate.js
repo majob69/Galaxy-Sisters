@@ -182,7 +182,7 @@ export class StarGate {
 
   isPressed(plate) {
     const g = this.game;
-    if (plate.arrowTimer > 0) return true;
+    if (plate.arrowTimer > 0 || plate.weighted) return true;
     const stands = (pos) => Math.hypot(pos.x - plate.x, pos.z - plate.z) < PLATE_RADIUS && Math.abs(pos.y - plate.y) < 1.4;
     if (!g.isDowned && stands(g.playerGroup.position)) return true;
     return g.remotes.list.some(r => r.hasState && !r.downed && stands(r.group.position));
@@ -272,6 +272,7 @@ export class StarGate {
     g.fx.flash(p, new THREE.Color(2.4, 1.8, 0.7), 5, 0.5);
     sfx.victory();
     g.progression.addXp(60, 'Schatzkiste');
+    g.inventory.addCoins(30, 'Sternen-Tor');
     for (let i = 0; i < 3; i++) g.addLoot('heart', p);
     for (let i = 0; i < 6; i++) g.addLoot('dust', p);
   }

@@ -234,6 +234,17 @@ export const playerMethods = {
       this.coyoteTimer = 0;
       this.jumpBufferTimer = 0;
       sfx.jump();
+    } else if (!this.isSwimming && !this.airJumpUsed) {
+      // Second press in the air: a higher star jump with a little spin
+      this.airJumpUsed = true;
+      this.jumpBufferTimer = 0;
+      this.playerVelY = current.jumpPower * 1.2;
+      this.jumpSpin = 1;
+      const p = this.playerGroup.position;
+      this.fx.burst(p.clone().setY(p.y + 0.4), [new THREE.Color(2.4, 2.0, 0.8), new THREE.Color(1.8, 1.6, 2.6)], 18, { speed: 2.5, up: -0.5, size: 0.3, gravity: 1 });
+      this.fx.ringWave(p.clone(), new THREE.Color(1.8, 1.6, 2.6), 1.6, 0.35);
+      sfx.jump();
+      sfx.playTone(880, 'sine', 0.12, 0.05);
     }
   },
 
@@ -260,32 +271,50 @@ export const playerMethods = {
       moveZ = 0;
     }
 
-    const isMoving = (moveX !== 0 || moveZ !== 0);
-    this.playerIsMoving = isMoving;
+    // Wish direction relative to the camera; the actual velocity eases towards it
+    const wish = new THREE.Vector3(moveX, 0, moveZ);
+    if (wish.lengthSq() > 1) wish.normalize();
+    const hasInput = wish.lengthSq() > 0.0001;
+    if (hasInput) wish.applyEuler(new THREE.Euler(0, this.camera.rotation.y, 0, 'YXZ'));
+    const joyMag = Math.hypot(this.joystickDelta.x, this.joystickDelta.y);
+    const sprinting = hasInput && !this.isSwimming && (this.keys['ShiftLeft'] || this.keys['ShiftRight'] || joyMag > 0.97);
+    this.isSprinting = sprinting;
+    const maxStep = current.speed * this.waterSpeedFactor * (this.slowTimer > 0 ? 0.5 : 1) * (sprinting ? 1.45 : 1);
+    if (!this.moveVel) this.moveVel = new THREE.Vector3();
+    const rate = hasInput ? (this.isGrounded ? 12 : 6) : (this.isGrounded ? 16 : 2.5);
+    this.moveVel.lerp(wish.multiplyScalar(maxStep), Math.min(1, rate * delta));
+    const speedNow = this.moveVel.length();
+    const isMoving = speedNow > 0.012;
+    this.playerIsMoving = isMoving && (hasInput || speedNow > 0.05);
+
+    // Turn smoothly towards where we want to go
+    if (hasInput) {
+      const want = Math.atan2(this.moveVel.x, this.moveVel.z);
+      const diff = Math.atan2(Math.sin(want - this.playerGroup.rotation.y), Math.cos(want - this.playerGroup.rotation.y));
+      this.playerGroup.rotation.y += diff * Math.min(1, delta * 14);
+    }
 
     if (isMoving) {
-      const moveVec = new THREE.Vector3(moveX, 0, moveZ);
-      if (moveVec.length() > 1) moveVec.normalize();
-      
-      const camEuler = new THREE.Euler(0, this.camera.rotation.y, 0, 'YXZ');
-      moveVec.applyEuler(camEuler);
-
       const oldX = this.playerGroup.position.x;
       const oldZ = this.playerGroup.position.z;
       const playerRadius = 0.42;
       const playerY = this.playerGroup.position.y;
-      const moveStep = current.speed * dtFactor * this.waterSpeedFactor * (this.slowTimer > 0 ? 0.5 : 1);
+      const moveStep = speedNow * dtFactor;
 
-      // X-axis movement & collision
-      const nextX = oldX + moveVec.x * moveStep;
-      if (!this.checkWallCollision(nextX, oldZ, playerRadius, playerY) && Math.abs(nextX) <= 96) {
+      // X-axis movement & collision (sliding along walls)
+      const nextX = oldX + this.moveVel.x * dtFactor;
+      if (!this.checkWallCollision(nextX, oldZ, playerRadius, playerY) && this.inWorldBounds(nextX, oldZ)) {
         this.playerGroup.position.x = nextX;
+      } else {
+        this.moveVel.x = 0;
       }
 
       // Z-axis movement & collision
-      const nextZ = oldZ + moveVec.z * moveStep;
-      if (!this.checkWallCollision(this.playerGroup.position.x, nextZ, playerRadius, playerY) && Math.abs(nextZ) <= 96) {
+      const nextZ = oldZ + this.moveVel.z * dtFactor;
+      if (!this.checkWallCollision(this.playerGroup.position.x, nextZ, playerRadius, playerY) && this.inWorldBounds(this.playerGroup.position.x, nextZ)) {
         this.playerGroup.position.z = nextZ;
+      } else {
+        this.moveVel.z = 0;
       }
 
       // Bridge rails: keep the player on the deck while walking across
@@ -302,9 +331,6 @@ export const playerMethods = {
         }
       }
 
-      const targetAngle = Math.atan2(moveVec.x, moveVec.z);
-      this.playerGroup.rotation.y = targetAngle;
-
       this.playerDress.rotation.z = Math.sin(Date.now() * 0.015) * 0.04;
 
       if (this.isSwimming) {
@@ -318,8 +344,7 @@ export const playerMethods = {
     }
 
     // World boundary protection (Allows scaling the surrounding mountain peaks)
-    this.playerGroup.position.x = Math.max(-96, Math.min(96, this.playerGroup.position.x));
-    this.playerGroup.position.z = Math.max(-96, Math.min(96, this.playerGroup.position.z));
+    this.clampToWorld(this.playerGroup.position);
 
     // Vertical Physics
     const prevY = this.playerGroup.position.y;
@@ -411,6 +436,13 @@ export const playerMethods = {
     const feetDepth = waterY !== null && !bestPlatform ? waterY - this.playerGroup.position.y : 0;
     this.waterSpeedFactor = this.isSwimming ? 0.62 : (feetDepth > 0.35 ? 0.8 : 1);
 
+    if (this.isGrounded) this.airJumpUsed = false;
+    if (this.jumpSpin > 0) {
+      this.jumpSpin = Math.max(0, this.jumpSpin - delta * 2.4);
+      this.playerRig.group.rotation.y = (1 - this.jumpSpin) * Math.PI * 2;
+      if (this.jumpSpin === 0) this.playerRig.group.rotation.y = 0;
+    }
+
     // Jump Buffering check
     if (this.jumpBufferTimer > 0) {
       this.jumpBufferTimer -= delta;
@@ -495,6 +527,26 @@ export const playerMethods = {
     }
   },
 
+
+  // Third-person helper: while walking, the camera swings gently behind the sister
+  // (not while the player turns the camera, and not when walking towards the camera)
+  autoFollowCamera(delta) {
+    if (!this.camFollow || this.camDragging || !this.playerIsMoving) return;
+    if (performance.now() - this.lastCamInput < 1500) return;
+    const target = this.controls.target;
+    const cam = this.camera.position;
+    const ox = cam.x - target.x;
+    const oz = cam.z - target.z;
+    const yaw = Math.atan2(ox, oz);
+    const facing = this.playerGroup.rotation.y;
+    if (Math.cos(facing - yaw) > 0.35) return; // walking towards the camera
+    const diff = Math.atan2(Math.sin(facing + Math.PI - yaw), Math.cos(facing + Math.PI - yaw));
+    const step = diff * Math.min(1, delta * 1.6);
+    const c = Math.cos(step);
+    const s = Math.sin(step);
+    cam.x = target.x + ox * c + oz * s;
+    cam.z = target.z + oz * c - ox * s;
+  },
 
   updateHPBar() {
     const bar = document.getElementById('player-hp-bar');

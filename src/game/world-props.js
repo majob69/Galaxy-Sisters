@@ -2,77 +2,51 @@
 import * as THREE from 'three';
 import { bakeStaticGroup } from '../bake.js';
 import { addAnimeFace } from '../characters.js';
+import { snowAt } from '../biome.js';
 
 export const worldPropsMethods = {
 
-  createBlackPinkBarkTexture() {
+  // Brown bark with darker grooves and a few knots
+  createBarkTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = 128;
     canvas.height = 256;
     const ctx = canvas.getContext('2d');
-
-    ctx.fillStyle = '#120b16';
+    ctx.fillStyle = '#7a5235';
     ctx.fillRect(0, 0, 128, 256);
-
-    for (let i = 0; i < 40; i++) {
-      ctx.strokeStyle = i % 2 === 0 ? '#22142d' : '#08050c';
-      ctx.lineWidth = 1 + Math.random() * 2.5;
+    for (let i = 0; i < 46; i++) {
+      ctx.strokeStyle = i % 3 === 0 ? '#5a3a24' : (i % 3 === 1 ? '#8d6443' : '#4a2f1c');
+      ctx.lineWidth = 1 + Math.random() * 3;
       ctx.beginPath();
       const x = Math.random() * 128;
       ctx.moveTo(x, 0);
-      ctx.lineTo(x + (Math.random() - 0.5) * 10, 256);
+      ctx.bezierCurveTo(x + (Math.random() - 0.5) * 12, 90, x + (Math.random() - 0.5) * 12, 170, x + (Math.random() - 0.5) * 10, 256);
       ctx.stroke();
     }
-
-    const pinkTones = ['#ff2a85', '#ff70a6', '#ff4d94', '#ff85a1', '#f72585'];
-    for (let y = 15; y < 256; y += 32) {
-      const col = pinkTones[Math.floor(Math.random() * pinkTones.length)];
-      ctx.strokeStyle = col;
-      ctx.lineWidth = 4 + Math.random() * 4;
+    for (let k = 0; k < 4; k++) {
+      ctx.fillStyle = '#4a2f1c';
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.bezierCurveTo(35, y + 14, 85, y - 14, 128, y + 6);
-      ctx.stroke();
-
-      ctx.strokeStyle = '#ffc2d4';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(0, y - 2);
-      ctx.bezierCurveTo(35, y + 12, 85, y - 16, 128, y + 4);
-      ctx.stroke();
+      ctx.ellipse(Math.random() * 128, Math.random() * 256, 5 + Math.random() * 4, 8 + Math.random() * 5, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
-
     const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
     tex.repeat.set(1.5, 2);
     return tex;
   },
 
-
+  // Real-life trees: leafy broadleaf trees (some of them apple trees) and firs
   buildFoliage() {
-    const barkTexture = this.createBlackPinkBarkTexture();
-    const treeTrunkMat = new THREE.MeshLambertMaterial({
-      map: barkTexture,
-      flatShading: true
-    });
-    const pinkAccentMat = new THREE.MeshLambertMaterial({
-      color: 0xff3385,
-      emissive: 0x440022,
-      flatShading: true
-    });
-
-    const lam = (c) => new THREE.MeshLambertMaterial({ color: c });
-    const crownPalettes = [
-      [lam(0x9d4edd), lam(0xb565d8), lam(0x8a3fe0)], // violet
-      [lam(0xff9ecf), lam(0xffb8dc), lam(0xf27fbc)], // pink blossom
-      [lam(0xe6d8ff), lam(0xf4ecff), lam(0xd2bdfa)]  // lilac-white
-    ];
-    const blossomGeo = new THREE.IcosahedronGeometry(0.22, 0);
-    const blossomMats = [lam(0xffffff), lam(0xffe066), lam(0xff70a6)];
+    const bark = new THREE.MeshLambertMaterial({ map: this.createBarkTexture(), flatShading: true });
+    const leafMats = [0x4e9a3a, 0x5fae45, 0x3f8a33, 0x6bb84c, 0x55a03e].map(c => new THREE.MeshLambertMaterial({ color: c, flatShading: true }));
+    const firMats = [0x2f6b3a, 0x3a7d44, 0x2a5f33].map(c => new THREE.MeshLambertMaterial({ color: c, flatShading: true }));
     const forest = new THREE.Group();
 
     this.treeCanopies = [];
+    this.appleTrees = [];
+    const appleSpots = [];
 
     for (let i = 0; i < 42; i++) {
       const x = (Math.random() - 0.5) * 88;
@@ -86,65 +60,85 @@ export const worldPropsMethods = {
       if (this.treeCanopies.some(t => (t.x - x) ** 2 + (t.z - z) ** 2 < 4.8 * 4.8)) continue; // keep trunks apart
 
       const treeGroup = new THREE.Group();
-      const trunkHeight = 5.5 + Math.random() * 1.8;
-      const trunkTopRadius = 0.55 + Math.random() * 0.15;
-      const trunkBottomRadius = 0.95 + Math.random() * 0.25;
-
-      const trunkGeo = new THREE.CylinderGeometry(trunkTopRadius, trunkBottomRadius, trunkHeight, 8);
-      const trunk = new THREE.Mesh(trunkGeo, treeTrunkMat);
-      trunk.position.y = trunkHeight / 2;
-      trunk.castShadow = true;
-      trunk.receiveShadow = true;
-      treeGroup.add(trunk);
-
-      const rootRingGeo = new THREE.TorusGeometry(trunkBottomRadius * 0.95, 0.16, 6, 12);
-      const rootRing = new THREE.Mesh(rootRingGeo, pinkAccentMat);
-      rootRing.rotation.x = Math.PI / 2;
-      rootRing.position.y = 0.2;
-      treeGroup.add(rootRing);
-
-      const collarRingGeo = new THREE.TorusGeometry(trunkTopRadius * 1.05, 0.12, 6, 10);
-      const collarRing = new THREE.Mesh(collarRingGeo, pinkAccentMat);
-      collarRing.rotation.x = Math.PI / 2;
-      collarRing.position.y = trunkHeight * 0.88;
-      treeGroup.add(collarRing);
-
-      // Fluffy cloud crown: a soft dome of round puffs (purple, pink blossom or lilac-white)
-      const palette = crownPalettes[i % 7 < 4 ? 0 : (i % 7 < 6 ? 1 : 2)];
-      const mainCrownRadius = 3.2 + Math.random() * 0.8;
-      const crown = new THREE.Group();
-      crown.position.y = trunkHeight + 1.0;
-      treeGroup.add(crown);
-      const core = new THREE.Mesh(new THREE.IcosahedronGeometry(mainCrownRadius, 1), palette[0]);
-      core.scale.set(1, 0.82, 1);
-      crown.add(core);
-      const puffCount = 8;
-      for (let p = 0; p < puffCount; p++) {
-        const ang = (p / puffCount) * Math.PI * 2 + Math.random() * 0.4;
-        const ring = mainCrownRadius * (0.72 + Math.random() * 0.15);
-        const puffR = mainCrownRadius * (0.42 + Math.random() * 0.14);
-        const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(puffR, 1), palette[(p % 2) + 1]);
-        puff.position.set(Math.cos(ang) * ring, (Math.random() - 0.35) * mainCrownRadius * 0.5, Math.sin(ang) * ring);
-        crown.add(puff);
-      }
-      const top = new THREE.Mesh(new THREE.IcosahedronGeometry(mainCrownRadius * 0.55, 1), palette[1]);
-      top.position.y = mainCrownRadius * 0.62;
-      crown.add(top);
-      // Little blossoms dotting the crown
-      for (let d = 0; d < 10; d++) {
-        const u = Math.random() * Math.PI * 2;
-        const v = Math.random() * 0.9;
-        const blossom = new THREE.Mesh(blossomGeo, blossomMats[(i + d) % blossomMats.length]);
-        blossom.position.set(
-          Math.cos(u) * Math.cos(v) * mainCrownRadius * 1.02,
-          Math.sin(v) * mainCrownRadius * 0.85,
-          Math.sin(u) * Math.cos(v) * mainCrownRadius * 1.02
-        );
-        crown.add(blossom);
-      }
-
+      const isFir = i % 4 === 1;
+      const isApple = !isFir && i % 3 === 0;
       const ty = this.getTerrainHeight(x, z);
+      let trunkHeight;
+      let trunkBottomRadius;
+      let crownY;
+      let crownRadius;
+
+      if (isFir) {
+        trunkHeight = 2.4 + Math.random() * 0.6;
+        trunkBottomRadius = 0.42;
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, trunkBottomRadius, trunkHeight, 7), bark);
+        trunk.position.y = trunkHeight / 2;
+        trunk.castShadow = true;
+        treeGroup.add(trunk);
+        const tiers = 4;
+        const baseR = 2.7 + Math.random() * 0.5;
+        for (let t = 0; t < tiers; t++) {
+          const r = baseR * (1 - t * 0.22);
+          const h = 2.6 - t * 0.25;
+          const cone = new THREE.Mesh(new THREE.ConeGeometry(r, h, 8), firMats[(i + t) % firMats.length]);
+          cone.position.y = trunkHeight + 0.6 + t * 1.45;
+          cone.rotation.y = Math.random() * Math.PI;
+          cone.castShadow = true;
+          treeGroup.add(cone);
+        }
+        crownY = trunkHeight + 3;
+        crownRadius = baseR;
+      } else {
+        trunkHeight = 3.8 + Math.random() * 1.4;
+        trunkBottomRadius = 0.48 + Math.random() * 0.1;
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, trunkBottomRadius, trunkHeight, 8), bark);
+        trunk.position.y = trunkHeight / 2;
+        trunk.castShadow = true;
+        trunk.receiveShadow = true;
+        treeGroup.add(trunk);
+        // two branches reaching into the crown
+        [-1, 1].forEach(side => {
+          const br = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.18, 2.0, 6), bark);
+          br.position.set(side * 0.55, trunkHeight * 0.78, 0.1 * side);
+          br.rotation.z = -side * 0.75;
+          treeGroup.add(br);
+        });
+        crownRadius = 2.6 + Math.random() * 0.6;
+        crownY = trunkHeight + 1.2;
+        const crown = new THREE.Group();
+        crown.position.y = crownY;
+        treeGroup.add(crown);
+        const clusters = 7;
+        for (let p = 0; p < clusters; p++) {
+          const ang = (p / clusters) * Math.PI * 2 + Math.random() * 0.5;
+          const ring = p === 0 ? 0 : crownRadius * (0.45 + Math.random() * 0.2);
+          const r = crownRadius * (p === 0 ? 0.85 : 0.55 + Math.random() * 0.15);
+          const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 1), leafMats[(i + p) % leafMats.length]);
+          leaf.position.set(Math.cos(ang) * ring, p === 0 ? 0.2 : (Math.random() - 0.3) * crownRadius * 0.6, Math.sin(ang) * ring);
+          leaf.scale.y = 0.85;
+          leaf.castShadow = true;
+          crown.add(leaf);
+        }
+        if (isApple) {
+          const tree = { x, z, apples: [] };
+          for (let k = 0; k < 8; k++) {
+            const u = (k / 8) * Math.PI * 2 + Math.random() * 0.4;
+            const v = -0.25 + Math.random() * 0.75;
+            const rr = crownRadius * 0.98;
+            const pos = new THREE.Vector3(
+              x + Math.cos(u) * Math.cos(v) * rr,
+              ty + crownY + Math.sin(v) * rr * 0.8,
+              z + Math.sin(u) * Math.cos(v) * rr
+            );
+            tree.apples.push({ pos, ripe: Math.random() < 0.75, timer: 30 + Math.random() * 120, index: appleSpots.length });
+            appleSpots.push(pos);
+          }
+          this.appleTrees.push(tree);
+        }
+      }
+
       treeGroup.position.set(x, ty, z);
+      treeGroup.rotation.y = Math.random() * Math.PI * 2;
       forest.add(treeGroup);
 
       this.colliders.push({
@@ -159,15 +153,72 @@ export const worldPropsMethods = {
       this.treeCanopies.push({
         x: x,
         z: z,
-        y: ty + trunkHeight + 2.0,
-        radius: mainCrownRadius + 1.0
+        y: ty + crownY + 0.8,
+        radius: crownRadius + 1.0,
+        fir: isFir
       });
     }
 
     // All trees merged into a handful of draw calls
     this.scene.add(bakeStaticGroup(forest));
 
+    // Apples: one instanced mesh; picked apples shrink to nothing until they regrow
+    if (appleSpots.length) {
+      const appleMat = new THREE.MeshLambertMaterial({ color: 0xd62828, emissive: 0x3a0606 });
+      this.appleMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.24, 10, 8), appleMat, appleSpots.length);
+      this.appleMesh.castShadow = true;
+      this.appleDummy = new THREE.Object3D();
+      this.appleTrees.forEach(t => t.apples.forEach(a => this.setAppleVisible(a, a.ripe)));
+      this.scene.add(this.appleMesh);
+    }
+
     this.createFallingTreePetals();
+  },
+
+  setAppleVisible(apple, on) {
+    const d = this.appleDummy;
+    d.position.copy(apple.pos);
+    d.scale.setScalar(on ? 1 : 0.0001);
+    d.updateMatrix();
+    this.appleMesh.setMatrixAt(apple.index, d.matrix);
+    this.appleMesh.instanceMatrix.needsUpdate = true;
+  },
+
+  // Ripe apples regrow a while after they were picked
+  updateApples(delta) {
+    if (!this.appleTrees) return;
+    this.appleTrees.forEach(t => t.apples.forEach(a => {
+      if (a.ripe) return;
+      a.timer -= delta;
+      if (a.timer <= 0) {
+        a.ripe = true;
+        this.setAppleVisible(a, true);
+      }
+    }));
+  },
+
+  // Nearest apple tree with ripe apples (for the interact key)
+  nearestAppleTree(maxDist = 3.6) {
+    if (!this.appleTrees) return null;
+    const p = this.playerGroup.position;
+    let best = null;
+    let bd = maxDist;
+    this.appleTrees.forEach(t => {
+      const d = Math.hypot(t.x - p.x, t.z - p.z);
+      if (d < bd && t.apples.some(a => a.ripe)) { bd = d; best = t; }
+    });
+    return best ? { tree: best, dist: bd } : null;
+  },
+
+  pickApple(tree) {
+    const apple = tree.apples.find(a => a.ripe);
+    if (!apple) return false;
+    apple.ripe = false;
+    apple.timer = 90 + Math.random() * 90;
+    this.setAppleVisible(apple, false);
+    this.fx.burst(apple.pos.clone(), [new THREE.Color(2.2, 0.5, 0.4), new THREE.Color(0.8, 1.8, 0.6)], 10, { speed: 1.5, up: 0.5, size: 0.25, gravity: 3 });
+    this.inventory.add('apple', 1);
+    return true;
   },
 
 
@@ -266,6 +317,7 @@ export const worldPropsMethods = {
         if (x >= 11 && x <= 33 && z >= -35 && z <= 0.5) continue; // temple
         if (x >= -18 && x <= -10 && z >= -12 && z <= -4) continue; // hut
         if (this.isNearWater(x, z, 0.25) || this.isOnBridge(x, z, 0.2)) continue; // water & bridges
+        if (snowAt(x, z) > 0.4) continue; // snow biome
         if (this.getTerrainSlope(x, z) > 0.3 || this.getTerrainHeight(x, z) > 12) continue; // rocky slopes
 
         const y = this.getTerrainHeight(x, z);
@@ -321,6 +373,7 @@ export const worldPropsMethods = {
       if (fx >= 11 && fx <= 33 && fz >= -35 && fz <= 0.5) continue;
       if (fx >= -18 && fx <= -10 && fz >= -12 && fz <= -4) continue;
       if (this.isNearWater(fx, fz, 0.4) || this.isOnBridge(fx, fz, 0.2)) continue;
+      if (snowAt(fx, fz) > 0.4) continue;
       if (this.getTerrainSlope(fx, fz) > 0.3 || this.getTerrainHeight(fx, fz) > 12) continue;
 
       const fy = this.getTerrainHeight(fx, fz);
@@ -449,10 +502,10 @@ export const worldPropsMethods = {
     this.treePetalsData = [];
     if (!this.treeCanopies || this.treeCanopies.length === 0) return;
 
-    const count = 400;
+    const count = 160;
     const petalGeo = new THREE.PlaneGeometry(0.24, 0.3);
     const petalMat = new THREE.MeshBasicMaterial({
-      color: 0xff99c8,
+      color: 0xffffff,
       side: THREE.DoubleSide,
       transparent: true,
       opacity: 0.85
@@ -462,9 +515,9 @@ export const worldPropsMethods = {
     const dummy = new THREE.Object3D();
 
     const petalColors = [
-      new THREE.Color(0xff70a6), new THREE.Color(0xff99c8),
-      new THREE.Color(0xf72585), new THREE.Color(0xc77dff),
-      new THREE.Color(0x9d4edd), new THREE.Color(0xd8b4fe)
+      new THREE.Color(0x6bb84c), new THREE.Color(0x8cc63f),
+      new THREE.Color(0xc9b037), new THREE.Color(0xd98c32),
+      new THREE.Color(0x5fae45), new THREE.Color(0xa7c957)
     ];
 
     for (let i = 0; i < count; i++) {

@@ -9,6 +9,7 @@ export const LANDMARKS = [
   { x: 22, z: -20, r: 20 },    // temple
   { x: -25, z: 15, r: 12 },    // obby
   { x: 32, z: 30, r: 19 },     // Vortox' arena
+  { x: 34, z: 32, r: 26 },     // snow biome
   { x: -4.5, z: 0.5, r: 9 },   // pond
   { x: -2, z: 44, r: 11 },     // south lake
   // slime packs (see spawnMinorSlimes)

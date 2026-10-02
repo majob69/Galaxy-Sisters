@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { NetClient } from './network.js';
 import { SISTER_ICONS } from './remote.js';
 import { sfx } from './game/shared.js';
+import { ITEMS } from './inventory.js';
 
 const STATE_INTERVAL = 1 / 15;
 const BOSS_INTERVAL = 1 / 10;
@@ -106,6 +107,16 @@ export class CoopSession {
         if (m.e === '🆘') g.showToast(`🆘 ${p.name} braucht Hilfe!`, 3500);
       },
       ping: (m) => this.addPing(m.id, m.x, m.z),
+      gift: (m) => {
+        const it = ITEMS[m.item];
+        const p = g.remotes.get(m.id);
+        if (!it) return;
+        const n = Math.max(1, Math.min(20, m.n | 0));
+        g.inventory.add(m.item, n, true);
+        g.showToast(`🎁 ${p ? p.name : 'Eine Freundin'} schenkt dir ${n}× ${it.icon} ${it.name}!`, 4500);
+        sfx.collect();
+      },
+      sleep: () => g.houses.sleep(null, true),
       chat: (m) => {
         const p = g.remotes.get(m.id);
         if (!p) return;
@@ -267,6 +278,47 @@ export class CoopSession {
     this.chatLog.appendChild(line);
     while (this.chatLog.children.length > 6) this.chatLog.firstChild.remove();
     setTimeout(() => line.remove(), 14000);
+  }
+
+  // ---------- Gifts: give one item from the bag to a friend ----------
+  openGift(itemId) {
+    const g = this.game;
+    const it = ITEMS[itemId];
+    if (!it || !this.active) return;
+    const friends = g.remotes.list;
+    if (!friends.length) { g.showToast('Niemand da, dem du etwas schenken kannst.', 2500); return; }
+    if (!this.giftModal) {
+      const modal = document.createElement('div');
+      modal.className = 'album-modal';
+      modal.id = 'gift-modal';
+      const card = document.createElement('div');
+      card.className = 'album-card';
+      modal.appendChild(card);
+      modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('open'); });
+      document.body.appendChild(modal);
+      this.giftModal = modal;
+      this.giftCard = card;
+    }
+    const card = this.giftCard;
+    card.textContent = '';
+    const title = document.createElement('div');
+    title.className = 'album-title';
+    title.textContent = `🎁 ${it.icon} ${it.name} verschenken an …`;
+    card.appendChild(title);
+    friends.forEach(p => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'shop-buy clickable gift-friend';
+      b.textContent = `${SISTER_ICONS[p.sister]} ${p.name}`;
+      b.addEventListener('click', () => {
+        if (!g.inventory.remove(itemId, 1)) return;
+        this.send({ t: 'gift', to: p.id, item: itemId, n: 1 });
+        g.showToast(`🎁 Du schenkst ${p.name}: ${it.icon} ${it.name}`, 3000);
+        this.giftModal.classList.remove('open');
+      });
+      card.appendChild(b);
+    });
+    this.giftModal.classList.add('open');
   }
 
   // ---------- Emote wheel (button in the roster, key T) ----------

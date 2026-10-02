@@ -10,7 +10,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Galaxy Sisters - 3D Kawaii Adventure</title>
-  <link rel="stylesheet" href="style.css?v=5.0">
+  <link rel="stylesheet" href="style.css?v=7.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700;800&display=swap" rel="stylesheet">
@@ -86,12 +86,14 @@
             <table class="howto-table">
               <tr><th></th><th>PC</th><th>Handy / Tablet</th></tr>
               <tr><td>Laufen</td><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / Pfeile</td><td>Joystick links</td></tr>
-              <tr><td>Springen</td><td><kbd>Leertaste</kbd></td><td>Knopf „Sprung“</td></tr>
+              <tr><td>Springen</td><td><kbd>Leertaste</kbd> – zweimal drücken = höherer Doppelsprung</td><td>Knopf „Sprung“ (zweimal)</td></tr>
+              <tr><td>Rennen</td><td><kbd>Shift</kbd> gedrückt halten</td><td>Joystick ganz nach außen</td></tr>
               <tr><td>Kräfte</td><td><kbd>E</kbd> und <kbd>R</kbd></td><td>Knöpfe P1 / P2</td></tr>
               <tr><td>Schwester wechseln</td><td><kbd>1</kbd>–<kbd>4</kbd> oder <kbd>Q</kbd></td><td>Symbole unten</td></tr>
               <tr><td>Kamera</td><td>Maus ziehen, Mausrad</td><td>Wischen, mit 2 Fingern zoomen</td></tr>
               <tr><td>Emotes &amp; Ping</td><td><kbd>T</kbd></td><td>💬-Knopf im Koop-Fenster</td></tr>
-              <tr><td>Angeln</td><td><kbd>F</kbd> am Ufer</td><td>🎣-Knopf am Ufer</td></tr>
+              <tr><td>Aktion</td><td><kbd>F</kbd>: Äpfel pflücken, sprechen, kaufen, schlafen, Truhen, angeln, bauen</td><td>runder Aktionsknopf rechts</td></tr>
+              <tr><td>Inventar</td><td><kbd>I</kbd></td><td>🎒-Knopf unten</td></tr>
               <tr><td>Chat</td><td><kbd>Enter</kbd> (nur im Koop)</td><td>⌨️-Knopf im Koop-Fenster</td></tr>
             </table>
 
@@ -112,10 +114,21 @@
               <li>Wasser ist schwimmbar. Im Quest-Feld kannst du auch die Tageszeit weiterschalten und die Grafik wählen.</li>
             </ul>
 
+            <h3>🪙 Sterntaler, Markt &amp; Häuser</h3>
+            <ul>
+              <li>Für Aufgaben, Rätsel, Bosse und Truhen bekommst du <b>Sterntaler</b>. Auf dem <b>Markt</b> gibt es dafür Essen, Baumaterial und Rätsel-Helfer (Sternen-Gewicht, Elementkerze, Frostlaterne).</li>
+              <li>In die <b>Häuser</b> kannst du hineingehen. Am Abend und in der Nacht kannst du im <b>Bett</b> schlafen (F oder anklicken) – dann ist es Morgen und du bist geheilt. Die <b>Truhe</b> füllt sich jeden Tag neu.</li>
+              <li>Mit 12 Holz, 8 Stein, 3 Glas, 2 Seil und 2 Stoff baust du am <b>Bauplatz</b> dein eigenes Haus mit Vorratstruhe. Freunde können dir Material schenken (🎁 im Inventar).</li>
+              <li>Überall wohnen <b>Tiere</b> (💬 über dem Kopf) – sprich mit ihnen, sie verraten Tipps zu den Rätseln und Bossen.</li>
+              <li>Vortox lebt im <b>Schneebiom</b>. Betrittst du eine Boss-Arena, wird sie versiegelt, bis der Boss besiegt ist.</li>
+              <li>Wer <b>alle Aufgaben</b> erfüllt, öffnet das Portal zum <b>Zauberwald</b> – einer geheimnisvollen dritten Welt.</li>
+            </ul>
+
             <h3>🧭 Entdecken &amp; Wetter</h3>
             <ul>
               <li>Im Tal sind <b>6 Truhen</b>, <b>Wunderblumen</b> und <b>Leuchtpilze</b> versteckt (es funkelt in der Nähe). Alles landet im <b>Sammelalbum</b> (📖 im Quest-Feld).</li>
-              <li>Am Ufer kannst du <b>angeln</b>. Manche Fische beißen nur nachts, andere nur bei Regen.</li>
+              <li>Am Ufer kannst du <b>angeln</b> – im Wasser schwimmen bunte Fische. Gefangene Fische kannst du essen. Manche Arten beißen nur nachts, andere nur bei Regen.</li>
+              <li>An manchen Bäumen wachsen <b>Äpfel</b> nach. 🎵 Im Quest-Feld wählst du dein Lieblings-Tageslied.</li>
               <li>Das Wetter wechselt: Regen, Nebel und Gewitter. Bei Frost-Angriffen wirst du kurz langsamer.</li>
               <li>Das Spiel <b>speichert automatisch</b>. Im Quest-Feld kannst du den Stand als Datei sichern und laden (💾 / 📂) oder ein neues Spiel beginnen.</li>
             </ul>
@@ -156,6 +169,7 @@
             <span class="lvl-badge" id="lvl-badge">Lv 1</span>
             <div class="xp-bar"><div class="xp-fill" id="xp-fill"></div></div>
             <span class="weather-badge" id="weather-badge">☀️ Klar</span>
+            <span class="weather-badge coin-badge" id="coin-badge">🪙 0</span>
           </div>
         </div>
       </div>
@@ -189,6 +203,8 @@
           <button class="sister-btn clickable" id="btn-save-reset" style="font-size:0.75rem; padding: 4px 10px;" title="Alles zurücksetzen">🗑️ Neues Spiel</button>
           <input type="file" id="save-file" accept=".json,application/json" hidden>
           <button class="sister-btn clickable" id="btn-album" style="font-size:0.75rem; padding: 4px 10px;">📖 Sammelalbum</button>
+          <button class="sister-btn clickable" id="btn-camfollow" style="font-size:0.75rem; padding: 4px 10px;" title="Kamera schwenkt beim Laufen hinter die Figur">🎥 Kamera: folgt</button>
+          <button class="sister-btn clickable" id="btn-music" style="font-size:0.75rem; padding: 4px 10px;" title="Tages-Lied wählen">🎵 Lied</button>
           <button class="sister-btn clickable" id="btn-wardrobe" style="font-size:0.75rem; padding: 4px 10px;" title="Outfits schaltest du mit Quests frei">👗 Outfit: Standard</button>
           <button class="sister-btn clickable" id="btn-daytime" style="font-size:0.75rem; padding: 4px 10px;" title="Zur nächsten Tageszeit springen">☀️ Tag ⏩</button>
           <button class="sister-btn clickable touch-only" id="btn-fullscreen" style="font-size:0.75rem; padding: 4px 10px;">⛶ Vollbild</button>
@@ -232,7 +248,10 @@
     </div>
 
     <div id="frost-overlay" class="frost-overlay"></div>
-    <button id="btn-fish" class="fish-btn clickable" type="button">🎣 Angeln</button>
+    <div id="sleep-overlay" class="sleep-overlay"><div>💤 Schlaf gut …</div></div>
+    <div id="travel-overlay" class="sleep-overlay travel-overlay"><div>🌀 …</div></div>
+    <button id="btn-interact" class="fish-btn interact-btn clickable" type="button"></button>
+    <div id="interact-hint" class="interact-hint"></div>
 
     <!-- Knocked out: wait for a friend (or the start point) -->
     <div id="ko-overlay" class="ko-overlay">
@@ -293,6 +312,9 @@
         <button class="sister-btn clickable" data-sister="3" type="button">
           <span class="hotkey-badge">4</span><span class="sister-icon">🪐</span><span class="sister-name">Planeta</span>
         </button>
+        <button class="sister-btn bag-btn clickable" id="btn-inventory" type="button" title="Inventar [I]">
+          <span class="hotkey-badge">I</span><span class="sister-icon">🎒</span><span class="sister-name">Inventar</span>
+        </button>
       </div>
     </div>
   </div>
@@ -319,6 +341,6 @@
   </div>
 
   <!-- Main Game Script -->
-  <script type="module" src="src/main.js?v=6.0"></script>
+  <script type="module" src="src/main.js?v=8.0"></script>
 </body>
 </html>

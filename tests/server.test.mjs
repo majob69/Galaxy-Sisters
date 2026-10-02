@@ -152,3 +152,21 @@ test('static files: game files are served, server code and traversal are not', a
   assert.equal(await get('/..%2fpackage.json'), 404);
   assert.equal(await get('/src/../package.json'), 404);
 });
+
+test('gifts go to exactly one friend, sleep is shared with the room', async () => {
+  const a = await open('room=SRV8&name=A');
+  const b = await open('room=SRV8&name=B');
+  const c = await open('room=SRV8&name=C');
+  await wait(150);
+  const bId = b.msgs[0].id;
+  a.send({ t: 'gift', to: bId, item: 'wood<script>', n: 500 });
+  a.send({ t: 'gift', to: a.msgs[0].id, item: 'apple', n: 1 }); // not to yourself
+  a.send({ t: 'sleep' });
+  await wait(200);
+  assert.deepEqual(b.of('gift')[0], { t: 'gift', id: a.msgs[0].id, item: 'woodscript', n: 20 });
+  assert.equal(c.of('gift').length, 0);
+  assert.equal(a.of('gift').length, 0);
+  assert.equal(b.of('sleep').length, 1);
+  assert.equal(c.of('sleep').length, 1);
+  [a, b, c].forEach((x) => x.ws.close());
+});

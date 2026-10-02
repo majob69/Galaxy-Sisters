@@ -1,5 +1,5 @@
 // Shared game constants: audio engine, sister definitions, seeded world RNG
-import { AudioEngine } from '../audio.js';
+import { AudioEngine, DAY_SONGS } from '../audio.js';
 
 // Deterministic PRNG: the world (trees, flowers, stones ...) looks the same on every visit
 export const WORLD_SEED = 20260929;
@@ -13,6 +13,11 @@ export function mulberry32(seed) {
 }
 
 export const sfx = new AudioEngine();
+try {
+  const saved = localStorage.getItem('gs-song');
+  if (DAY_SONGS.some(s => s.key === saved)) sfx.daySong = saved;
+} catch (e) { /* storage unavailable */ }
+export { DAY_SONGS };
 
 export const SISTERS = [
   {
@@ -29,12 +34,12 @@ export const SISTERS = [
     ability1: {
       name: "Mondschild",
       icon: "🛡️",
-      cooldown: 7.0
+      cooldown: 4.0
     },
     ability2: {
       name: "Heilung",
       icon: "💚",
-      cooldown: 8.0
+      cooldown: 5.0
     }
   },
   {
@@ -51,12 +56,12 @@ export const SISTERS = [
     ability1: {
       name: "Sternen-Bogen",
       icon: "🏹",
-      cooldown: 2.5
+      cooldown: 1.5
     },
     ability2: {
       name: "Sternen-Dash",
       icon: "⚡",
-      cooldown: 4.0
+      cooldown: 2.5
     }
   },
   {
@@ -73,12 +78,12 @@ export const SISTERS = [
     ability1: {
       name: "Supernova",
       icon: "💥",
-      cooldown: 5.0
+      cooldown: 3.0
     },
     ability2: {
       name: "Versteinern",
       icon: "🪨",
-      cooldown: 9.0
+      cooldown: 5.5
     }
   },
   {
@@ -95,12 +100,12 @@ export const SISTERS = [
     ability1: {
       name: "Planeten-Ringe",
       icon: "🪐",
-      cooldown: 5.5
+      cooldown: 3.0
     },
     ability2: {
       name: "Unsichtbar",
       icon: "👻",
-      cooldown: 8.5
+      cooldown: 5.0
     }
   }
 ];
