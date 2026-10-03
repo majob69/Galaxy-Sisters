@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#1a1528">
+  <title>Galaxy Sisters – Figuren in 3D</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --accent: #b8c0ff;
+      --glass: rgba(24, 16, 44, 0.72);
+      --line: rgba(255, 255, 255, 0.14);
+      --text: #f4efff;
+      --muted: #b9add6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #140e22; color: var(--text); font-family: 'Quicksand', 'Segoe UI', sans-serif; }
+    #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+    .ui { position: fixed; inset: 0; pointer-events: none; display: flex; flex-direction: column; padding: max(12px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left)); gap: 12px; }
+    .glass { background: var(--glass); border: 1.5px solid var(--line); border-radius: 20px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); }
+    .on { pointer-events: auto; }
+    button { font-family: inherit; color: inherit; cursor: pointer; }
+
+    header { display: flex; align-items: center; gap: 14px; padding: 10px 14px; flex-wrap: wrap; }
+    .back { border: 1.5px solid var(--line); background: rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 8px 12px; font-weight: 800; font-size: 0.85rem; text-decoration: none; color: var(--text); }
+    .badge { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 1.5rem; background: radial-gradient(circle, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0.05)); border: 2px solid var(--accent); box-shadow: 0 0 18px var(--accent); }
+    .who { flex: 1; min-width: 180px; }
+    .who h1 { font-size: 1.35rem; font-weight: 800; line-height: 1.1; }
+    .who h1 span { color: var(--accent); }
+    .who p { font-size: 0.78rem; color: var(--muted); font-weight: 700; margin-top: 2px; }
+    .tabs, .sisters { display: flex; gap: 6px; flex-wrap: wrap; }
+    .tab, .sis { border: 1.5px solid var(--line); background: rgba(255, 255, 255, 0.07); border-radius: 14px; padding: 8px 12px; font-weight: 800; font-size: 0.82rem; }
+    .tab.active, .sis.active { background: var(--accent); color: #1c1230; border-color: transparent; box-shadow: 0 0 16px var(--accent); }
+
+    main { flex: 1; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; min-height: 0; }
+    aside { width: 270px; max-height: 100%; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+    .title { font-size: 0.76rem; font-weight: 800; letter-spacing: 0.6px; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .btn { border: 1.5px solid var(--line); background: rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 9px 6px; font-weight: 800; font-size: 0.78rem; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .btn .e { font-size: 1.3rem; }
+    .btn.active { border-color: var(--accent); background: rgba(255, 255, 255, 0.16); box-shadow: inset 0 0 0 1px var(--accent); }
+    .row { display: flex; gap: 6px; }
+    .row .btn { flex: 1; flex-direction: row; justify-content: center; gap: 6px; }
+    .note { font-size: 0.72rem; color: var(--muted); line-height: 1.4; border-top: 1px solid var(--line); padding-top: 10px; }
+
+    .portrait { position: relative; height: 170px; border-radius: 16px; overflow: hidden; border: 2px solid var(--accent); }
+    .portrait img { width: 100%; height: 100%; object-fit: cover; transition: object-position 0.4s ease; }
+    .portrait .tag { position: absolute; left: 8px; top: 8px; background: rgba(20, 12, 40, 0.8); border-radius: 10px; padding: 2px 8px; font-size: 0.68rem; font-weight: 800; }
+    .facts { list-style: none; display: flex; flex-direction: column; gap: 7px; font-size: 0.8rem; }
+    .facts li { display: flex; gap: 8px; line-height: 1.3; }
+    .facts li b { color: var(--accent); min-width: 92px; }
+    .facts li div { flex: 1; }
+    .bar { height: 7px; border-radius: 4px; background: rgba(0, 0, 0, 0.4); overflow: hidden; margin-top: 4px; }
+    .bar i { display: block; height: 100%; background: var(--accent); }
+    .outfits { display: flex; gap: 6px; flex-wrap: wrap; }
+    .outfits .btn { flex: 1; min-width: 70px; font-size: 0.72rem; }
+
+    footer { display: flex; justify-content: center; }
+    .hint { padding: 8px 14px; font-size: 0.78rem; color: var(--muted); font-weight: 700; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    .hud { display: none; padding: 8px 14px; font-weight: 800; font-size: 0.9rem; gap: 14px; align-items: center; }
+    .hud .kbd { display: inline-block; padding: 0 6px; border-radius: 5px; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--line); margin: 0 1px; }
+    .touch { position: fixed; bottom: max(18px, env(safe-area-inset-bottom)); display: none; width: 84px; height: 84px; border-radius: 50%; background: rgba(255, 255, 255, 0.14); border: 2px solid rgba(255, 255, 255, 0.4); font-size: 2rem; place-items: center; touch-action: none; pointer-events: auto; }
+    #t-joy { left: max(18px, env(safe-area-inset-left)); }
+    #t-jump { right: max(18px, env(safe-area-inset-right)); }
+    body.playing aside { visibility: hidden; }
+    @media (hover: none), (pointer: coarse) {
+      body.playing .touch-on { display: grid; }
+    }
+
+    .mobile-only { display: none !important; }
+    @media (max-width: 860px), (max-height: 520px) {
+      .ui { gap: 8px; }
+      header { padding: 6px 10px; gap: 8px; }
+      .badge { width: 34px; height: 34px; font-size: 1.1rem; }
+      .who { min-width: 120px; }
+      .who h1 { font-size: 1rem; }
+      .who p { display: none; }
+      .tab, .sis { padding: 5px 9px; font-size: 0.74rem; }
+      .back { padding: 5px 9px; font-size: 0.74rem; }
+      main { flex-direction: column; justify-content: flex-end; }
+      aside { width: 100%; max-height: 30vh; padding: 8px 10px; gap: 10px; }
+      .grid { grid-template-columns: repeat(4, 1fr); }
+      .btn { padding: 5px 4px; font-size: 0.7rem; }
+      .btn .e { font-size: 1rem; }
+      .title { margin-bottom: 4px; }
+      .note { display: none; }
+      #facts-panel { display: none; }
+      body.show-facts #facts-panel { display: flex; }
+      body.show-facts #controls-panel { display: none; }
+      body.hide-panels aside { display: none !important; }
+      .portrait { height: 90px; }
+      footer .hint { display: none !important; }
+      .mobile-only { display: inline-flex !important; }
+    }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="view"></canvas>
+  <div class="ui">
+    <header class="glass on">
+      <a class="back" href="index.html">◀ Zum Spiel</a>
+      <div class="badge" id="badge">🌙</div>
+      <div class="who">
+        <h1 id="name">Luna <span>✦ Mond-Wächterin</span></h1>
+        <p id="title">Spielfigur in 3D</p>
+      </div>
+      <div class="sisters" id="sisters"></div>
+      <div class="tabs">
+        <button class="tab active" id="mode-inspect" type="button">🔍 3D-Inspektor</button>
+        <button class="tab" id="mode-play" type="button">🎮 Spiel-Modus</button>
+        <button class="tab mobile-only" id="toggle-facts" type="button">📋 Steckbrief</button>
+        <button class="tab mobile-only" id="toggle-panels" type="button">🙈 Menü</button>
+      </div>
+    </header>
+
+    <main>
+      <aside class="glass on" id="controls-panel">
+        <div>
+          <div class="title">🎬 Animationen</div>
+          <div class="grid" id="anims">
+            <button class="btn active" data-anim="idle" type="button"><span class="e">🫧</span>Stehen</button>
+            <button class="btn" data-anim="walk" type="button"><span class="e">🏃</span>Laufen</button>
+            <button class="btn" data-anim="jump" type="button"><span class="e">🦘</span>Hüpfen</button>
+            <button class="btn" data-anim="wave" type="button"><span class="e">👋</span>Winken</button>
+            <button class="btn" data-anim="shy" type="button"><span class="e">🙈</span>Schüchtern</button>
+            <button class="btn" data-anim="magic" type="button"><span class="e">🪄</span>Zauber</button>
+            <button class="btn" data-anim="swim" type="button"><span class="e">🏊</span>Schwimmen</button>
+            <button class="btn" data-anim="dance" type="button"><span class="e">💃</span>Tanzen</button>
+          </div>
+        </div>
+        <div>
+          <div class="title">👗 Outfit</div>
+          <div class="outfits" id="outfits"></div>
+        </div>
+        <div>
+          <div class="title">💡 Atmosphäre &amp; Licht</div>
+          <div class="grid4" id="lights">
+            <button class="btn active" data-light="sunset" type="button"><span class="e">🌅</span>Abend</button>
+            <button class="btn" data-light="day" type="button"><span class="e">☀️</span>Tag</button>
+            <button class="btn" data-light="night" type="button"><span class="e">🌌</span>Nacht</button>
+            <button class="btn" data-light="neon" type="button"><span class="e">🔮</span>Neon</button>
+          </div>
+        </div>
+        <div>
+          <div class="title">⚙️ Kamera &amp; Ansicht</div>
+          <div class="row">
+            <button class="btn" id="btn-rotate" type="button">🔄 360°</button>
+            <button class="btn" id="btn-wire" type="button">📐 Gitter</button>
+          </div>
+          <div class="row" style="margin-top: 6px;">
+            <button class="btn" id="btn-center" type="button">🎯 Kamera zentrieren</button>
+          </div>
+        </div>
+        <div class="note">💡 Die Augen folgen deinem Cursor. Ziehen dreht die Figur, Mausrad oder zwei Finger zoomen. Klick auf die Figur – sie winkt dir zu!</div>
+      </aside>
+
+      <aside class="glass on" id="facts-panel">
+        <div>
+          <div class="title">🖼️ Vorlage vs. 3D-Modell</div>
+          <div class="portrait"><span class="tag">Intro-Bild</span><img id="portrait" src="public/intro.jpg" alt="Die vier Galaxy Sisters" onerror="this.onerror=null;this.src='intro.jpg';"></div>
+        </div>
+        <div>
+          <div class="title">📋 Steckbrief</div>
+          <ul class="facts" id="facts"></ul>
+        </div>
+      </aside>
+    </main>
+
+    <footer>
+      <div class="hint glass on" id="hint"><span>🖱️ <b>Ziehen:</b> drehen</span><span>•</span><span><b>Mausrad:</b> Zoom</span><span>•</span><span><b>Touch:</b> wischen &amp; zwei Finger</span><span>•</span><span><b>1–4:</b> Schwester wechseln</span></div>
+      <div class="hud glass on" id="hud">⭐ Sterne: <span id="stars">0</span> / 12 <span style="color: var(--muted); font-weight: 700;"><span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span> laufen · <span class="kbd">Leertaste</span> springen (zweimal = Doppelsprung) · <span class="kbd">E</span> zaubern</span></div>
+    </footer>
+  </div>
+  <div class="touch touch-on" id="t-joy">🕹️</div>
+  <div class="touch touch-on" id="t-jump">⬆️</div>
+
+  <script type="module" src="src/showcase.js?v=1"></script>
+</body>
+</html>

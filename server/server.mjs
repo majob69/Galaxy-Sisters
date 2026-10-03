@@ -33,7 +33,7 @@ const MIME = {
   '.webp': 'image/webp'
 };
 const PUBLIC_DIRS = ['src', 'public', 'tests'];
-const PUBLIC_FILES = ['index.html', 'style.css', 'intro.jpg'];
+const PUBLIC_FILES = ['index.html', 'figuren.html', 'style.css', 'intro.jpg'];
 
 function serveStatic(req, res) {
   let rel;

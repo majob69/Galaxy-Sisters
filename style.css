@@ -2173,6 +2173,29 @@ html.touch .chat-log {
   pointer-events: none;
 }
 
+.intro-names span {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.intro-names span:hover {
+  text-decoration: underline;
+}
+
+.intro-figure-hint {
+  position: absolute;
+  top: 16px;
+  right: 14px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: rgba(20, 12, 40, 0.6);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .interact-hint {
   position: absolute;
   left: 50%;

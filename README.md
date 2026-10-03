@@ -66,6 +66,7 @@ Ein farbenfrohes 3D-Action-Adventure / Platformer im Kawaii-Anime-Stil, direkt i
   * Quests & Einstellungen liegen hinter dem 📜-Knopf oben rechts; auf Wunsch Vollbild (Querformat wird empfohlen).
   * Layout mit Notch-Rand (Safe-Area) und für Hoch- und Querformat.
 * **🤖 Automatische Grafik:** Der Button „Grafik“ wechselt zwischen *Auto*, *Hoch* und *Niedrig*. Im Auto-Modus misst das Spiel die echte Bildrate und schaltet bei Ruckeln selbstständig stufenweise herunter (Hoch → Niedrig ohne Bloom → kleinere Auflösung/Schatten). Handys starten auf „Niedrig“.
+* **🔍 Figuren in 3D:** Auf dem Startbildschirm eine der vier Schwestern (oder ihren Namen) anklicken – es öffnet sich `figuren.html` mit 3D-Inspektor (Posen, Outfits, Licht-Stimmungen, Gitteransicht, Augen folgen dem Cursor) und einem kleinen Spiel-Modus zum Sterne-Sammeln.
 * **👭 Koop für 2–4 Spieler:** Auf dem Startbildschirm Name und Raum-Code eintragen und „Koop spielen“ wählen. Alle im selben Raum sehen sich mit Namen, Zaubern und Lebensbalken (Liste links unter dem Status) und können Emotes schicken.
   * Die Welt ist für alle identisch (fester Seed); Quests bleiben persönlich.
   * Der Gastgeber (zuerst beigetretener Spieler 👑) steuert den Boss Vortox; Treffer aller Spieler zählen, der Boss jagt die nächste sichtbare Schwester. Verlässt der Gastgeber das Spiel, übernimmt automatisch der nächste.
@@ -143,6 +144,7 @@ Im Dokument [GDD_Galaxy_Sisters.md](file:///c:/Users/Mario/Coding/Galaxy-Sisters
 | `weather.js`, `savegame.js` | Wetter und Speicherstand (Export/Import) |
 | `inventory.js`, `interactions.js`, `market.js`, `houses.js`, `npcs.js`, `critters.js` | Inventar, Aktionstaste, Markt, Häuser, sprechende Tiere |
 | `biome.js`, `snowbiome.js`, `arenas.js`, `riverfish.js`, `forest.js`, `intro.js` | Schneebiom, Arena-Siegel, Fische, Zauberwald, Intro-Bild |
+| `showcase.js` | 3D-Figurenseite `figuren.html` (Inspektor & Spiel-Modus) |
 | `progression.js` | Stern-Level, XP, Outfits |
 | `coop.js`, `network.js`, `remote.js` | Koop-Sitzung, WebSocket-Client, Fremdspieler |
 | `landscape.js`, `atmosphere.js`, `water.js`, `bridges.js` | Gelände, Himmel, Wasser, Brücken |

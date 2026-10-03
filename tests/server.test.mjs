@@ -147,6 +147,9 @@ test('static files: game files are served, server code and traversal are not', a
   const get = async (p) => (await fetch(`http://localhost:${PORT}${p}`)).status;
   assert.equal(await get('/'), 200);
   assert.equal(await get('/src/main.js'), 200);
+  assert.equal(await get('/figuren.html'), 200);
+  assert.equal(await get('/src/showcase.js'), 200);
+  assert.equal(await get('/chibi_3d.html'), 404);
   assert.equal(await get('/server/server.mjs'), 404);
   assert.equal(await get('/package.json'), 404);
   assert.equal(await get('/..%2fpackage.json'), 404);

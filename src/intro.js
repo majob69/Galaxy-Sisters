@@ -96,13 +96,43 @@ export function startIntroPortrait() {
   // Names under the girls
   const names = document.createElement('div');
   names.className = 'intro-names';
-  NAMES.forEach(([n, icon, color]) => {
+  NAMES.forEach(([n, icon, color], i) => {
     const s = document.createElement('span');
     s.textContent = `${icon} ${n}`;
     s.style.color = color;
+    s.title = `${n} in 3D ansehen`;
+    s.addEventListener('click', () => openShowcase(i));
     names.appendChild(s);
   });
   wrap.appendChild(names);
+  const hint = document.createElement('div');
+  hint.className = 'intro-figure-hint';
+  hint.textContent = '👆 Tippe auf eine Schwester – sie in 3D ansehen';
+  wrap.appendChild(hint);
+
+  // Clicking a sister opens her 3D showcase page (figuren.html)
+  const openShowcase = (i) => { location.href = `figuren.html?s=${i}`; };
+  const ray = new THREE.Raycaster();
+  const ndc = new THREE.Vector2();
+  const pickSister = (e) => {
+    const r = canvas.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(ndc, camera);
+    let best = -1;
+    let bestDist = Infinity;
+    rigs.forEach((rig, i) => {
+      const hit = ray.intersectObject(rig.group, true)[0];
+      if (hit && hit.distance < bestDist) { best = i; bestDist = hit.distance; }
+    });
+    return best;
+  };
+  canvas.addEventListener('click', (e) => {
+    const i = pickSister(e);
+    if (i >= 0) openShowcase(i);
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    canvas.style.cursor = e.pointerType === 'mouse' && pickSister(e) >= 0 ? 'pointer' : '';
+  });
 
   const resize = () => {
     const w = Math.max(1, wrap.clientWidth);
