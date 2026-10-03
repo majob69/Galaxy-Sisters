@@ -4,6 +4,7 @@
 // ==========================================
 import * as THREE from 'three';
 import { addAnimeFace } from './characters.js';
+import { bakeStaticGroup } from './bake.js';
 
 const KINDS = {
   cat: { body: 0xf6c28b, belly: 0xfff1de, ears: 'cat', tail: 'long', iris: 0x3aa655 },
@@ -16,12 +17,15 @@ const KINDS = {
   hedgehog: { body: 0x8b6a4f, belly: 0xf3dfc6, ears: 'round', tail: 'none', iris: 0x2a1c12, spikes: true }
 };
 
-export function createCritter(kind = 'cat', { scale = 1, accessory = null } = {}) {
-  const k = KINDS[kind] || KINDS.cat;
+// colors: optional { body, belly, iris } to recolour a kind (white snow fox, glowing forest bunny ...)
+// glow: extra self-light (forest animals shine softly in the twilight)
+export function createCritter(kind = 'cat', { scale = 1, accessory = null, colors = null, glow = 0.18 } = {}) {
+  const k = { ...(KINDS[kind] || KINDS.cat), ...(colors || {}) };
   const lam = (c) => new THREE.MeshLambertMaterial({ color: c });
   const bodyMat = lam(k.body);
   const bellyMat = lam(k.belly);
-  bodyMat.emissive = new THREE.Color(k.body).multiplyScalar(0.18);
+  bodyMat.emissive = new THREE.Color(k.body).multiplyScalar(glow);
+  if (glow > 0.3) bodyMat.userData.noNightGlow = true;
   const g = new THREE.Group();
 
   const body = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 12), bodyMat);
@@ -152,6 +156,28 @@ export function createCritter(kind = 'cat', { scale = 1, accessory = null } = {}
   g.userData.face = face;
   g.userData.kind = kind;
   return g;
+}
+
+// The same critter with its body and head merged into a few meshes (for roaming animals, where
+// dozens of them would otherwise cost hundreds of draw calls). The head still turns and blinks.
+export function createCritterLite(kind, opts = {}) {
+  const c = createCritter(kind, { ...opts, scale: 1 });
+  const head = c.userData.head;
+  const face = c.userData.face;
+  const body = new THREE.Group();
+  [...c.children].forEach(ch => { if (ch !== head) body.add(ch); });
+  c.add(bakeStaticGroup(body, { receiveShadow: false }));
+  const hp = head.position.clone();
+  head.position.set(0, 0, 0);
+  face.parent.remove(face);
+  const parts = new THREE.Group();
+  [...head.children].forEach(ch => parts.add(ch));
+  head.add(bakeStaticGroup(parts, { receiveShadow: false }));
+  head.add(face);
+  head.position.copy(hp);
+  c.userData.tail = null;
+  c.scale.setScalar(opts.scale || 1);
+  return c;
 }
 
 // Idle animation: bob, look around, wag

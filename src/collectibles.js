@@ -359,11 +359,13 @@ export class Collectibles {
     const isNew = this.quests.mark('album', `fish-${fish.id}`, `${fish.name} gefangen`);
     // the fish that actually swam by the bobber decides the size
     const caught = g.riverFish ? g.riverFish.takeNearest(f.spot) : null;
-    const size = caught ? (caught.size - 0.55) / 0.8 : Math.random();
+    // a hidden fish from the deep: any size, a big one is rarer
+    const size = caught ? (caught.size - 0.55) / 0.8 : Math.pow(Math.random(), 1.4);
     const item = size < 0.45 ? 'fish_small' : size < 0.8 ? 'fish_medium' : 'fish_large';
     g.inventory.add(item, 1, true);
     const sizeName = item === 'fish_small' ? 'klein' : item === 'fish_medium' ? 'mittel' : 'groß';
-    g.showToast(`${fish.emoji} Du fängst: ${fish.name} (${sizeName})!${isNew ? ' Neu im Album.' : ''} Im Inventar (I) kannst du ihn essen.`, 4000);
+    const where = caught ? 'einen der Fische, die du gesehen hast' : 'einen Fisch aus der Tiefe, den du gar nicht gesehen hast';
+    g.showToast(`${fish.emoji} Du fängst ${where}: ${fish.name} (${sizeName})!${isNew ? ' Neu im Album.' : ''} Im Inventar (I) kannst du ihn essen.`, 4500);
     g.progression.addXp(isNew ? 20 : 4);
     if (Math.random() < 0.35) g.addLoot('dust', g.playerGroup.position);
     this.endFishing(null);

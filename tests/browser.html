@@ -47,6 +47,17 @@ const until = async (fn, ms = 8000, step = 50) => {
   return false;
 };
 const heal = () => { g.playerHP = g.maxPlayerHP; g.isDowned = false; };
+// modules that import three must be loaded inside the game frame (it has the import map)
+let importId = 0;
+const gameImport = (path) => new Promise((resolve, reject) => {
+  const key = `__gsImport${++importId}`;
+  const s = w.document.createElement('script');
+  s.type = 'module';
+  s.textContent = `import * as m from '${path.replace('./', '/')}'; window['${key}'] = m;`;
+  s.onerror = reject;
+  w.document.head.appendChild(s);
+  until(() => w[key], 5000).then(ok => (ok ? resolve(w[key]) : reject(new Error('Modul lädt nicht: ' + path))));
+});
 const stand = (x, z) => { g.playerGroup.position.set(x, g.getTerrainHeight(x, z), z); g.playerVelY = 0; };
 
 // ---------- tests ----------
@@ -59,7 +70,7 @@ test('Spiel startet, Welt ist aufgebaut', async () => {
 
 test('Alle Bosse, Rätsel und Sammelstücke haben eigene, freie Plätze', async () => {
   const { LANDMARKS } = await import('../src/spots.js');
-  const places = [['Sternen-Tor', g.stargate.center, 12], ['Morvanta', g.morvanta.center, 16], ['Schrein', g.shrine.center, 10], ['Glaciel', g.glaciel.center, 15]];
+  const places = [['Sternen-Tor', g.stargate.center, 12], ['Bauland', g.buildArea, 16], ['Schrein', g.shrine.center, 10], ['Glaciel', g.glaciel.center, 15]];
   places.forEach(([name, c, r]) => {
     LANDMARKS.forEach(l => assert(Math.hypot(c.x - l.x, c.z - l.z) > l.r + r * 0.5, `${name} liegt auf einem festen Ort (${l.x},${l.z})`));
   });
@@ -186,10 +197,16 @@ test('Vier-Elemente-Schrein: alle vier Altäre gleichzeitig öffnen ihn', async 
   assert(await until(() => g.quests.state.done.elements, 4000), 'Quest nicht erfüllt');
 });
 
-test('Morvanta: erwacht, greift an, Befreiung macht sie benommen, Sieg', async () => {
+test('Morvanta: lebt im Zauberwald, erwacht auf ihrer Lichtung, Befreiung macht sie benommen, Sieg', async () => {
   const m = g.morvanta;
-  m.onVortoxDefeated();
+  assert(m.center.x > 300, 'Morvanta wohnt nicht im Zauberwald');
+  assert(g.arenaLock.arenas.find(a => a.name === 'Morvanta').r >= 20, 'Arena nicht größer');
+  const F = g.forest; const real = F.questsDone;
   stand(m.center.x, m.center.z + 6); heal();
+  await sleep(600);
+  assert(m.d.st === 'sleep', 'erwacht ohne offenes Portal');
+  F.questsDone = () => 99;
+  assert(await until(() => F.unlocked, 2000), 'Portal öffnet nicht');
   assert(await until(() => m.d.st === 'hover', 25000), 'erwacht nicht');
   m.setState('dust');
   assert(await until(() => m.d.zones.length > 0, 3000), 'keine Staub-Zonen');
@@ -203,11 +220,14 @@ test('Morvanta: erwacht, greift an, Befreiung macht sie benommen, Sieg', async (
   assert(hp0 - m.d.hp >= 79, `Benommen = 1,6x Schaden (${hp0 - m.d.hp})`);
   m.applyHit(99999);
   assert(!m.d.alive && g.quests.state.done.morvanta, 'Sieg zählt nicht');
-  assert(g.glaciel.morvantaDown, 'Glaciel wird nicht freigeschaltet');
+  F.questsDone = real;
+  stand(0, 8);
 });
 
 test('Glaciel: Panzer, drei Kristalle, Kern frei, Sieg', async () => {
   const gl = g.glaciel;
+  gl.onVortoxDefeated();
+  assert(gl.vortoxDown, 'Glaciel wird nach Vortox nicht freigeschaltet');
   assert(await until(() => gl.d.st === 'idle', 25000), 'erwacht nicht');
   heal();
   const hp0 = gl.d.hp; gl.applyHit(100);
@@ -360,9 +380,9 @@ test('Schneebiom: Iglus, Schneefall, versiegelte Arena, Vortox bleibt drin', asy
     g.moveVel.set(dx / d * 0.3, 0, dz / d * 0.3);
     g.playerHP = 9999;
     await sleep(30);
-    maxD = Math.max(maxD, Math.hypot(pp.x - 32, pp.z - 30), Math.hypot(g.bossGroup.position.x - 32, g.bossGroup.position.z - 30) > 14 ? 99 : 0);
+    maxD = Math.max(maxD, Math.hypot(pp.x - 32, pp.z - 30), Math.hypot(g.bossGroup.position.x - 32, g.bossGroup.position.z - 30) > 17 ? 99 : 0);
   }
-  assert(maxD < 15.6, `Arena verlassen oder Boss draußen (${maxD.toFixed(1)})`);
+  assert(maxD < 18.6, `Arena verlassen oder Boss draußen (${maxD.toFixed(1)})`);
   g.cameraDesired && g.camera.position.copy(g.playerGroup.position).add(new V(0, 6, 10));
   g.snowBiome.update();
   assert(g.snowBiome.flakes.visible, 'kein Schneefall');
@@ -395,12 +415,22 @@ test('Fische schwimmen im Fluss; ein Fang landet im Inventar und heilt', async (
   const f = g.riverFish.fish.find(x => x.gone <= 0);
   assert(g.getWaterSurface(f.pos.x, f.pos.z) !== null, 'Fisch nicht im Wasser');
   stand(0, 8);
+  g.riverFish.visibleChance = 1;
   g.collectibles.startCast(f.pos.clone()); g.collectibles.fish.timer = 0;
   await until(() => g.collectibles.fish && g.collectibles.fish.state === 'bite', 2000);
   const before = ['fish_small', 'fish_medium', 'fish_large'].reduce((n, k) => n + g.inventory.count(k), 0);
   g.collectibles.onFishKey();
   const after = ['fish_small', 'fish_medium', 'fish_large'].reduce((n, k) => n + g.inventory.count(k), 0);
   assert(after === before + 1 && f.gone > 0, 'Fang fehlt');
+  // not every bite is one of the fish you can see
+  g.riverFish.visibleChance = 0;
+  const f2 = g.riverFish.fish.find(x => x.gone <= 0);
+  g.collectibles.startCast(f2.pos.clone()); g.collectibles.fish.timer = 0;
+  await until(() => g.collectibles.fish && g.collectibles.fish.state === 'bite', 2000);
+  g.collectibles.onFishKey();
+  const after2 = ['fish_small', 'fish_medium', 'fish_large'].reduce((n, k) => n + g.inventory.count(k), 0);
+  assert(after2 === after + 1 && f2.gone <= 0, 'Fisch aus der Tiefe fehlt oder sichtbarer Fisch verschwand');
+  g.riverFish.visibleChance = 0.5;
   const kind = ['fish_small', 'fish_medium', 'fish_large'].find(k => g.inventory.count(k) > 0);
   g.playerHP = 5; g.inventory.use(kind);
   assert(g.playerHP > 5, 'Fisch heilt nicht');
@@ -451,9 +481,11 @@ test('Wesen erzählen Tipps', async () => {
 test('Zauberwald: erst nach allen Aufgaben, Mondsteine wecken das Herz', async () => {
   const F = g.forest;
   stand(F.portal.x, F.portal.z + 2.5); await sleep(700);
-  assert(!F.unlocked || F.questsDone() === 11, 'Portal zu früh offen');
+  const { FOREST_QUESTS } = await gameImport('./src/forest.js');
+  assert(!FOREST_QUESTS.some(q => q.id === 'morvanta'), 'Morvanta darf das Portal nicht sperren');
+  assert(!F.unlocked || F.questsDone() >= FOREST_QUESTS.length, 'Portal zu früh offen');
   const real = F.questsDone;
-  F.questsDone = () => 11;
+  F.questsDone = () => FOREST_QUESTS.length;
   assert(await until(() => F.unlocked, 2000), 'Portal öffnet nicht');
   g.interactions.trigger();
   assert(await until(() => F.inForest && !F.travelling, 4000), 'keine Reise');
@@ -468,6 +500,144 @@ test('Zauberwald: erst nach allen Aufgaben, Mondsteine wecken das Herz', async (
   F.travel(false);
   assert(await until(() => !F.inForest && !F.travelling, 4000), 'kein Rückweg');
   F.questsDone = real;
+});
+
+test('Kochen: passende Mischung heilt die Summe, falsche Mischung verbraucht nichts', async () => {
+  const inv = g.inventory;
+  inv.add('apple', 2, true); inv.add('berries', 1, true); inv.add('fish_small', 1, true);
+  const a0 = inv.count('apple'), b0 = inv.count('berries'), s0 = inv.count('fruit_salad');
+  inv.cook = ['apple', 'fish_small'];
+  assert(inv.cookNow() === null && inv.count('apple') === a0 && inv.count('fish_small') >= 1, 'falsche Mischung');
+  inv.cook = ['berries', 'apple'];
+  assert(inv.cookNow() === 'fruit_salad', 'kein Obstsalat');
+  assert(inv.count('fruit_salad') === s0 + 1 && inv.count('apple') === a0 - 1 && inv.count('berries') === b0 - 1, 'Zutaten falsch');
+  const { ITEMS } = await gameImport('./src/inventory.js');
+  assert(ITEMS.fruit_salad.heal === ITEMS.apple.heal + ITEMS.berries.heal, 'Heilung ist nicht die Summe');
+  g.playerHP = 1; inv.use('fruit_salad');
+  assert(g.playerHP === 1 + ITEMS.fruit_salad.heal, `heilt ${g.playerHP}`);
+  assert(inv.state.recipes.includes('fruit_salad'), 'Rezept nicht gemerkt');
+  heal();
+});
+
+test('Werkbank: Möbel aus Material bauen, beim Bau-Stand kaufen, aufstellen und aufheben', async () => {
+  const inv = g.inventory; const hs = g.houses;
+  ['wood', 'rope'].forEach(id => inv.remove(id, inv.count(id)));
+  assert(!inv.craft('chair'), 'ohne Material gebaut');
+  inv.add('wood', 2, true); inv.add('rope', 1, true);
+  const c0 = inv.count('chair');
+  assert(inv.craft('chair') && inv.count('chair') === c0 + 1 && inv.count('wood') === 0, 'Stuhl nicht gebaut');
+  const { STALLS } = await gameImport('./src/market.js');
+  assert(['chair', 'table', 'door', 'lamp'].every(id => STALLS.find(s => s.id === 'build').items.includes(id)), 'Bau-Stand ohne Möbel');
+  stand(0, 8);
+  assert(!hs.placeFurniture('chair'), 'Möbel mitten auf der Wiese');
+  stand(hs.area.x + 3, hs.area.z + 11); await sleep(100);
+  const n0 = hs.furniture.length;
+  inv.use('chair');
+  assert(hs.furniture.length === n0 + 1 && inv.count('chair') === c0, 'nicht aufgestellt');
+  hs.pickUpFurniture(hs.furniture[hs.furniture.length - 1]);
+  assert(inv.count('chair') === c0 + 1, 'nicht aufgehoben');
+});
+
+test('Obergeschoss: Sterntaler, dann Material, dann 5 Minuten Bauzeit', async () => {
+  const hs = g.houses; const inv = g.inventory;
+  assert(hs.state.built && hs.ownHouse, 'kein eigenes Haus');
+  inv.state.coins = 0;
+  const own = hs.ownHouse;
+  stand(own.doorPos.x, own.doorPos.z); await sleep(100);
+  hs.floor2Step();
+  assert(hs.state.floor2.stage === 0, 'ohne Geld beauftragt');
+  inv.addCoins(70);
+  hs.floor2Step();
+  assert(hs.state.floor2.stage === 1 && inv.coins === 10, 'Bezahlen klappt nicht');
+  hs.floor2Step();
+  assert(hs.state.floor2.stage === 1, 'ohne Material fertig');
+  const { FLOOR2_COST } = await gameImport('./src/houses.js');
+  Object.keys(FLOOR2_COST).forEach(id => inv.add(id, FLOOR2_COST[id], true));
+  hs.floor2Step();
+  assert(hs.state.floor2.stage === 2 && hs.floor2Remaining() > 290, 'Bauzeit startet nicht');
+  await sleep(500);
+  assert(hs.state.floor2.stage === 2, 'zu schnell fertig');
+  hs.state.floor2.readyAt = Date.now() - 1;
+  assert(await until(() => hs.state.floor2.stage === 3, 2000), 'wird nicht fertig');
+  const h2 = hs.ownHouse;
+  assert(h2.floors === 2 && g.platforms.some(p => Math.abs(p.topY - (h2.floorY + 3)) < 0.01), 'kein Obergeschoss');
+});
+
+test('Bauland: mehrere Gebäude bauen, Brunnen heilt, Beet gibt Ernte', async () => {
+  const hs = g.houses; const inv = g.inventory;
+  assert(hs.plots.length === 5, 'Bauplätze fehlen');
+  assert(!hs.build(1, 'fountain') || false, 'ohne Material gebaut');
+  inv.add('stone', 20, true); inv.add('glass', 5, true); inv.add('wood', 10, true);
+  assert(hs.build(1, 'fountain'), 'Brunnen nicht gebaut');
+  assert(hs.build(2, 'garden'), 'Beet nicht gebaut');
+  assert(!hs.build(3, 'fountain'), 'zweiter Brunnen');
+  const p1 = hs.plots[1];
+  stand(p1.x + 2.8, p1.z); g.playerHP = 20; g.maxPlayerHP = Math.max(g.maxPlayerHP, 100);
+  assert(await until(() => g.playerHP > 24, 3000), 'Brunnen heilt nicht');
+  const b0 = inv.count('berries');
+  hs.harvest(hs.plots[2]);
+  assert(inv.count('berries') === b0 + 3, 'keine Ernte');
+  hs.harvest(hs.plots[2]);
+  assert(inv.count('berries') === b0 + 3, 'zweimal am Tag geerntet');
+  heal();
+});
+
+test('Tiere im Schnee und im Zauberwald, Dornwichtel lassen sich verscheuchen', async () => {
+  const wl = g.wildlife;
+  assert(wl.animals.filter(a => a.zone === 'snow').length >= 6, 'zu wenige Schnee-Tiere');
+  assert(wl.animals.filter(a => a.zone === 'forest').length >= 8, 'zu wenige Wald-Tiere');
+  assert(wl.foes.length >= 4 && wl.foes.length <= 8, `Dornwichtel: ${wl.foes.length}`);
+  const a = wl.animals.find(x => x.zone === 'snow');
+  stand(a.mesh.position.x + 1, a.mesh.position.z); await sleep(300);
+  const it = wl.getInteraction();
+  assert(it && /streicheln/.test(it.label), 'Streicheln fehlt');
+  const f = wl.foes[0];
+  stand(f.home.x + 3, f.home.z);
+  assert(await until(() => f.mesh.visible, 4000), 'Dornwichtel unsichtbar');
+  wl.hitFoes(f.mesh.position.clone().setY(f.mesh.position.y + 0.6), 2, 999);
+  assert(!f.alive, 'Dornwichtel nicht verscheucht');
+  stand(0, 8); heal();
+});
+
+test('Schnee-Obbys und schwere Rätsel: Eis-Schieben, Nordlicht, Laternen, brüchige Schollen', async () => {
+  const c = g.challenges;
+  const { snowAt } = await import('../src/biome.js');
+  assert(snowAt(c.spiral.x, c.spiral.z) > 0.5, 'Frost-Spirale nicht im Schnee');
+  // sliding ice: the 8-push solution
+  const s = c.slide;
+  const moves = [[1, 3, 0, -1], [5, 3, -1, 0], [1, 0, 0, 1], [1, 2, -1, 0], [1, 3, 0, 1], [1, 5, 1, 0], [4, 5, 0, -1], [4, 0, 1, 0]];
+  for (const [bc, br, dc, dr] of moves) {
+    const b = s.blocks.find(x => x.c === bc && x.r === br);
+    assert(b && c.pushBlock(b, dc, dr), `Block ${bc},${br} bewegt sich nicht`);
+  }
+  assert(c.state.slide, 'Eis-Rätsel nicht gelöst');
+  // Nordlicht: three rounds of 4, 6 and 8 lights
+  c.startMemory();
+  const m = c.memory;
+  assert(m.seq.length === 4, 'erste Runde nicht 4 lang');
+  c.memoryStep((m.seq[0] + 1) % 4);
+  assert(m.step === 0 && !c.state.memory, 'falscher Schritt zählt');
+  for (let r = 0; r < 3; r++) {
+    m.phase = 'input'; m.step = 0;
+    [...m.seq].forEach(n => c.memoryStep(n));
+    if (r < 2) { assert(m.round === r + 1, 'nächste Runde fehlt'); c.newMemoryRound(); }
+  }
+  assert(c.state.memory, 'Nordlicht nicht gelöst');
+  // lanterns: find which ones to touch
+  let pick = null;
+  for (let mask = 0; mask < 128 && !pick; mask++) {
+    const on = c.lanterns.map(l => l.on);
+    for (let i = 0; i < 7; i++) if (mask & (1 << i)) [i - 1, i, i + 1].forEach(k => { on[(k + 7) % 7] = !on[(k + 7) % 7]; });
+    if (on.every(Boolean)) pick = mask;
+  }
+  assert(pick !== null, 'Laternen unlösbar');
+  for (let i = 0; i < 7; i++) if (pick & (1 << i)) c.touchLantern(i);
+  assert(c.state.lanterns, 'Laternen nicht gelöst');
+  // a cracking floe breaks under your feet
+  const cr = c.crumbling[0];
+  g.playerGroup.position.set(cr.plat.x, cr.top + 0.05, cr.plat.z); g.playerVelY = 0;
+  assert(await until(() => cr.gone > 0, 3000), 'Scholle bricht nicht');
+  stand(0, 8);
 });
 
 test('Server-Nachrichten: Boss-3-Zustand hat das erwartete Format', async () => {

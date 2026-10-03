@@ -15,17 +15,37 @@ import { createSoftSpriteTexture } from './water.js';
 import { bakeStaticGroup } from './bake.js';
 
 export const FOREST = { x: 600, z: 0, r: 64 };
+// Morvanta's clearing: a big, flat, magical arena in the west of the forest
+export const FOREST_ARENA = { x: FOREST.x - 24, z: FOREST.z - 22, r: 22 };
+// a quiet clearing next to the arena where Lilli the bunny waits
+export const LILLI_SPOT = { x: FOREST_ARENA.x + 4, z: FOREST_ARENA.z + FOREST_ARENA.r + 5 };
+// every quest except Morvanta herself (she lives in the forest) opens the portal
+export const FOREST_QUESTS = QUEST_DEFS.filter(d => d.id !== 'morvanta');
 const STORAGE_KEY = 'gs-forest-v1';
 const STONES = 3;
+
+function forestNoise(lx, lz) {
+  return simplex2(lx * 0.03, lz * 0.03) * 2.2 + simplex2(lx * 0.09 + 5, lz * 0.09 - 3) * 0.6;
+}
+const ARENA_FLOOR = 22 + forestNoise(FOREST_ARENA.x - FOREST.x, FOREST_ARENA.z - FOREST.z);
 
 export function forestHeight(x, z) {
   const lx = x - FOREST.x;
   const lz = z - FOREST.z;
   const r = Math.hypot(lx, lz);
   // the forest floats high above the cloud sea that surrounds the valley
-  let h = 22 + simplex2(lx * 0.03, lz * 0.03) * 2.2 + simplex2(lx * 0.09 + 5, lz * 0.09 - 3) * 0.6;
+  let h = 22 + forestNoise(lx, lz);
+  // Morvanta's arena is levelled flat
+  const ad = Math.hypot(x - FOREST_ARENA.x, z - FOREST_ARENA.z);
+  if (ad < FOREST_ARENA.r + 7) h += (ARENA_FLOOR - h) * (1 - smoothstep(FOREST_ARENA.r + 1, FOREST_ARENA.r + 7, ad));
   h += smoothstep(FOREST.r - 6, FOREST.r + 10, r) * 16; // the forest sits in a bowl of mossy hills
   return h;
+}
+
+// keeps trees and mushrooms out of the arena and Lilli's clearing
+function inClearing(x, z, pad = 0) {
+  return Math.hypot(x - FOREST_ARENA.x, z - FOREST_ARENA.z) < FOREST_ARENA.r + 3 + pad ||
+    Math.hypot(x - LILLI_SPOT.x, z - LILLI_SPOT.z) < 4 + pad;
 }
 
 export function inForestArea(x) {
@@ -62,14 +82,14 @@ export class EnchantedForest {
   // ---------- Unlock ----------
   questsDone() {
     const q = this.game.quests;
-    return q ? QUEST_DEFS.filter(d => q.state.done[d.id]).length : 0;
+    return q ? FOREST_QUESTS.filter(d => q.state.done[d.id]).length : 0;
   }
 
   checkUnlock() {
     const was = this.unlocked;
-    this.unlocked = this.questsDone() >= QUEST_DEFS.length;
+    this.unlocked = this.questsDone() >= FOREST_QUESTS.length;
     if (this.unlocked && !was && this.announce) {
-      this.game.showToast('🌀 Alle Aufgaben erfüllt! Das Portal zum Zauberwald hat sich geöffnet – es steht nahe am Start.', 7000);
+      this.game.showToast('🌀 Alle Aufgaben erfüllt! Das Portal zum Zauberwald hat sich geöffnet – es steht nahe am Start. Dort wartet Morvanta …', 7000);
       sfx.victory();
     }
     this.announce = true;
@@ -173,6 +193,7 @@ export class EnchantedForest {
       const z = FOREST.z + Math.sin(a) * r;
       if (this.treeSpots.some(t => Math.hypot(t.x - x, t.z - z) < 5.5)) continue;
       if (Math.hypot(x - FOREST.x, z - (FOREST.z + 40)) < 7) continue; // keep the arrival clearing open
+      if (inClearing(x, z, 2)) continue;
       this.treeSpots.push({ x, z, p: palettes[i % 3], h: 4 + rng() * 3, s: 0.8 + rng() * 0.6 });
     }
     const forestGroup = new THREE.Group();
@@ -215,6 +236,7 @@ export class EnchantedForest {
       const r = 4 + rng() * (FOREST.r - 8);
       const x = FOREST.x + Math.cos(a) * r;
       const z = FOREST.z + Math.sin(a) * r;
+      if (inClearing(x, z)) continue;
       const y = forestHeight(x, z);
       const cap = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), mushMat[i % 3]);
       cap.position.set(x, y + 0.35, z);
@@ -301,6 +323,8 @@ export class EnchantedForest {
     this.guideLines = [
       'Willkommen im Zauberwald, Schwester … hier ist es immer Dämmerung. 🦉',
       'Drei Mondsteine schlafen zwischen den leuchtenden Bäumen. Folge deinem Kompass.',
+      'Im Westen liegt eine große Lichtung voller Runen. Dort schläft Morvanta, der Totenkopf-Falter, in ihrem Kokon …',
+      'Nimm dich vor den Dornwichteln in Acht – sie beißen! Die anderen Tiere hier sind lieb.',
       'Bringst du alle drei, erwacht das Herz des Waldes in der Mitte.',
       'Das Tor hinter mir bringt dich zurück ins Himmelsgebirge.'
     ];
@@ -361,7 +385,7 @@ export class EnchantedForest {
       if (d > 4) return null;
       return this.unlocked
         ? { dist: d, label: '🌀 In den Zauberwald reisen', action: () => this.travel(true) }
-        : { dist: d, label: `🔒 Portal (${this.questsDone()}/${QUEST_DEFS.length} Aufgaben)`, action: () => this.game.showToast(`🔒 Das Portal öffnet sich, wenn alle Aufgaben erfüllt sind (${this.questsDone()}/${QUEST_DEFS.length}). Schau ins Quest-Feld!`, 4500) };
+        : { dist: d, label: `🔒 Portal (${this.questsDone()}/${FOREST_QUESTS.length} Aufgaben)`, action: () => this.game.showToast(`🔒 Das Portal öffnet sich, wenn alle Aufgaben erfüllt sind (${this.questsDone()}/${FOREST_QUESTS.length}). Schau ins Quest-Feld!`, 4500) };
     }
     const dr = Math.hypot(pp.x - this.returnGate.x, pp.z - this.returnGate.z);
     if (dr < 4) return { dist: dr, label: '🌀 Zurück ins Himmelsgebirge', action: () => this.travel(false) };
@@ -387,6 +411,7 @@ export class EnchantedForest {
       .filter(o => !this.state.stones.includes(o.i))
       .map(o => ({ id: `moonstone:${o.i}`, icon: '💠', label: 'Mondstein', x: o.s.x, z: o.s.z }));
     if (!this.state.heart && this.state.stones.length >= STONES) out.push({ id: 'heart', icon: '💜', label: 'Herz des Waldes', x: FOREST.x, z: FOREST.z });
+    out.push(...this.game.morvanta.getTargets());
     out.push({ id: 'returngate', icon: '🌀', label: 'Rückweg', x: this.returnGate.x, z: this.returnGate.z, noLabel: true });
     return out;
   }

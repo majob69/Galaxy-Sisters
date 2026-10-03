@@ -214,7 +214,7 @@ export function flatMask(x, z) {
 
   const bx = x - 32;
   const bz = z - 30;
-  const bossMask = smoothstep(16.5, 22.5, Math.sqrt(bx * bx + bz * bz));
+  const bossMask = smoothstep(19.8, 25.5, Math.sqrt(bx * bx + bz * bz));
 
   const dxObby = Math.max(0, Math.abs(x - (-25)) - 4.5);
   const dzObby = Math.max(0, Math.abs(z - 1.5) - 16.5);

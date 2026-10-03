@@ -15,9 +15,9 @@ export const QUEST_DEFS = [
   { id: 'fireflies', icon: '✨', name: 'Fange Sternenglühwürmchen', hint: 'Die goldenen fliegen nachts über der Wiese – manche hoch, spring!', total: 8, night: true },
   { id: 'moonflowers', icon: '🌸', name: 'Pflücke Mondblumen', hint: 'Sie blühen am Flussufer', total: 5, night: true },
   { id: 'gate', icon: '⭐', name: 'Öffne das Sternen-Tor', hint: 'Beide Platten gleichzeitig – zu zweit oder mit Stellas Pfeil', total: 1 },
-  { id: 'morvanta', icon: '🦋', name: 'Besiege Morvanta', hint: 'Sie erwacht, sobald Vortox besiegt ist', total: 1 },
+  { id: 'morvanta', icon: '🦋', name: 'Besiege Morvanta', hint: 'Sie schläft im Zauberwald – das Portal öffnet sich nach allen anderen Aufgaben', total: 1 },
   { id: 'elements', icon: '🔮', name: 'Vier-Elemente-Schrein', hint: 'Jede Schwester entzündet ihren Altar – alle vier gleichzeitig', total: 1 },
-  { id: 'glaciel', icon: '❄️', name: 'Besiege Glaciel', hint: 'Der Frostgolem erwacht, sobald Morvanta besiegt ist', total: 1 },
+  { id: 'glaciel', icon: '❄️', name: 'Besiege Glaciel', hint: 'Der Frostgolem erwacht, sobald Vortox besiegt ist', total: 1 },
   { id: 'chests', icon: '🧰', name: 'Verborgene Truhen', hint: 'Es funkelt, wenn du in der Nähe bist', total: 6 },
   { id: 'album', icon: '📖', name: 'Sammelalbum', hint: 'Blumen, Leuchtpilze und Fische (Album im Quest-Feld, Angeln mit F)', total: 17 }
 ];

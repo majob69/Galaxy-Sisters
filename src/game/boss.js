@@ -1,7 +1,7 @@
 // Boss Vortox: model, AI (host / puppet), damage and defeat. Methods are mixed into the game class (see main.js), so `this` is the game.
 import * as THREE from 'three';
 import { sfx } from './shared.js';
-import { ArenaLock } from '../arenas.js';
+import { ArenaLock, VORTOX_ARENA } from '../arenas.js';
 
 export const bossMethods = {
 
@@ -111,20 +111,35 @@ export const bossMethods = {
     const capMat = new THREE.MeshLambertMaterial({ color: 0xf4f9ff });
     const glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.2, 2.2, 2.8) });
     glowMat.userData.noNightGlow = true;
-    for (let i = 0; i < 10; i++) {
-      const ang = (i / 10) * Math.PI * 2;
+    const AR = VORTOX_ARENA.r;
+    this.vortoxOrbs = [];
+    for (let i = 0; i < 12; i++) {
+      const ang = (i / 12) * Math.PI * 2;
       const pil = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.95, 6, 7), pillarMat);
-      pil.position.set(Math.cos(ang) * 16, 3, Math.sin(ang) * 16);
+      pil.position.set(Math.cos(ang) * AR, 3, Math.sin(ang) * AR);
       pil.castShadow = true;
       arenaGroup.add(pil);
       const cap = new THREE.Mesh(new THREE.SphereGeometry(0.85, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), capMat);
-      cap.position.set(Math.cos(ang) * 16, 6, Math.sin(ang) * 16);
+      cap.position.set(Math.cos(ang) * AR, 6, Math.sin(ang) * AR);
       arenaGroup.add(cap);
-      const orb = new THREE.Mesh(new THREE.OctahedronGeometry(0.4, 0), glowMat);
-      orb.position.set(Math.cos(ang) * 16, 7.1, Math.sin(ang) * 16);
+      const orb = new THREE.Mesh(new THREE.OctahedronGeometry(0.45, 0), glowMat);
+      orb.position.set(Math.cos(ang) * AR, 7.1, Math.sin(ang) * AR);
       arenaGroup.add(orb);
+      this.vortoxOrbs.push(orb);
+      this.colliders.push({ type: 'cylinder', x: bx + Math.cos(ang) * AR, z: bz + Math.sin(ang) * AR, radius: 0.95, minY: by - 1, maxY: by + 6.5 });
     }
-    const floor = new THREE.Mesh(new THREE.RingGeometry(13.5, 16.6, 64), new THREE.MeshLambertMaterial({ color: 0xc8d6e6 }));
+    // floating ice crystals over the arena
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * Math.PI * 2 + 0.2;
+      const shard = new THREE.Mesh(new THREE.OctahedronGeometry(0.55, 0), glowMat);
+      shard.scale.y = 2;
+      shard.position.set(Math.cos(ang) * AR * 0.7, 8 + (i % 3), Math.sin(ang) * AR * 0.7);
+      shard.userData.a = ang;
+      arenaGroup.add(shard);
+      this.vortoxOrbs.push(shard);
+    }
+    this.vortoxArenaGroup = arenaGroup;
+    const floor = new THREE.Mesh(new THREE.RingGeometry(AR - 3.2, AR + 0.6, 72), new THREE.MeshLambertMaterial({ color: 0xc8d6e6 }));
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = 0.08;
     arenaGroup.add(floor);
@@ -146,6 +161,7 @@ export const bossMethods = {
 
   petrifyEnemies(duration) {
     this.petrifyWisps(duration);
+    if (this.wildlife) this.wildlife.petrify(duration);
     if (this.glaciel.hittable && this.glaciel.pos.distanceTo(this.playerGroup.position) < 26) {
       if (this.coop.puppetBoss) this.coop.send({ t: 'boss3Hit', dmg: 0, pet: duration });
       else this.glaciel.petrify(duration);
@@ -234,7 +250,7 @@ export const bossMethods = {
     this.progression.addXp(100, 'Vortox besiegt');
     this.inventory.addCoins(50, 'Vortox');
     if (this.saveGame) this.saveGame.save();
-    this.morvanta.onVortoxDefeated();
+    this.glaciel.onVortoxDefeated();
     this.dropLoot(this.bossGroup.position, { dust: 1, heart: 1 });
     this.dropLoot(this.bossGroup.position, { dust: 1, heart: 0.6 });
   },
@@ -336,7 +352,7 @@ export const bossMethods = {
       dir.normalize();
       this.bossGroup.position.addScaledVector(dir, 0.12);
       // Vortox never leaves his arena
-      ArenaLock.clamp(this.bossGroup.position, 32, 30, 13.5);
+      ArenaLock.clamp(this.bossGroup.position, VORTOX_ARENA.x, VORTOX_ARENA.z, VORTOX_ARENA.r - 2.5);
       this.bossGroup.position.y = this.getTerrainHeight(this.bossGroup.position.x, this.bossGroup.position.z);
 
       if (b.timer > 3.5) {

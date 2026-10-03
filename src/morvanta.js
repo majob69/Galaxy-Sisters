@@ -1,5 +1,6 @@
 // ==========================================
-// BOSS 2: MORVANTA, the skull butterfly. Sleeps in a cocoon until Vortox is beaten.
+// BOSS: MORVANTA, the skull butterfly. She sleeps in a cocoon on a rune clearing in the enchanted
+// forest (third world) and wakes up when a sister steps into her arena.
 // Attacks:  Schuppenstaub (marked zones burst after a moment), Sturzflug (dive at a sister)
 //           and the antenna GRAB: she lifts one sister into the air - friends strike her
 //           (or the captive struggles with the jump button) to set her free.
@@ -7,8 +8,8 @@
 // ==========================================
 import * as THREE from 'three';
 import { sfx } from './game/shared.js';
-import { findFlatSpot } from './spots.js';
 import { ArenaLock } from './arenas.js';
+import { FOREST_ARENA, inForestArea } from './forest.js';
 
 const MAX_HP = 320;
 const HOVER_H = 3.6;
@@ -22,7 +23,8 @@ const GRAB_DOT = 3;           // HP per second while lifted
 const GRAB_TIME = 10;         // she gives up after this many seconds
 const FREE_NEEDED = 5;        // strikes / struggles to break free
 const MASH_PER_FREE = 3;      // jump presses for one struggle
-const ARENA_RADIUS = 17;
+const ARENA_RADIUS = FOREST_ARENA.r;
+const WAKE_RADIUS = ARENA_RADIUS - 1;
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
@@ -112,7 +114,6 @@ export class Morvanta {
       timer: 0, pet: 0, cp: -1, fc: 0, zones: [], zid: 0, attackIdx: 0, orbit: Math.random() * 6
     };
     this.msg = null;
-    this.vortoxDown = false;
     this.mash = 0;
     this.swoopTarget = new THREE.Vector3();
     this.swoopHit = false;
@@ -129,11 +130,14 @@ export class Morvanta {
     return this.game.getTerrainHeight(x, z);
   }
 
-  // Dry, open ground with few trees, away from the other places
+  // Her rune clearing in the enchanted forest (kept free of trees, see forest.js)
   findSpot() {
-    const g = this.game;
-    const avoid = g.stargate ? [{ x: g.stargate.center.x, z: g.stargate.center.z, r: 16 }] : [];
-    return findFlatSpot(g, { target: { x: -55, z: -50 }, radius: ARENA_RADIUS + 1, avoid });
+    return { x: FOREST_ARENA.x, z: FOREST_ARENA.z };
+  }
+
+  // The forest portal is open (every other quest is done)
+  get ready() {
+    return !!(this.game.forest && this.game.forest.unlocked);
   }
 
   // ---------- Scene ----------
@@ -150,23 +154,73 @@ export class Morvanta {
     this.arena.add(rune);
     this.runeMat = runeMat;
 
+    // a second, outer rune ring that turns the other way
+    const outerMat = runeMat.clone();
+    outerMat.color = new THREE.Color(0.8, 1.2, 2.4);
+    const outer = new THREE.Mesh(new THREE.RingGeometry(ARENA_RADIUS - 1.2, ARENA_RADIUS + 0.6, 64), outerMat);
+    outer.rotation.x = -Math.PI / 2;
+    outer.position.set(cx, by + 0.06, cz);
+    this.arena.add(outer);
+    this.outerRune = outer;
+
     const pillarMat = new THREE.MeshLambertMaterial({ color: 0x3c2a58, flatShading: true });
     const orbMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.8, 0.6, 2.4) });
     orbMat.userData.noNightGlow = true;
-    for (let i = 0; i < 10; i++) {
-      const ang = (i / 10) * Math.PI * 2;
+    const archMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.2, 0.5, 2.0), transparent: true, opacity: 0.55, depthWrite: false });
+    archMat.userData.noNightGlow = true;
+    const PILLARS = 14;
+    const tops = [];
+    for (let i = 0; i < PILLARS; i++) {
+      const ang = (i / PILLARS) * Math.PI * 2;
       const px = cx + Math.cos(ang) * ARENA_RADIUS;
       const pz = cz + Math.sin(ang) * ARENA_RADIUS;
       const py = g.getTerrainHeight(px, pz);
-      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.85, 5.5, 7), pillarMat);
-      pillar.position.set(px, py + 2.5, pz);
+      const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.85, 6.5, 7), pillarMat);
+      pillar.position.set(px, py + 3, pz);
       pillar.castShadow = true;
       this.arena.add(pillar);
-      const orb = new THREE.Mesh(new THREE.SphereGeometry(0.42, 10, 8), orbMat);
-      orb.position.set(px, py + 5.7, pz);
+      const orb = new THREE.Mesh(new THREE.OctahedronGeometry(0.5, 0), orbMat);
+      orb.position.set(px, py + 7, pz);
       this.arena.add(orb);
-      g.colliders.push({ type: 'cylinder', x: px, z: pz, radius: 0.85, minY: py - 1, maxY: py + 6 });
+      tops.push(new THREE.Vector3(px, py + 6.4, pz));
+      g.colliders.push({ type: 'cylinder', x: px, z: pz, radius: 0.85, minY: py - 1, maxY: py + 7 });
     }
+    // glowing arches of magic between neighbouring pillars
+    for (let i = 0; i < PILLARS; i++) {
+      const a = tops[i];
+      const b = tops[(i + 1) % PILLARS];
+      const mid = a.clone().lerp(b, 0.5);
+      mid.y += 1.6;
+      const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
+      this.arena.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 10, 0.07, 5, false), archMat));
+    }
+    // floating crystals that circle above the clearing
+    const crystalMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.4, 0.9, 2.6) });
+    crystalMat.userData.noNightGlow = true;
+    this.crystals = [];
+    for (let i = 0; i < 10; i++) {
+      const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.45 + (i % 3) * 0.15, 0), crystalMat);
+      c.scale.y = 1.8;
+      c.userData = { a: (i / 10) * Math.PI * 2, r: ARENA_RADIUS * (0.55 + (i % 2) * 0.25), h: 7 + (i % 3) * 1.3 };
+      this.arena.add(c);
+      this.crystals.push(c);
+    }
+    // sparkles drifting up from the runes
+    const SPARKS = 140;
+    this.sparkBase = [];
+    for (let i = 0; i < SPARKS; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * ARENA_RADIUS;
+      this.sparkBase.push({ x: cx + Math.cos(a) * r, z: cz + Math.sin(a) * r, y: by, ph: Math.random() * 8, sp: 0.5 + Math.random() });
+    }
+    const sg = new THREE.BufferGeometry();
+    sg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(SPARKS * 3), 3));
+    this.sparks = new THREE.Points(sg, new THREE.PointsMaterial({ color: new THREE.Color(1.8, 1.0, 2.6), size: 0.18, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending }));
+    this.sparks.frustumCulled = false;
+    this.arena.add(this.sparks);
+    this.arenaLight = new THREE.PointLight(0xc58bff, 1.2, ARENA_RADIUS * 2.2, 2);
+    this.arenaLight.position.set(cx, by + 9, cz);
+    this.arena.add(this.arenaLight);
     g.scene.add(this.arena);
 
     // Telegraph zones for Schuppenstaub (pooled)
@@ -345,25 +399,21 @@ export class Morvanta {
   get myId() { return this.game.coop.active ? this.game.coop.net.id : 0; }
   get hittable() { return this.d.alive && this.d.awake && this.d.st !== 'awaken' && this.d.st !== 'sleep'; }
 
-  onVortoxDefeated() {
-    this.vortoxDown = true;
-    this.game.showToast('🦋 Ein Kokon im Nebel bricht auf … Morvanta erwacht!', 6000);
-  }
-
   getTargets() {
     const d = this.d;
-    if (!this.vortoxDown || !d.alive) return [];
+    if (!this.ready || !d.alive) return [];
     const done = this.game.quests && this.game.quests.state.done.morvanta;
     return done ? [] : [{ id: 'morvanta', icon: '🦋', label: 'Morvanta', x: this.center.x, z: this.center.z }];
   }
 
-  // ---------- Candidates the boss may attack ----------
-  candidates() {
+  // ---------- Candidates the boss may attack (only sisters at her clearing) ----------
+  candidates(range = ARENA_RADIUS + 10) {
     const g = this.game;
     const out = [];
-    if (!g.isPlayerInvisible && !g.isDowned) out.push({ id: this.myId, pos: g.playerGroup.position });
+    const close = (p) => inForestArea(p.x) && Math.hypot(p.x - this.center.x, p.z - this.center.z) < range;
+    if (!g.isPlayerInvisible && !g.isDowned && close(g.playerGroup.position)) out.push({ id: this.myId, pos: g.playerGroup.position });
     g.remotes.list.forEach(r => {
-      if (r.hasState && !r.invisible && !r.downed) out.push({ id: r.id, pos: r.group.position });
+      if (r.hasState && !r.invisible && !r.downed && close(r.group.position)) out.push({ id: r.id, pos: r.group.position });
     });
     return out;
   }
@@ -460,8 +510,7 @@ export class Morvanta {
     sfx.victory();
     g.showFloatingText('🦋 MORVANTA BESIEGT! 🦋', g.playerGroup.position, '#ff9ee6');
     g.progression.addXp(200, 'Morvanta besiegt');
-    g.inventory.addCoins(80, 'Morvanta');
-    g.glaciel.onMorvantaDefeated();
+    g.inventory.addCoins(120, 'Morvanta');
     if (g.saveGame) g.saveGame.save();
     g.quests.mark('morvanta', 'boss', 'Morvanta besiegt');
     for (let i = 0; i < 3; i++) g.dropLoot(this.pos.clone().setY(this.groundAt(this.pos.x, this.pos.z)), { dust: 1, heart: 1 });
@@ -503,7 +552,11 @@ export class Morvanta {
 
     if (d.st === 'sleep') {
       this.pos.set(this.center.x, this.groundAt(this.center.x, this.center.z) + 4.2, this.center.z);
-      if (this.vortoxDown) this.setState('awaken');
+      // she wakes when a sister steps onto her rune clearing
+      if (this.ready && this.candidates(WAKE_RADIUS).length) {
+        this.setState('awaken');
+        g.showToast('🦋 Der Kokon bricht auf … Morvanta erwacht!', 5000);
+      }
       return;
     }
     if (d.st === 'awaken') {
@@ -766,6 +819,31 @@ export class Morvanta {
     this.cocoon.position.set(this.center.x, this.groundAt(this.center.x, this.center.z) + 4.2 + Math.sin(t * 1.2) * 0.15, this.center.z);
     this.cocoon.rotation.y += delta * 0.4;
     this.runeMat.opacity = 0.55 + Math.sin(t * 1.5) * 0.15;
+    // the clearing (and everything on it) is only drawn while you are in the forest
+    const here = inForestArea(this.game.camera.position.x);
+    this.arena.visible = here;
+    if (!here) {
+      this.cocoon.visible = false;
+      this.group.visible = false;
+    } else {
+      this.outerRune.rotation.z -= delta * 0.12;
+      const floorY = this.groundAt(this.center.x, this.center.z);
+      this.crystals.forEach((c, i) => {
+        const u = c.userData;
+        const a = u.a + t * (i % 2 ? 0.18 : -0.12);
+        c.position.set(this.center.x + Math.cos(a) * u.r, floorY + u.h + Math.sin(t * 1.4 + i) * 0.5, this.center.z + Math.sin(a) * u.r);
+        c.rotation.y += delta * 1.2;
+      });
+      const arr = this.sparks.geometry.attributes.position.array;
+      this.sparkBase.forEach((p, i) => {
+        const k = (t * p.sp * 0.25 + p.ph) % 1;
+        arr[i * 3] = p.x + Math.sin(t + p.ph) * 0.3;
+        arr[i * 3 + 1] = p.y + k * 7;
+        arr[i * 3 + 2] = p.z + Math.cos(t + p.ph) * 0.3;
+      });
+      this.sparks.geometry.attributes.position.needsUpdate = true;
+      this.arenaLight.intensity = (d.awake && d.alive ? 2.2 : 1.0) + Math.sin(t * 2) * 0.3;
+    }
 
     this.group.position.copy(this.pos);
     if (d.alive && d.awake) {

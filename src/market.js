@@ -4,14 +4,14 @@
 // ==========================================
 import * as THREE from 'three';
 import { sfx } from './game/shared.js';
-import { ITEMS } from './inventory.js';
+import { ITEMS, recipeText } from './inventory.js';
 import { findFlatSpot } from './spots.js';
 import { createCritter, animateCritter } from './critters.js';
 import { blinkFace } from './characters.js';
 
 export const STALLS = [
   { id: 'food', name: 'Leckereien', keeper: 'bunny', owner: 'Hoppla', awning: [0xff8fb1, 0xffffff], items: ['apple', 'berries', 'bread', 'soup', 'cake'] },
-  { id: 'build', name: 'Baumaterial', keeper: 'bear', owner: 'Brummo', awning: [0x7fbf6a, 0xfff3d6], items: ['wood', 'stone', 'glass', 'rope', 'cloth'] },
+  { id: 'build', name: 'Baumaterial', keeper: 'bear', owner: 'Brummo', awning: [0x7fbf6a, 0xfff3d6], items: ['wood', 'stone', 'glass', 'rope', 'cloth', 'chair', 'table', 'door', 'lamp', 'shelf', 'plant', 'sofa', 'picture'] },
   { id: 'magic', name: 'Zauberkram', keeper: 'owl', owner: 'Professor Uhu', awning: [0x8f7bff, 0xfff6c8], items: ['weight', 'candle', 'lantern'] }
 ];
 
@@ -79,7 +79,7 @@ export class Market {
       awning.rotation.x = -Math.PI / 2 + 0.35;
       stall.add(awning);
       // goods on the counter
-      def.items.forEach((id, k) => {
+      def.items.slice(0, 5).forEach((id, k) => {
         const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTex(ITEMS[id].icon), transparent: true, depthWrite: false }));
         sprite.scale.setScalar(0.5);
         sprite.position.set(-1.2 + k * 0.6, 1.38, 0.65);
@@ -201,7 +201,10 @@ export class Market {
       nm.textContent = `${it.name}`;
       const desc = document.createElement('div');
       desc.className = 'shop-desc';
-      desc.textContent = it.kind === 'food' ? `+${it.heal} HP · du hast ${g.inventory.count(id)}` : `${it.desc || 'Material zum Bauen'} · du hast ${g.inventory.count(id)}`;
+      const what = it.kind === 'food' ? `+${it.heal} HP`
+        : it.kind === 'furniture' ? `Möbel · selbst gebaut: ${recipeText(it.recipe)}`
+          : it.desc || 'Material zum Bauen';
+      desc.textContent = `${what} · du hast ${g.inventory.count(id)}`;
       info.append(nm, desc);
       const buy = document.createElement('button');
       buy.type = 'button';
@@ -213,6 +216,14 @@ export class Market {
       list.appendChild(row);
     });
     card.appendChild(list);
+    if (s.def.id === 'build') {
+      const hint = document.createElement('button');
+      hint.type = 'button';
+      hint.className = 'shop-buy clickable shop-wide';
+      hint.textContent = '🔨 Möbel selbst bauen (Werkbank)';
+      hint.addEventListener('click', () => { this.closeShop(); g.inventory.toggle(true, 'craft'); });
+      card.appendChild(hint);
+    }
   }
 }
 

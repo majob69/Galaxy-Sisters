@@ -40,7 +40,7 @@ export class Glaciel {
       cr: [CRYSTAL_HP, CRYSTAL_HP, CRYSTAL_HP], zones: [], zid: 0, attackIdx: 0, sl: null
     };
     this.msg = null;
-    this.morvantaDown = false; // Morvanta beaten
+    this.vortoxDown = false; // Vortox beaten: the frost golem wakes up
     this.zoneHits = new Set();
     this.slamHit = false;
     this.pos = new THREE.Vector3(this.center.x, this.groundAt(this.center.x, this.center.z), this.center.z);
@@ -229,14 +229,14 @@ export class Glaciel {
   get armored() { return this.d.cr.some(h => h > 0); }
   get hittable() { return this.d.alive && this.d.awake && this.d.st !== 'sleep' && this.d.st !== 'awaken'; }
 
-  onMorvantaDefeated() {
-    this.morvantaDown = true;
+  onVortoxDefeated() {
+    this.vortoxDown = true;
     this.game.showToast('❄️ Ein eisiger Wind zieht auf … der Frostgolem Glaciel erwacht!', 6000);
   }
 
   getTargets() {
     const d = this.d;
-    if (!this.morvantaDown || !d.alive) return [];
+    if (!this.vortoxDown || !d.alive) return [];
     const done = this.game.quests && this.game.quests.state.done.glaciel;
     return done ? [] : [{ id: 'glaciel', icon: '❄️', label: 'Glaciel', x: this.center.x, z: this.center.z }];
   }
@@ -417,7 +417,7 @@ export class Glaciel {
     }
 
     if (d.st === 'sleep') {
-      if (this.morvantaDown) this.setState('awaken');
+      if (this.vortoxDown) this.setState('awaken');
       return;
     }
     if (d.st === 'awaken') {

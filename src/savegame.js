@@ -78,9 +78,8 @@ export class SaveGame {
     const g = this.game;
     if (!s) return false;
     if (s.vortox) g.restoreVortoxDefeated();
-    if (s.vortox || s.morvanta || s.glaciel) g.morvanta.vortoxDown = true;
     if (s.morvanta) g.morvanta.restoreDefeated();
-    if (s.morvanta || s.glaciel) g.glaciel.morvantaDown = true;
+    if (s.vortox || s.glaciel) g.glaciel.vortoxDown = true;
     if (s.glaciel) g.glaciel.restoreDefeated();
     if (s.gate) g.stargate.restoreOpen();
     if (s.shrine) g.shrine.restoreSolved();

@@ -1,6 +1,7 @@
 // ==========================================
 // RIVER FISH: colourful fish of different sizes swimming in the river, pond and lakes.
-// Fishing near them catches one of them (it is gone for a while, then a new one swims by).
+// Fishing near them sometimes catches one of them (it is gone for a while, then a new one swims by) -
+// but often something bites that was hiding deeper down, so you never quite know what you get.
 // Two instanced meshes (bodies, tails) keep this to two draw calls.
 // ==========================================
 import * as THREE from 'three';
@@ -40,6 +41,7 @@ export class RiverFish {
       this.tails.setColorAt(i, c.clone().multiplyScalar(0.8));
     });
     this.dummy = new THREE.Object3D();
+    this.visibleChance = 0.5; // how often the bite is one of the fish you can see
     game.scene.add(this.bodies, this.tails);
     this.update(0);
   }
@@ -86,8 +88,10 @@ export class RiverFish {
     this.tails.instanceMatrix.needsUpdate = true;
   }
 
-  // The fish that bites: the nearest one to the bobber (or a random size if none is close)
+  // The fish that bites: sometimes the nearest visible one, otherwise a hidden fish from the deep
+  // (null = hidden fish; the caller rolls its size)
   takeNearest(spot, maxDist = 9) {
+    if (Math.random() >= this.visibleChance) return null;
     let best = null;
     let bd = maxDist;
     this.fish.forEach(f => {
@@ -97,6 +101,6 @@ export class RiverFish {
     });
     if (!best) return null;
     best.gone = 60 + Math.random() * 60;
-    return { size: best.size, color: best.color };
+    return { size: best.size, color: best.color, visible: true };
   }
 }

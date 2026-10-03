@@ -7,6 +7,7 @@ import { sfx } from './game/shared.js';
 import { createCritter, animateCritter } from './critters.js';
 import { blinkFace } from './characters.js';
 import { SNOW_BIOME } from './biome.js';
+import { LILLI_SPOT } from './forest.js';
 
 const RANGE = 3.2;
 
@@ -22,7 +23,7 @@ const NPCS = [
     ]
   },
   {
-    id: 'fips', name: 'Fips', kind: 'fox', accessory: 'scarf', where: () => ({ x: SNOW_BIOME.x - 18, z: SNOW_BIOME.z + 6 }),
+    id: 'fips', name: 'Fips', kind: 'fox', accessory: 'scarf', where: () => ({ x: SNOW_BIOME.x - 24, z: SNOW_BIOME.z + 8 }),
     lines: [
       'Brrr, ist das kalt hier im Schnee! Ich bin Fips. 🦊',
       'In der Eis-Arena wohnt Vortox. Wer hineingeht, kommt erst wieder heraus, wenn er besiegt ist!',
@@ -58,10 +59,10 @@ const NPCS = [
     ]
   },
   {
-    id: 'lilli', name: 'Lilli', kind: 'bunny', where: (g) => ({ x: g.morvanta.center.x, z: g.morvanta.center.z + 21 }),
+    id: 'lilli', name: 'Lilli', kind: 'bunny', where: () => LILLI_SPOT,
     lines: [
-      'Ich bin Lilli … da drüben schläft Morvanta in ihrem Kokon. 🐰',
-      'Sie erwacht erst, wenn Vortox besiegt ist. Weicht ihren leuchtenden Staubkreisen aus!',
+      'Ich bin Lilli … da drüben auf der Runen-Lichtung schläft Morvanta in ihrem Kokon. 🐰',
+      'Sobald du die Lichtung betrittst, erwacht sie. Weicht ihren leuchtenden Staubkreisen aus!',
       'Packt sie eine von euch, strampelt mit der Sprungtaste – und Freunde schlagen auf sie ein.',
       'Danach ist sie benommen und nimmt doppelten Schaden.'
     ]
@@ -70,7 +71,7 @@ const NPCS = [
     id: 'pingu', name: 'Pingu', kind: 'penguin', where: (g) => ({ x: g.glaciel.center.x - 18, z: g.glaciel.center.z }),
     lines: [
       'Hallo! Pingu hier. Ich mag Kälte – aber Glaciel ist mir zu frostig! 🐧',
-      'Sein Eispanzer schluckt fast jeden Schaden. Zerschlagt zuerst die drei leuchtenden Kristalle!',
+      'Er erwacht, sobald Vortox besiegt ist. Sein Eispanzer schluckt fast jeden Schaden. Zerschlagt zuerst die drei leuchtenden Kristalle!',
       'Dann liegt sein Kern frei – jetzt zählt jeder Treffer anderthalbfach.',
       'Über seine Schockwelle kannst du springen. Eine Frostlaterne schützt dich vor dem Einfrieren.'
     ]
@@ -81,7 +82,10 @@ const NPCS = [
       'Moin! Ich bin Ole, Baumeister. 🐻',
       'Auf dem Bauplatz kannst du dir ein eigenes Haus bauen!',
       'Du brauchst 12 Holz, 8 Stein, 3 Glas, 2 Seil und 2 Stoff. Das gibt es am Bau-Stand, in Truhen – oder von Freunden geschenkt.',
-      'In deinem Haus steht eine Vorratstruhe für alles, was nicht in die Tasche muss.'
+      'In deinem Haus steht eine Vorratstruhe für alles, was nicht in die Tasche muss.',
+      'An der Haustür kannst du ein Obergeschoss ausbauen: 60 Sterntaler, dann Material – und 5 Minuten Geduld!',
+      'Auf dem Bauland ist Platz für noch mehr: Brunnen, Laube, Turm, Beet, Werkstatt und Gästehaus.',
+      'Möbel baust du an der Werkbank im Inventar – zum Beispiel einen Stuhl aus 2 Holz und 1 Seil.'
     ]
   }
 ];

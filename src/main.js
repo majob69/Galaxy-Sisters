@@ -26,6 +26,9 @@ import { toolMethods } from './game/tools.js';
 import { Houses } from './houses.js';
 import { Npcs } from './npcs.js';
 import { EnchantedForest, forestHeight, FOREST } from './forest.js';
+import { findFlatSpot } from './spots.js';
+import { Wildlife } from './wildlife.js';
+import { Challenges } from './challenges.js';
 import { WORLD_SEED, mulberry32, sfx } from './game/shared.js';
 import { worldTerrainMethods } from './game/world-terrain.js';
 import { worldPropsMethods } from './game/world-props.js';
@@ -123,9 +126,11 @@ class GalaxySistersGame {
     // Co-op puzzle and the second boss (positions are found deterministically, so all players agree)
     this.stargate = new StarGate(this);
     this.morvanta = new Morvanta(this);
+    // the building land sits where Morvanta used to sleep before she moved into the enchanted forest
+    this.buildArea = findFlatSpot(this, { target: { x: -55, z: -50 }, radius: 18, avoid: [{ x: this.stargate.center.x, z: this.stargate.center.z, r: 16 }] });
     const taken = [
       { x: this.stargate.center.x, z: this.stargate.center.z, r: 15 },
-      { x: this.morvanta.center.x, z: this.morvanta.center.z, r: 18 }
+      { x: this.buildArea.x, z: this.buildArea.z, r: 18 }
     ];
     this.shrine = new ElementShrine(this, taken);
     taken.push({ x: this.shrine.center.x, z: this.shrine.center.z, r: 15 });
@@ -133,7 +138,7 @@ class GalaxySistersGame {
     taken.push({ x: this.glaciel.center.x, z: this.glaciel.center.z, r: 16 });
     this.market = new Market(this, taken);
     taken.push({ x: this.market.center.x, z: this.market.center.z, r: 11 });
-    this.houses = new Houses(this, taken);
+    this.houses = new Houses(this, taken, this.buildArea);
     taken.length = 0;
     taken.push(...this.houses.taken);
     this.weather = new WeatherSystem(this);
@@ -161,6 +166,11 @@ class GalaxySistersGame {
     this.interactions.register(() => this.forest.getInteraction());
     this.riverFish = new RiverFish(this);
     this.frostWard = 0;
+    // animals in the snow and the forest (plus the prickly Dornwichtel), obbys and harder puzzles
+    this.wildlife = new Wildlife(this);
+    this.interactions.register(() => this.wildlife.getInteraction());
+    this.challenges = new Challenges(this);
+    this.interactions.register(() => this.challenges.getInteraction());
 
     // Day & night: sun/moon arc, palettes, night glow, fireflies
     this.dayNight = new DayNightCycle(this, {
@@ -178,12 +188,12 @@ class GalaxySistersGame {
 
     // Compass with open quest goals (and the boss while he is alive)
     this.compass = new Compass(this, () => {
-      if (this.forest && this.forest.inForest) return this.forest.getTargets();
+      if (this.forest && this.forest.inForest) return [...this.forest.getTargets(), ...this.challenges.getTargets(true)];
       const targets = this.quests.getTargets();
       if (this.bossData && this.bossData.alive) {
         targets.push({ id: 'boss', icon: '👾', label: 'Vortox', x: this.bossGroup.position.x, z: this.bossGroup.position.z });
       }
-      targets.push(...this.stargate.getTargets(), ...this.morvanta.getTargets(), ...this.shrine.getTargets(), ...this.glaciel.getTargets(), ...this.coop.getCompassTargets());
+      targets.push(...this.stargate.getTargets(), ...this.shrine.getTargets(), ...this.glaciel.getTargets(), ...this.challenges.getTargets(false), ...this.coop.getCompassTargets());
       return targets;
     });
 
@@ -352,6 +362,8 @@ class GalaxySistersGame {
     this.npcs.update(delta);
     this.forest.update(delta);
     this.riverFish.update(delta);
+    this.wildlife.update(delta);
+    this.challenges.update(delta);
     if (this.frostWard > 0) this.frostWard = Math.max(0, this.frostWard - delta);
     this.interactions.update();
     this.collectibles.update(delta);

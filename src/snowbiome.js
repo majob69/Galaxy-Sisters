@@ -54,7 +54,7 @@ export class SnowBiome {
   okSpot(x, z, clear = 2.5) {
     const g = this.game;
     const arena = Math.hypot(x - 32, z - 30);
-    return snowAt(x, z) > 0.6 && arena > 20 && !g.isNearWater(x, z, 2.5) && g.getWaterSurface(x, z) === null &&
+    return snowAt(x, z) > 0.6 && arena > 20 + clear && !g.isNearWater(x, z, 2.5) && g.getWaterSurface(x, z) === null &&
       !g.checkWallCollision(x, z, clear, g.getTerrainHeight(x, z));
   }
 

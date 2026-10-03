@@ -285,6 +285,7 @@ export const abilityMethods = {
       }
     });
     this.hitWisps(pos, radius, dmg);
+    if (this.wildlife) this.wildlife.hitFoes(pos, radius, dmg);
   },
 
   // Damage after the star level bonus
@@ -393,7 +394,7 @@ export const abilityMethods = {
         }
       });
 
-      if (!p.remote && this.hitWisps(p.mesh.position, 1.5, p.damage)) {
+      if (!p.remote && (this.hitWisps(p.mesh.position, 1.5, p.damage) || (this.wildlife && this.wildlife.hitFoes(p.mesh.position, 1.0, p.damage)))) {
         this.fx.flash(p.mesh.position, p.trail || new THREE.Color(2, 2, 2), 2, 0.2);
         this.scene.remove(p.mesh);
         this.projectiles.splice(i, 1);
