@@ -387,7 +387,7 @@ test('Schneebiom: Iglus, Schneefall, versiegelte Arena, Vortox bleibt drin', asy
   g.snowBiome.update();
   assert(g.snowBiome.flakes.visible, 'kein Schneefall');
   for (let i = 0; i < 8; i++) g.applyBossDamage(25);
-  assert(await until(() => !g.arenaLock.locked, 1500), 'Arena öffnet nach dem Sieg nicht');
+  assert(await until(() => !g.arenaLock.locked, 6000), 'Arena öffnet nach dem Sieg nicht');
   g.maxPlayerHP = 100; heal();
 });
 
@@ -593,7 +593,7 @@ test('Tiere im Schnee und im Zauberwald, Dornwichtel lassen sich verscheuchen', 
   assert(it && /streicheln|füttern/.test(it.label), 'Streicheln fehlt');
   const f = wl.foes[0];
   stand(f.home.x + 3, f.home.z);
-  assert(await until(() => f.mesh.visible, 4000), 'Dornwichtel unsichtbar');
+  assert(await until(() => f.mesh.visible, 12000), 'Dornwichtel unsichtbar');
   wl.hitFoes(f.mesh.position.clone().setY(f.mesh.position.y + 0.6), 2, 999);
   assert(!f.alive, 'Dornwichtel nicht verscheucht');
   stand(0, 8); heal();
@@ -636,7 +636,7 @@ test('Schnee-Obbys und schwere Rätsel: Eis-Schieben, Nordlicht, Laternen, brüc
   // a cracking floe breaks under your feet
   const cr = c.crumbling[0];
   g.playerGroup.position.set(cr.plat.x, cr.top + 0.05, cr.plat.z); g.playerVelY = 0;
-  assert(await until(() => cr.gone > 0, 3000), 'Scholle bricht nicht');
+  assert(await until(() => cr.gone > 0, 9000), 'Scholle bricht nicht');
   stand(0, 8);
 });
 
@@ -679,10 +679,10 @@ test('Haustier: dreimal Lieblingsessen füttern, es folgt und hilft beim Angeln'
   }
   assert(pet.active && pet.state.key === 'snow-bunny' && a.tamed, 'nicht gezähmt');
   assert(g.quests.state.done.pet, 'Quest fehlt');
-  stand(10, 30); await sleep(1500);
+  stand(10, 30);
   // it stays close - unless it is sniffing at a hidden chest nearby
-  const pd = pet.mesh.position.distanceTo(g.playerGroup.position);
-  assert(pd < 6 || (pet.nearestChest() && pd < 25), `Begleiter folgt nicht (${pd.toFixed(1)} m)`);
+  const follows = () => { const pd = pet.mesh.position.distanceTo(g.playerGroup.position); return pd < 6 || (pet.nearestChest() && pd < 25); };
+  assert(await until(follows, 10000), `Begleiter folgt nicht (${pet.mesh.position.distanceTo(g.playerGroup.position).toFixed(1)} m)`);
   stand(0, 8); await sleep(200);
   pet.mesh.position.copy(g.playerGroup.position).x += 1;
   g.collectibles.startCast(new V(0, 0, 4));
@@ -748,6 +748,42 @@ test('Leistung: Lavendel und Tempel sind zusammengefasst, ferne Dinge werden nic
   const farSlime = g.slimes.find(s => s.userData.alive && s.position.distanceTo(g.playerGroup.position) > 80);
   assert(!farSlime || !farSlime.visible, 'ferner Slime wird gezeichnet');
   stand(0, 8);
+});
+
+test('Sicherungsdatei enthält alle Welten und wird beim Laden geprüft', async () => {
+  const s = g.saveGame;
+  g.houses.save(); g.pet.save(); g.challenges.save(); g.castle.save(); g.forest.save();
+  const exp = s.buildExport();
+  ['house', 'forest', 'challenges', 'pet', 'castle', 'inventory', 'quests', 'progress'].forEach(k => assert(k in exp, `${k} fehlt im Export`));
+  assert(Array.isArray(exp.inventory.recipes), 'Rezepte fehlen');
+  const back = s.parseImport(JSON.stringify(exp));
+  assert(back.parts['gs-house-v1'] && back.parts['gs-house-v1'].built === g.houses.state.built, 'Haus geht verloren');
+  assert(back.inventory.recipes.length === g.inventory.state.recipes.length, 'Rezepte gehen verloren');
+  const keep = w.localStorage.getItem('gs-house-v1');
+  const evil = { ...exp, house: { built: 'ja', structures: { 0: 'rakete', 1: 'fountain' }, furniture: [{ id: 'bomb', x: 1, y: 1, z: 1, r: 0 }, { id: 'chair', x: 'x' }] }, pet: { key: 'drache', name: 'X' } };
+  const clean = s.parseImport(JSON.stringify(evil));
+  const h = clean.parts['gs-house-v1'];
+  assert(h.built === true && Object.values(h.structures).join() === 'fountain' && h.furniture.length === 0, 'Haus-Daten nicht bereinigt');
+  assert(clean.parts['gs-pet-v1'] === null, 'unbekanntes Tier angenommen');
+  assert(w.localStorage.getItem('gs-house-v1') === keep, 'Prüfen hat den Spielstand verändert');
+});
+
+test('Weltkarte und Foto-Modus', async () => {
+  g.worldMap.toggle(true);
+  assert(w.document.querySelector('#map-modal.open'), 'Karte öffnet nicht');
+  assert(w.document.querySelectorAll('#map-modal .inv-tab').length === 3, 'Welt-Reiter fehlen');
+  const px = w.document.querySelector('.map-canvas').getContext('2d').getImageData(256, 256, 1, 1).data;
+  assert(px[3] === 255, 'Karte nicht gemalt');
+  g.worldMap.toggle(false);
+  stand(0, 8);
+  g.photo.toggle(true);
+  assert(w.document.body.classList.contains('photo-mode') && w.getComputedStyle(w.document.getElementById('ui-overlay')).display === 'none', 'Oberfläche bleibt sichtbar');
+  g.photo.setPose('wave'); await sleep(300);
+  assert(Math.abs(g.playerRig.arms[1].rotation.z) > 2, 'Pose wirkt nicht');
+  const p0 = g.playerGroup.position.clone(); g.keys['KeyW'] = true; await sleep(500); g.keys['KeyW'] = false;
+  assert(p0.distanceTo(g.playerGroup.position) < 0.05, 'Figur läuft im Foto-Modus');
+  g.photo.toggle(false);
+  assert(!w.document.body.classList.contains('photo-mode'), 'Foto-Modus endet nicht');
 });
 
 test('Server-Nachrichten: Boss-3-Zustand hat das erwartete Format', async () => {

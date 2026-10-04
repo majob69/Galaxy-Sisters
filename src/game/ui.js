@@ -106,6 +106,14 @@ export const uiMethods = {
 
     window.addEventListener('keydown', (e) => {
       if (e.target && e.target.tagName === 'INPUT') return; // typing the player name / room code
+      // photo mode: only P / Escape leave it, nothing else moves the sister
+      if (this.photo && this.photo.active) {
+        if (e.key.toLowerCase() === 'p' || e.key === 'Escape') this.photo.toggle(false);
+        return;
+      }
+      if (e.key.toLowerCase() === 'p' && this.photo) { this.photo.toggle(true); return; }
+      if (e.key.toLowerCase() === 'm' && this.worldMap) this.worldMap.toggle();
+      if (e.key === 'Escape' && this.worldMap) this.worldMap.toggle(false);
       this.keys[e.code] = true;
       if (e.key === '1') this.switchSister(0);
       if (e.key === '2') this.switchSister(1);

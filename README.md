@@ -103,6 +103,10 @@ Ein farbenfrohes 3D-Action-Adventure / Platformer im Kawaii-Anime-Stil, direkt i
 * **🚪 Arena-Notausgang:** An der Arenawand zweimal F – du bist draußen, der Boss heilt sich dann aber wieder (außer Freundinnen kämpfen noch drin).
 * **👭 Koop für die neuen Welten:** Gäste sehen Haus, Bauland und Möbel der Gastgeberin; Eisblöcke, Laternen, Nordlicht-Lösung und verscheuchte Dornwichtel werden geteilt; Positionen im Zauberwald und im Schloss werden richtig übertragen.
 * **⚡ Schneller:** Lavendelbüsche, Tempel, Hütte und Häuser sind zu wenigen Meshes zusammengefasst, ferne Sammelstücke, Slimes, Häuser und Stände werden nicht gezeichnet und nur Dinge in der Nähe werfen Schatten – rund 45 % weniger Draw-Calls. Auf der niedrigsten Grafikstufe gibt es keine Schatten.
+* **🗺️ Weltkarte (`M`):** Gemalte Karte jeder Welt (Himmelsgebirge, Zauberwald, Sternenschloss) mit den wichtigen Orten, offenen Zielen, Freundinnen, Begleiter und dir selbst. Versteckte Truhen erscheinen erst, wenn du sie gefunden hast.
+* **📸 Foto-Modus (`P`):** Oberfläche aus, Kamera frei um die Figur drehen und zoomen, Posen (Winken, Schüchtern, Zaubern, Tanzen, Hüpfen) und Tageszeit wählen, Bild als PNG speichern.
+* **💾 Vollständige Sicherung:** Die Spielstand-Datei enthält jetzt auch Haus, Obergeschoss, Bauland, Möbel, Kochrezepte, Zauberwald, Rätsel, Begleiter und Sternenschloss; beim Laden wird alles geprüft. „Neues Spiel“ setzt auch diese Teile zurück.
+* **📱 Handy:** Die untere Leiste (Schwestern, Inventar, Karte, Foto) passt auch auf schmale Handys und ins Querformat; der Aktionsknopf liegt nicht mehr über der Leiste.
 * **🏟️ Magischere Arenen:** Vortox' Arena ist größer (mit schwebenden Eiskristallen); alle Arenen haben einen leuchtenden Runenring, eine Aurora-Wand und kreisende Glyphen.
 * **🎵 Musik:** vier Tageslieder zur Wahl (🎵-Knopf), nachts spielt die Musik leiser.
 * **🌀 Zauberwald:** Sind alle Aufgaben erfüllt, öffnet sich ein Portal in eine dritte Welt mit lila, pinken und blauen Bäumen, ewiger Dämmerung und einem Geheimnis aus drei Mondsteinen.
@@ -159,6 +163,7 @@ Im Dokument [GDD_Galaxy_Sisters.md](file:///c:/Users/Mario/Coding/Galaxy-Sisters
 | `showcase.js` | 3D-Figurenseite `figuren.html` (Inspektor & Spiel-Modus) |
 | `buildings.js`, `wildlife.js`, `challenges.js` | Gebäude- und Möbelmodelle, Tiere & Dornwichtel, Schnee-Obbys und schwere Rätsel |
 | `pet.js`, `castle.js` | Begleiter-Tier, Sternenschloss mit Endboss Umbra |
+| `worldmap.js`, `photomode.js` | Weltkarte (M), Foto-Modus (P) |
 | `progression.js` | Stern-Level, XP, Outfits |
 | `coop.js`, `network.js`, `remote.js` | Koop-Sitzung, WebSocket-Client, Fremdspieler |
 | `landscape.js`, `atmosphere.js`, `water.js`, `bridges.js` | Gelände, Himmel, Wasser, Brücken |
@@ -174,3 +179,7 @@ npm test          # Server-Protokoll und reine Logik (Node 22, keine Pakete nöt
 Für die Spielmodule (Bosse, Rätsel, KO, Speichern, Wetter, Chat …): Server starten und im Browser
 `http://localhost:8080/tests/browser.html` öffnen. Die Seite startet das Spiel in einem Rahmen, führt alle Tests aus
 und zeigt am Ende `RESULT: … bestanden, … fehlgeschlagen` an (ca. 1–2 Minuten).
+
+Koop-Probelauf mit zwei Spielerinnen über den echten Koop-Server: `http://localhost:8080/tests/coop.html` öffnen
+(Server muss mit `start_multiplayer.bat` bzw. `node server/server.mjs` laufen). Zwei Spiele treten demselben Raum bei;
+geprüft werden Positionen in allen Welten, Begleiter, Bauten der Gastgeberin, geteilte Rätsel, Dornwichtel und Umbra.

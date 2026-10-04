@@ -1292,6 +1292,11 @@ html.touch .compass.lowered {
     bottom: calc(max(18px, env(safe-area-inset-bottom)) + 206px);
   }
 
+  /* the action button sits just above the picker instead of on top of it */
+  html.touch .fish-btn {
+    bottom: calc(max(18px, env(safe-area-inset-bottom)) + 274px);
+  }
+
   html.touch .boss-banner {
     top: 68px;
     padding: 8px 14px;
@@ -2440,4 +2445,130 @@ html:not(.touch) .interact-btn {
 .travel-overlay {
   background: radial-gradient(circle at center, #b28cff 0%, #3a2350 45%, #0b0718 100%);
   color: #fff;
+}
+
+/* ==========================================
+   World map (M) and photo mode (P)
+   ========================================== */
+.map-card {
+  max-width: 600px;
+}
+
+.map-canvas {
+  display: block;
+  width: 100%;
+  max-width: 512px;
+  aspect-ratio: 1;
+  margin: 8px auto 6px;
+  border-radius: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  background: #2a1d3d;
+}
+
+.map-legend {
+  font-size: 0.72rem;
+  color: #d9cdf5;
+  text-align: center;
+}
+
+.photo-panel {
+  display: none;
+  position: fixed;
+  left: 50%;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 300;
+  width: min(760px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border-radius: 18px;
+  background: rgba(24, 16, 44, 0.78);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  color: #f4efff;
+  font-weight: 800;
+}
+
+body.photo-mode .photo-panel {
+  display: block;
+}
+
+body.photo-mode > *:not(#canvas-container):not(#photo-panel):not(.photo-flash) {
+  display: none !important;
+}
+
+.photo-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.photo-label {
+  min-width: 44px;
+  font-size: 0.75rem;
+  color: #ffd6f5;
+}
+
+.photo-btn {
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f4efff;
+  font-weight: 800;
+  font-size: 0.78rem;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.photo-btn.active {
+  border-color: #ffd166;
+  background: rgba(255, 209, 102, 0.22);
+}
+
+.photo-hint {
+  font-size: 0.7rem;
+  color: #c9bde6;
+  text-align: center;
+}
+
+.photo-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: #fff;
+  pointer-events: none;
+  animation: photoFlash 0.45s ease-out forwards;
+}
+
+@keyframes photoFlash {
+  from { opacity: 0.85; }
+  to { opacity: 0; }
+}
+
+/* narrow phones: seven buttons (four sisters, bag, map, photo) must fit in one row */
+@media (max-width: 440px), (orientation: landscape) and (max-height: 500px) {
+  html.touch .sister-picker {
+    gap: 5px;
+    padding: 5px 7px;
+  }
+
+  html.touch .sister-picker .sister-btn {
+    width: 44px;
+    height: 46px;
+  }
+
+  html.touch .sister-picker .sister-icon {
+    font-size: 1.35rem;
+  }
+
+  .map-card {
+    padding: 10px;
+  }
+
+  .photo-btn {
+    padding: 5px 8px;
+    font-size: 0.72rem;
+  }
 }

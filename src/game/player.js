@@ -266,7 +266,7 @@ export const playerMethods = {
       moveX += this.joystickDelta.x;
       moveZ += this.joystickDelta.y;
     }
-    if (this.isDowned || this.isGrabbed) {
+    if (this.isDowned || this.isGrabbed || (this.photo && this.photo.active)) {
       moveX = 0;
       moveZ = 0;
     }

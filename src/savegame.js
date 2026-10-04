@@ -2,16 +2,30 @@
 // SAVE GAME: world progress that quests / XP do not cover (boss defeats, opened gate and shrine,
 // position, sister, time of day). Saved automatically and restored on the next start.
 // Also export / import as a .json file to move a game to another device.
-// Quests and XP have their own storage keys and are bundled into the export.
+// Quests, XP, the bag, houses & building land, the forest, the puzzles, the pet and the star castle
+// have their own storage keys; all of them are bundled into the export and checked on import.
 // ==========================================
 import { PERKS } from './progression.js';
-import { ITEMS } from './inventory.js';
+import { Inventory } from './inventory.js';
+import { Houses } from './houses.js';
+import { EnchantedForest } from './forest.js';
+import { Challenges } from './challenges.js';
+import { Pet } from './pet.js';
+import { StarCastle } from './castle.js';
 
 const KEY = 'gs-save-v1';
 const QUEST_KEY = 'gs-quests-v1';
 const PROGRESS_KEY = 'gs-progress-v1';
 const GRAPHICS_KEY = 'gs-graphics';
 const INVENTORY_KEY = 'gs-inventory-v1';
+// world parts that check their own data (their load() reads the key and returns clean state or null)
+const PARTS = [
+  { name: 'house', key: 'gs-house-v1', load: Houses.prototype.load },
+  { name: 'forest', key: 'gs-forest-v1', load: EnchantedForest.prototype.load },
+  { name: 'challenges', key: 'gs-challenges-v1', load: Challenges.prototype.load },
+  { name: 'pet', key: 'gs-pet-v1', load: Pet.prototype.load },
+  { name: 'castle', key: 'gs-castle-v1', load: StarCastle.prototype.load }
+];
 
 const num = (v, lo, hi, dflt = 0) => (Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : dflt);
 
@@ -105,7 +119,7 @@ export class SaveGame {
   buildExport() {
     this.save();
     const read = (key) => { try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (e) { return null; } };
-    return {
+    const out = {
       game: 'galaxy-sisters',
       version: 1,
       save: this.snapshot(),
@@ -113,6 +127,8 @@ export class SaveGame {
       progress: read(PROGRESS_KEY),
       inventory: read(INVENTORY_KEY)
     };
+    PARTS.forEach(p => { out[p.name] = read(p.key); });
+    return out;
   }
 
   exportFile() {
@@ -140,7 +156,7 @@ export class SaveGame {
     const q = data.quests && typeof data.quests === 'object' ? data.quests : {};
     ['items', 'done', 'marks'].forEach(part => {
       const src = q[part] && typeof q[part] === 'object' ? q[part] : {};
-      Object.keys(src).slice(0, 200).forEach(k => { if (/^[a-z0-9:_-]{1,48}$/i.test(k) && src[k] === true) quests[part][k] = true; });
+      Object.keys(src).slice(0, 300).forEach(k => { if (/^[a-z0-9:_-]{1,48}$/i.test(k) && src[k] === true) quests[part][k] = true; });
     });
 
     const known = new Set(PERKS.map(p => p.id));
@@ -151,14 +167,28 @@ export class SaveGame {
       perks: Array.isArray(p.perks) ? p.perks.filter(id => known.has(id)).slice(0, 8) : [],
       offer: []
     };
-    const inv = data.inventory && typeof data.inventory === 'object' ? data.inventory : {};
-    const inventory = { items: {}, coins: num(Math.floor(Number(inv.coins) || 0), 0, 1e6) };
-    const srcItems = inv.items && typeof inv.items === 'object' ? inv.items : {};
-    Object.keys(srcItems).forEach(k => {
-      const n = Math.floor(Number(srcItems[k]));
-      if (ITEMS[k] && n > 0) inventory.items[k] = Math.min(999, n);
-    });
-    return { save, quests, progress, inventory };
+    const inventory = this.checkPart(INVENTORY_KEY, data.inventory, Inventory.prototype.load) || { items: {}, coins: 0, recipes: [] };
+    const parts = {};
+    PARTS.forEach(p => { parts[p.key] = this.checkPart(p.key, data[p.name], p.load); });
+    return { save, quests, progress, inventory, parts };
+  }
+
+  // Let the part's own loader clean the data: write it, read it back through load(), restore the old value
+  checkPart(key, value, load) {
+    if (!value || typeof value !== 'object') return null;
+    let old = null;
+    try {
+      old = localStorage.getItem(key);
+      localStorage.setItem(key, JSON.stringify(value));
+      return load.call(null) || null;
+    } catch (e) {
+      return null;
+    } finally {
+      try {
+        if (old === null) localStorage.removeItem(key);
+        else localStorage.setItem(key, old);
+      } catch (e) { /* ignore */ }
+    }
   }
 
   importText(text) {
@@ -174,6 +204,11 @@ export class SaveGame {
       localStorage.setItem(QUEST_KEY, JSON.stringify(parsed.quests));
       localStorage.setItem(PROGRESS_KEY, JSON.stringify(parsed.progress));
       localStorage.setItem(INVENTORY_KEY, JSON.stringify(parsed.inventory));
+      PARTS.forEach(p => {
+        const v = parsed.parts[p.key];
+        if (v) localStorage.setItem(p.key, JSON.stringify(v));
+        else localStorage.removeItem(p.key);
+      });
     } catch (e) {
       this.game.showToast('⚠️ Der Browser erlaubt kein Speichern', 4500);
       return false;
@@ -184,9 +219,9 @@ export class SaveGame {
   }
 
   resetAll() {
-    if (!window.confirm('Wirklich alles zurücksetzen? Quests, Level, Outfits und Spielstand gehen verloren.')) return;
+    if (!window.confirm('Wirklich alles zurücksetzen? Quests, Level, Outfits, Haus, Begleiter und Spielstand gehen verloren.')) return;
     try {
-      [KEY, QUEST_KEY, PROGRESS_KEY, GRAPHICS_KEY, INVENTORY_KEY, 'gs-house-v1', 'gs-player-name', 'gs-room'].forEach(k => localStorage.removeItem(k));
+      [KEY, QUEST_KEY, PROGRESS_KEY, GRAPHICS_KEY, INVENTORY_KEY, 'gs-player-name', 'gs-room', ...PARTS.map(p => p.key)].forEach(k => localStorage.removeItem(k));
     } catch (e) { /* ignore */ }
     this.skipSaveOnUnload = true;
     location.reload();

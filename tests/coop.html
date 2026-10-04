@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Galaxy Sisters – Koop-Probelauf</title>
+  <style>
+    body { font-family: Consolas, monospace; background: #15101f; color: #eee; margin: 16px; }
+    h1 { font-size: 1.1rem; }
+    #out div { padding: 2px 0; }
+    .pass { color: #7dffb0; }
+    .fail { color: #ff8fa3; font-weight: bold; }
+    #summary { margin: 12px 0; font-size: 1.1rem; font-weight: bold; }
+    .frames { display: flex; gap: 8px; flex-wrap: wrap; }
+    iframe { width: 480px; height: 300px; border: 1px solid #555; }
+  </style>
+</head>
+<body>
+  <h1>👭 Galaxy Sisters – Koop-Probelauf (zwei Spielerinnen, echter Server)</h1>
+  <p>Startet zwei Spiele, verbindet beide über den Koop-Server mit demselben Raum und prüft Positionen in allen Welten,
+     Begleiter, Bauten der Gastgeberin, geteilte Rätsel, Dornwichtel und den Kampf gegen Umbra.
+     Voraussetzung: <code>start_multiplayer.bat</code> bzw. <code>node server/server.mjs</code> läuft. Dauer: ca. 1 Minute.</p>
+  <div id="summary">Läuft …</div>
+  <div id="out"></div>
+  <div class="frames">
+    <iframe id="a" title="Gastgeberin"></iframe>
+    <iframe id="b" title="Gast"></iframe>
+  </div>
+
+<script>
+const out = document.getElementById('out');
+const summary = document.getElementById('summary');
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+let passed = 0;
+let failed = 0;
+const tests = [];
+const test = (name, fn) => tests.push({ name, fn });
+function assert(cond, msg) { if (!cond) throw new Error(msg || 'Bedingung nicht erfüllt'); }
+function log(cls, text) {
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = text;
+  out.appendChild(d);
+}
+const until = async (fn, ms = 8000, step = 50) => {
+  const t0 = performance.now();
+  while (performance.now() - t0 < ms) { if (fn()) return true; await sleep(step); }
+  return false;
+};
+
+let A; let B; let wa; let wb; let V;
+const ROOM = 'T' + Math.floor(Math.random() * 1e6);
+const place = (g, x, z) => { g.playerGroup.position.set(x, g.getTerrainHeight(x, z), z); g.playerVelY = 0; };
+const heal = (g) => { g.maxPlayerHP = 9999; g.playerHP = 9999; g.isDowned = false; };
+
+async function loadGame(frame) {
+  frame.src = '../index.html';
+  await new Promise(r => { frame.onload = r; });
+  const w = frame.contentWindow;
+  const ok = await until(() => w.__gsReady && w.galaxyGame, 60000, 200);
+  if (!ok) throw new Error('Spiel wurde nicht bereit');
+  // keep both games running in background frames
+  w.requestAnimationFrame = (cb) => w.setTimeout(() => cb(w.performance.now()), 16);
+  w.galaxyGame.animate();
+  w.document.getElementById('btn-start-game').click();
+  return w;
+}
+
+// ---------- tests ----------
+test('Beide sind im selben Raum, A ist Gastgeberin', async () => {
+  assert(A.coop.active && B.coop.active, 'nicht verbunden');
+  assert(A.coop.net.isHost && !B.coop.net.isHost, 'Gastgeber-Rolle falsch');
+  assert(await until(() => A.remotes.list.length === 1 && A.remotes.list[0].hasState && B.remotes.list.length === 1 && B.remotes.list[0].hasState, 6000), 'sehen sich nicht');
+});
+
+test('Positionen kommen in allen Welten richtig an (Tal, Zauberwald, Schloss)', async () => {
+  for (const [x, z] of [[5, 10], [600, 30], [-600, 40]]) {
+    place(B, x, z);
+    const ok = await until(() => { const r = A.remotes.list[0]; return r && Math.abs(r.group.position.x - x) < 2 && Math.abs(r.group.position.z - z) < 2; }, 4000);
+    assert(ok, `Position (${x}, ${z}) kommt nicht an (${A.remotes.list[0].group.position.x.toFixed(1)})`);
+  }
+  place(B, 2, 10);
+});
+
+test('Der Begleiter der Freundin ist zu sehen', async () => {
+  if (B.pet.active) B.pet.release();
+  B.pet.adopt('snow-fox', 'Frosti');
+  assert(await until(() => A.remotes.list[0].pet && A.remotes.list[0].pet.visible !== false, 8000), 'Begleiter fehlt bei A');
+});
+
+test('Der Gast sieht Haus und Bauland der Gastgeberin und darf dort nicht bauen', async () => {
+  const hs = A.houses;
+  ['wood', 'stone', 'glass', 'rope', 'cloth'].forEach(id => A.inventory.add(id, 30, true));
+  if (!hs.state.built) hs.tryBuild();
+  const free = hs.plots.find(p => !p.built);
+  const id = ['fountain', 'garden', 'tower'].find(x => !Object.values(hs.state.structures).includes(x));
+  if (free && id) hs.build(free.i, id);
+  const want = Object.values(hs.state.structures);
+  assert(want.length > 0, 'A konnte nichts bauen');
+  const okB = await until(() => B.houses.shared && B.houses.shared.built && Object.values(B.houses.shared.structures).length === want.length, 12000);
+  assert(okB, `B sieht die Bauten nicht (A: ${JSON.stringify(hs.state.structures)}, B: ${B.houses.shared ? JSON.stringify(B.houses.shared.structures) + ' gebaut=' + B.houses.shared.built : 'nichts'})`);
+  assert(B.houses.ownHouse && B.houses.plots.filter(p => p.built).length === want.length, 'Bauten bei B nicht aufgebaut');
+  assert(!B.houses.build(B.houses.plots.find(p => !p.built).i, 'gazebo'), 'Gast darf bauen');
+});
+
+test('Eisblöcke, Laternen und Dornwichtel werden geteilt', async () => {
+  const ca = A.challenges; const cb = B.challenges;
+  ca.state.slide = false; cb.state.slide = false; ca.slide.solved = false; cb.slide.solved = false;
+  ca.resetSlide(true); cb.resetSlide(true);
+  const b = cb.slide.blocks.find(x => x.c === 1 && x.r === 3);
+  cb.pushBlock(b, 0, -1);
+  assert(await until(() => ca.slide.blocks.some(x => x.c === 1 && x.r === 0), 6000), 'Eisblock bewegt sich bei A nicht');
+  ca.state.lanterns = false; cb.state.lanterns = false;
+  ca.resetLanterns(true); cb.resetLanterns(true);
+  const before = ca.lanterns.map(l => l.on);
+  cb.touchLantern(4);
+  assert(await until(() => ca.lanterns[4].on !== before[4] && ca.lanterns[5].on !== before[5], 6000), 'Laterne bei A nicht umgeschaltet');
+  const f = A.wildlife.foes.findIndex((x, i) => x.alive && B.wildlife.foes[i].alive);
+  assert(f >= 0, 'kein Dornwichtel übrig');
+  const fa = A.wildlife.foes[f];
+  fa.mesh.visible = true;
+  A.wildlife.hitFoes(fa.mesh.position.clone().setY(fa.mesh.position.y + 0.6), 1, 999);
+  assert(await until(() => !B.wildlife.foes[f].alive, 6000), 'Dornwichtel bei B noch da');
+});
+
+test('Umbra: Gastgeberin steuert, beide entzünden Siegel, Treffer des Gasts zählen', async () => {
+  const ka = A.castle; const kb = B.castle;
+  if (!ka.d.alive) { ka.d.alive = true; ka.state.defeated = false; ka.boss.visible = true; }
+  ka.forceUnlock = true; kb.forceUnlock = true;
+  heal(A); heal(B);
+  place(A, -600, 8); place(B, -604, 8);
+  const woke = await until(() => ka.d.awake && ka.d.st !== 'sleep' && ka.d.st !== 'awaken', 15000);
+  assert(woke, `Umbra erwacht bei der Gastgeberin nicht (Zustand ${ka.d.st}, im Schloss ${ka.inCastle}, Kandidaten ${ka.candidates(19).length})`);
+  assert(await until(() => kb.d.awake && kb.d.st !== 'sleep', 8000), 'Gast sieht Umbra nicht wach');
+  const seal = (g, i) => g.castle.onCast(i, new V(g.castle.seals[i].x, 30, g.castle.seals[i].z));
+  seal(A, 0); seal(A, 1); seal(B, 2); seal(B, 3);
+  assert(await until(() => ka.d.st === 'stunned', 6000), `Schild bricht nicht (Siegel ${ka.d.seals.map(v => Math.round(v)).join(',')})`);
+  assert(await until(() => kb.d.st === 'stunned', 6000), 'Gast sieht den gebrochenen Schild nicht');
+  const hp0 = ka.d.hp;
+  kb.hit(60);
+  assert(await until(() => ka.d.hp === hp0 - 60, 6000), `Treffer des Gasts zählt nicht (${hp0} → ${ka.d.hp})`);
+  assert(await until(() => kb.d.hp === ka.d.hp, 6000), 'Lebensleiste beim Gast nicht aktuell');
+  ka.applyHit(99999);
+  assert(await until(() => !kb.d.alive && kb.state.defeated, 8000), 'Sieg kommt beim Gast nicht an');
+  place(A, 0, 8); place(B, 2, 10);
+  A.maxPlayerHP = 100; B.maxPlayerHP = 100; heal(A); heal(B); A.playerHP = 100; B.playerHP = 100;
+});
+
+test('Verlässt der Gast den Raum, bekommt er seine eigene Welt zurück', async () => {
+  B.coop.net.close();
+  assert(await until(() => A.remotes.list.length === 0, 8000), 'A sieht den Gast noch');
+  assert(await until(() => B.houses.shared === null, 6000), 'Gast hat seine eigene Welt nicht zurück');
+});
+
+// ---------- run ----------
+async function main() {
+  try { localStorage.clear(); } catch (e) { /* ignore */ }
+  try {
+    wa = await loadGame(document.getElementById('a'));
+    wb = await loadGame(document.getElementById('b'));
+    A = wa.galaxyGame; B = wb.galaxyGame; V = A.playerGroup.position.constructor;
+    await A.coop.join({ name: 'Anna', room: ROOM });
+    await sleep(300);
+    await B.coop.join({ name: 'Bea', room: ROOM });
+  } catch (e) {
+    log('fail', `FAIL  Start: ${e.message}`);
+    failed++;
+    return finish();
+  }
+  const errors = [];
+  [wa, wb].forEach(w => w.addEventListener('error', e => errors.push(e.message)));
+  for (const t of tests) {
+    const t0 = performance.now();
+    try {
+      await t.fn();
+      passed++;
+      log('pass', `PASS  ${t.name}  (${Math.round(performance.now() - t0)} ms)`);
+    } catch (e) {
+      failed++;
+      log('fail', `FAIL  ${t.name}: ${e.message}`);
+    }
+  }
+  if (errors.length) { failed++; log('fail', `FAIL  Laufzeitfehler: ${errors.slice(0, 3).join(' | ')}`); }
+  else { passed++; log('pass', 'PASS  keine Laufzeitfehler in beiden Spielen'); }
+  finish();
+}
+
+function finish() {
+  summary.textContent = `RESULT: ${passed} bestanden, ${failed} fehlgeschlagen`;
+  summary.className = failed ? 'fail' : 'pass';
+  document.title = failed ? `FAIL (${failed})` : `OK (${passed})`;
+  window.__testsDone = { passed, failed };
+}
+main();
+</script>
+</body>
+</html>

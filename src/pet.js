@@ -188,8 +188,9 @@ export class Pet {
     const dx = pp.x - m.position.x;
     const dz = pp.z - m.position.z;
     const d = Math.hypot(dx, dz);
-    // left behind (travel, teleport, respawn): pop up next to you
-    if (d > 24 || (pp.x > 300) !== (m.position.x > 300)) {
+    // left behind (travel, teleport, respawn) or stuck behind something: pop up next to you
+    if (d > 24 || (pp.x > 300) !== (m.position.x > 300) || (pp.x < -300) !== (m.position.x < -300) || this.stuck > 1.2) {
+      this.stuck = 0;
       const ry = g.playerGroup.rotation.y;
       const x = pp.x - Math.sin(ry) * 1.6 + Math.cos(ry) * 0.8;
       const z = pp.z - Math.cos(ry) * 1.6 - Math.sin(ry) * 0.8;
@@ -219,13 +220,19 @@ export class Pet {
     if (td > stop) {
       const speed = Math.min(9, 2.5 + td * 0.9);
       const step = Math.min(td - stop, speed * delta);
-      const nx = m.position.x + (tdx / td) * step;
-      const nz = m.position.z + (tdz / td) * step;
-      if (!g.checkWallCollision(nx, nz, 0.3, m.position.y)) {
-        m.position.x = nx;
-        m.position.z = nz;
-        moving = true;
+      // straight ahead, or slip around an obstacle to the left or right
+      const base = Math.atan2(tdx, tdz);
+      for (const turn of [0, 0.7, -0.7, 1.4, -1.4]) {
+        const nx = m.position.x + Math.sin(base + turn) * step;
+        const nz = m.position.z + Math.cos(base + turn) * step;
+        if (!g.checkWallCollision(nx, nz, 0.3, m.position.y)) {
+          m.position.x = nx;
+          m.position.z = nz;
+          moving = true;
+          break;
+        }
       }
+      this.stuck = moving ? 0 : (this.stuck || 0) + delta;
       const want = Math.atan2(tdx, tdz);
       m.rotation.y += Math.atan2(Math.sin(want - m.rotation.y), Math.cos(want - m.rotation.y)) * Math.min(1, delta * 8);
     } else {

@@ -31,6 +31,8 @@ import { Wildlife } from './wildlife.js';
 import { Challenges } from './challenges.js';
 import { Pet } from './pet.js';
 import { StarCastle, castleHeight, CASTLE } from './castle.js';
+import { WorldMap } from './worldmap.js';
+import { PhotoMode } from './photomode.js';
 import { WORLD_SEED, mulberry32, sfx } from './game/shared.js';
 import { worldTerrainMethods } from './game/world-terrain.js';
 import { worldPropsMethods } from './game/world-props.js';
@@ -180,6 +182,8 @@ class GalaxySistersGame {
     // the fourth world: the star castle (portal in the forest after Morvanta)
     this.castle = new StarCastle(this);
     this.interactions.register(() => this.castle.getInteraction());
+    this.worldMap = new WorldMap(this);
+    this.photo = new PhotoMode(this);
 
     // Day & night: sun/moon arc, palettes, night glow, fireflies
     this.dayNight = new DayNightCycle(this, {
@@ -362,6 +366,7 @@ class GalaxySistersGame {
       velY: this.playerVelY,
       downed: this.isDowned
     });
+    this.photo.applyPose(delta);
 
     // 9.2 Projectiles & Particles
     this.updateProjectiles();
@@ -385,6 +390,7 @@ class GalaxySistersGame {
     this.wildlife.update(delta);
     this.pet.update(delta);
     this.castle.update(delta);
+    this.worldMap.update(delta);
     this.challenges.update(delta);
     if (this.frostWard > 0) this.frostWard = Math.max(0, this.frostWard - delta);
     this.updateShadowCasters(delta);
