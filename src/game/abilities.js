@@ -47,6 +47,7 @@ export const abilityMethods = {
     this.cooldown1 = current.ability1.cooldown * this.progression.cooldownMul;
     this.coop.sendCast(1);
     if (this.shrine) this.shrine.onCast(this.activeSisterIdx, 1, this.playerGroup.position);
+    if (this.castle) this.castle.onCast(this.activeSisterIdx, this.playerGroup.position);
 
     if (this.activeSisterIdx === 0) {
       sfx.magicSkill(0);
@@ -170,6 +171,7 @@ export const abilityMethods = {
     this.cooldown2 = current.ability2.cooldown * this.progression.cooldownMul;
     this.coop.sendCast(2);
     if (this.shrine) this.shrine.onCast(this.activeSisterIdx, 2, this.playerGroup.position);
+    if (this.castle) this.castle.onCast(this.activeSisterIdx, this.playerGroup.position);
 
     if (this.activeSisterIdx === 0) {
       sfx.heal();
@@ -286,6 +288,7 @@ export const abilityMethods = {
     });
     this.hitWisps(pos, radius, dmg);
     if (this.wildlife) this.wildlife.hitFoes(pos, radius, dmg);
+    if (this.castle) this.castle.areaHit(pos, radius, dmg);
   },
 
   // Damage after the star level bonus
@@ -356,6 +359,13 @@ export const abilityMethods = {
       if (!p.remote && this.glaciel.tryHit(p.mesh.position, p.damage)) {
         this.fx.flash(p.mesh.position, p.trail || new THREE.Color(2, 2, 2), 3, 0.25);
         this.fx.burst(p.mesh.position, [p.trail || new THREE.Color(2, 2, 2), new THREE.Color(1.4, 2.4, 3.0)], 20, { speed: 4, up: 1.5, size: 0.35 });
+        this.scene.remove(p.mesh);
+        this.projectiles.splice(i, 1);
+        continue;
+      }
+
+      if (!p.remote && this.castle && this.castle.tryHit(p.mesh.position, p.damage)) {
+        this.fx.flash(p.mesh.position, p.trail || new THREE.Color(2, 2, 2), 3, 0.25);
         this.scene.remove(p.mesh);
         this.projectiles.splice(i, 1);
         continue;

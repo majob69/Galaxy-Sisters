@@ -7,11 +7,13 @@
 // While you are inside, the roof disappears and the walls turn see-through so the camera can follow.
 // Your own house can get an upper floor: pay Sterntaler, bring the materials, then the builders
 // need five minutes. Furniture (chairs, lamps, sofas ...) can be set up in your houses and on the land.
+// Co-op: guests see the host's house, buildings and furniture (and get their own back when they leave).
 // ==========================================
 import * as THREE from 'three';
 import { sfx } from './game/shared.js';
 import { ITEMS } from './inventory.js';
 import { findFlatSpot } from './spots.js';
+import { bakeChildren } from './bake.js';
 import { BUILDINGS, buildStructure, buildFurniture, buildScaffold } from './buildings.js';
 
 const STORAGE_KEY = 'gs-house-v1';
@@ -54,6 +56,11 @@ function windowTex() {
   return tex;
 }
 
+const r2 = (v) => Math.round(v * 100) / 100;
+function dropFrom(arr, gone) {
+  for (let i = arr.length - 1; i >= 0; i--) if (gone.includes(arr[i])) arr.splice(i, 1);
+}
+
 const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const costText = (cost, inv) => Object.keys(cost).map(id => `${ITEMS[id].icon} ${inv ? `${inv.count(id)}/` : ''}${cost[id]}`).join(' · ');
 
@@ -80,16 +87,21 @@ export class Houses {
     taken.push({ x: plot.x, z: plot.z, r: 9 });
     this.taken = taken;
     this.buildPlot();
-    if (this.state.built) this.buildOwnHouse(true);
     // the building land with five plots for more buildings
     this.area = buildArea || { x: plot.x - 20, z: plot.z - 14 };
     this.buildLand();
     this.furniture = [];
-    this.state.furniture.forEach(f => this.spawnFurniture(f));
+    this.shared = null;
+    this.buildFromView();
     this.wireClicks();
     this.sleepOverlay = document.getElementById('sleep-overlay');
     this.buildStorageUI();
     this.buildMenuUI();
+    // older save games: count what was already built for the builder quest
+    if (game.quests) {
+      if (this.state.floor2.stage >= 3) game.quests.markQuiet('builder', 'floor2');
+      for (let i = 1; i <= Math.min(3, Object.keys(this.state.structures).length); i++) game.quests.markQuiet('builder', `b${i}`);
+    }
   }
 
   load() {
@@ -135,6 +147,76 @@ export class Houses {
 
   save() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state)); } catch (e) { /* ignore */ }
+    // as host, friends see every change right away
+    const coop = this.game.coop;
+    if (coop && coop.active && coop.net.isHost && !this.shared) coop.sendBuild();
+  }
+
+  // What is shown: your own buildings, or the host's while you are a guest in co-op
+  get view() {
+    return this.shared || this.state;
+  }
+
+  guestBlocked() {
+    if (!this.shared) return false;
+    this.game.showToast('🏗️ Im Koop baut die Gastgeberin – du siehst gerade ihre Welt. Schenk ihr Material (🎁 im Inventar)!', 4500);
+    return true;
+  }
+
+  snapshot() {
+    const s = this.state;
+    return {
+      t: 'build', b: s.built ? 1 : 0, f2: s.floor2.stage, rs: Math.round(this.floor2Remaining()), st: s.structures,
+      fu: s.furniture.map(f => [f.id, r2(f.x), r2(f.y), r2(f.z), r2(f.r)])
+    };
+  }
+
+  applyShared(m) {
+    const structures = {};
+    Object.keys(m.st || {}).forEach(k => { if (this.plots[k] && BUILDINGS.some(b => b.id === m.st[k])) structures[k] = m.st[k]; });
+    const furniture = (m.fu || []).filter(f => ITEMS[f[0]] && ITEMS[f[0]].kind === 'furniture')
+      .map(f => ({ id: f[0], x: f[1], y: f[2], z: f[3], r: f[4] }));
+    this.shared = { built: !!m.b, floor2: { stage: m.f2 | 0, delivered: {}, readyAt: Date.now() + (m.rs || 0) * 1000 }, structures, furniture };
+    this.clearBuilt();
+    this.buildFromView();
+  }
+
+  restoreLocal() {
+    if (!this.shared) return;
+    this.shared = null;
+    this.clearBuilt();
+    this.buildFromView();
+  }
+
+  // Take down everything the player built (own house, land buildings, furniture)
+  clearBuilt() {
+    const g = this.game;
+    const own = this.ownHouse;
+    if (own) this.removeHouse(own);
+    if (this.scaffold) { g.scene.remove(this.scaffold); this.scaffold = null; this.scaffoldSign = null; }
+    this.plotGroup.visible = true;
+    this.plots.forEach(p => {
+      const b = p.built;
+      if (!b) return;
+      if (b.house) this.removeHouse(b.house);
+      else {
+        g.scene.remove(b.group);
+        dropFrom(g.colliders, b.wc);
+        dropFrom(g.platforms, b.wp);
+      }
+      p.built = null;
+      p.marker.visible = true;
+    });
+    this.furniture.forEach(f => g.scene.remove(f.mesh));
+    this.furniture = [];
+    this.inside = null;
+  }
+
+  buildFromView() {
+    const v = this.view;
+    if (v.built) this.buildOwnHouse(true);
+    Object.keys(v.structures).forEach(k => this.placeStructure(this.plots[k], v.structures[k]));
+    v.furniture.forEach(f => this.spawnFurniture(f));
   }
 
   // Facing: the door points towards the middle of the valley (rounded to 90 degrees so walls stay axis aligned)
@@ -365,6 +447,8 @@ export class Houses {
     lamp.userData.lantern = true;
     group.add(lamp);
 
+    // walls, beams and furniture are merged; the roof (hidden indoors), bed (clickable) and chest (lid) stay
+    bakeChildren(group, c => c === roof || c === bed || c === chest);
     g.scene.add(group);
     group.updateMatrixWorld(true);
 
@@ -404,9 +488,8 @@ export class Houses {
   removeHouse(h) {
     const g = this.game;
     g.scene.remove(h.group);
-    const drop = (arr, gone) => { for (let i = arr.length - 1; i >= 0; i--) if (gone.includes(arr[i])) arr.splice(i, 1); };
-    drop(g.colliders, h.colliders);
-    drop(g.platforms, h.platforms);
+    dropFrom(g.colliders, h.colliders);
+    dropFrom(g.platforms, h.platforms);
     this.houses = this.houses.filter(x => x !== h);
   }
 
@@ -450,6 +533,7 @@ export class Houses {
 
   tryBuild() {
     const g = this.game;
+    if (this.guestBlocked()) return;
     const missing = this.missingMaterials();
     if (missing.length) {
       g.showToast(`🏗️ Für dein Haus fehlt noch: ${missing.join(' · ')}. Materialien gibt es am Bau-Stand, in Truhen oder als Geschenk.`, 6000);
@@ -468,10 +552,10 @@ export class Houses {
   buildOwnHouse(silent) {
     const g = this.game;
     this.plotGroup.visible = false;
-    const floors = this.state.floor2.stage >= 3 ? 2 : 1;
-    const house = this.buildHouse(this.plot.x, this.plot.z, { wall: 0xf3e8ff, roof: 0x9b6bff, trim: 0x6b4a2b }, 'own', 'Dein Haus', true, floors);
+    const floors = this.view.floor2.stage >= 3 ? 2 : 1;
+    const house = this.buildHouse(this.plot.x, this.plot.z, { wall: 0xf3e8ff, roof: 0x9b6bff, trim: 0x6b4a2b }, 'own', this.shared ? 'Haus der Gastgeberin' : 'Dein Haus', true, floors);
     this.houses.push(house);
-    if (this.state.floor2.stage === 2) this.showScaffold(house);
+    if (this.view.floor2.stage === 2) this.showScaffold(house);
     if (!silent) {
       const p = new THREE.Vector3(this.plot.x, house.floorY + 2, this.plot.z);
       g.fx.burst(p, [new THREE.Color(2.4, 2.0, 0.8), new THREE.Color(2.0, 1.6, 2.6)], 90, { speed: 7, up: 4, size: 0.5, life: 1.2, gravity: 4 });
@@ -485,6 +569,7 @@ export class Houses {
   // ---------- Upper floor: Sterntaler -> materials -> five minutes of building ----------
   floor2Step() {
     const g = this.game;
+    if (this.guestBlocked()) return;
     const f2 = this.state.floor2;
     const inv = g.inventory;
     if (f2.stage === 0) {
@@ -528,7 +613,7 @@ export class Houses {
   }
 
   floor2Remaining() {
-    return Math.max(0, (this.state.floor2.readyAt - Date.now()) / 1000);
+    return Math.max(0, (this.view.floor2.readyAt - Date.now()) / 1000);
   }
 
   showScaffold(house) {
@@ -560,6 +645,7 @@ export class Houses {
     sfx.victory();
     g.showToast('🏰 Dein Obergeschoss ist fertig! Eine Treppe an der rechten Wand führt hinauf.', 6500);
     g.progression.addXp(120, 'Obergeschoss');
+    g.quests.mark('builder', 'floor2', 'Obergeschoss gebaut');
   }
 
   // ---------- Building land: five plots for more buildings ----------
@@ -580,7 +666,7 @@ export class Houses {
     sign.scale.set(3.4, 0.85, 1);
     sign.position.set(cx, g.getTerrainHeight(cx, cz + 13) + 3.2, cz + 13);
     g.scene.add(sign);
-    Object.keys(this.state.structures).forEach(k => this.placeStructure(this.plots[k], this.state.structures[k]));
+
   }
 
   placeStructure(plot, id) {
@@ -598,24 +684,28 @@ export class Houses {
     s.group.rotation.y = plot.i === 0 ? 0 : rot;
     g.scene.add(s.group);
     const toWorld = (lx, lz) => new THREE.Vector3(lx, 0, lz).applyAxisAngle(new THREE.Vector3(0, 1, 0), s.group.rotation.y).add(new THREE.Vector3(plot.x, 0, plot.z));
+    const wc = [];
+    const wp = [];
     s.colliders.forEach(c => {
       const p = toWorld(c.x, c.z);
-      if (c.type === 'cylinder') g.colliders.push({ type: 'cylinder', x: p.x, z: p.z, radius: c.radius, minY: plot.y - 1, maxY: plot.y + c.h });
-      else {
-        const r = Math.max(c.hw, c.hd);
-        g.colliders.push({ type: 'cylinder', x: p.x, z: p.z, radius: r * 0.9, minY: plot.y - 1, maxY: plot.y + c.h });
-      }
+      const radius = c.type === 'cylinder' ? c.radius : Math.max(c.hw, c.hd) * 0.9;
+      wc.push({ type: 'cylinder', x: p.x, z: p.z, radius, minY: plot.y - 1, maxY: plot.y + c.h });
     });
     s.platforms.forEach(pl => {
       const p = toWorld(pl.x, pl.z);
-      if (pl.type === 'cylinder') g.platforms.push({ type: 'cylinder', x: p.x, z: p.z, radius: pl.radius, topY: plot.y + pl.top });
-      else g.platforms.push({ type: 'box', minX: p.x - pl.hw, maxX: p.x + pl.hw, minZ: p.z - pl.hd, maxZ: p.z + pl.hd, topY: plot.y + pl.top });
+      if (pl.type === 'cylinder') wp.push({ type: 'cylinder', x: p.x, z: p.z, radius: pl.radius, topY: plot.y + pl.top });
+      else wp.push({ type: 'box', minX: p.x - pl.hw, maxX: p.x + pl.hw, minZ: p.z - pl.hd, maxZ: p.z + pl.hd, topY: plot.y + pl.top });
     });
+    g.colliders.push(...wc);
+    g.platforms.push(...wp);
+    s.wc = wc;
+    s.wp = wp;
     plot.built = { id, ...s };
   }
 
   build(plotIndex, id) {
     const g = this.game;
+    if (this.guestBlocked()) return false;
     const plot = this.plots[plotIndex];
     const def = BUILDINGS.find(b => b.id === id);
     if (!plot || !def || plot.built) return false;
@@ -633,6 +723,7 @@ export class Houses {
     sfx.victory();
     g.showToast(`${def.icon} ${def.name} gebaut! ${def.desc}`, 5000);
     g.progression.addXp(50, def.name);
+    if (Object.keys(this.state.structures).length <= 3) g.quests.mark('builder', `b${Object.keys(this.state.structures).length}`, `${def.name} gebaut`);
     this.closeMenu();
     return true;
   }
@@ -667,6 +758,7 @@ export class Houses {
 
   placeFurniture(id) {
     const g = this.game;
+    if (this.guestBlocked()) return false;
     if (!this.canFurnishHere()) {
       g.showToast('🪑 Möbel kannst du in deinem eigenen Haus oder auf dem Bauland aufstellen.', 4000);
       return false;
@@ -696,6 +788,7 @@ export class Houses {
 
   pickUpFurniture(item) {
     const g = this.game;
+    if (this.guestBlocked()) return;
     g.scene.remove(item.mesh);
     this.furniture = this.furniture.filter(x => x !== item);
     this.state.furniture = this.state.furniture.filter(x => x !== item.data);
@@ -717,14 +810,14 @@ export class Houses {
       const dc = Math.hypot(pp.x - h.chestPos.x, pp.z - h.chestPos.z);
       if (dc < 2.0 && level(h.floorY)) consider(dc, h.own ? '📦 Vorratstruhe' : '🧰 Truhe öffnen', () => (h.own ? this.openStorage() : this.openChest(h)));
     });
-    if (!this.state.built) {
+    if (!this.view.built) {
       const dp = Math.hypot(pp.x - this.plot.x, pp.z - this.plot.z);
       if (dp < 5) consider(dp, '🏗️ Haus bauen', () => this.tryBuild());
     }
     const own = this.ownHouse;
-    if (own && this.state.floor2.stage < 3) {
+    if (own && this.view.floor2.stage < 3) {
       const dd = Math.hypot(pp.x - own.doorPos.x, pp.z - own.doorPos.z);
-      const st = this.state.floor2.stage;
+      const st = this.view.floor2.stage;
       const label = st === 0 ? `🏗️ Obergeschoss ausbauen (${FLOOR2_PRICE} 🪙)` : st === 1 ? '📦 Material fürs Obergeschoss abgeben' : `⏳ Obergeschoss: noch ${fmtTime(this.floor2Remaining())}`;
       if (dd < 2.2) consider(dd + 0.3, label, () => this.floor2Step());
     }
@@ -853,7 +946,7 @@ export class Houses {
     card.appendChild(head);
     const list = document.createElement('div');
     list.className = 'shop-list';
-    const builtIds = Object.values(this.state.structures);
+    const builtIds = Object.values(this.view.structures);
     BUILDINGS.forEach(b => {
       const row = document.createElement('div');
       row.className = 'shop-row';
@@ -1010,7 +1103,9 @@ export class Houses {
     this.lastP = p;
 
     let inside = null;
+    const cam = g.camera.position;
     this.houses.forEach(h => {
+      h.group.visible = Math.hypot(cam.x - h.x, cam.z - h.z) < 120;
       // player position in the house's own frame (inverse of the Y rotation)
       const dx = pp.x - h.x;
       const dz = pp.z - h.z;
@@ -1033,11 +1128,15 @@ export class Houses {
       if (inside) g.showToast(`🏠 ${inside.name}${this.canSleep() ? ' – im Bett kannst du schlafen (F oder anklicken)' : ''}`, 3000);
     }
 
-    // upper floor under construction
-    const f2 = this.state.floor2;
+    // upper floor under construction (a guest only watches the host's builders)
+    if (this.shared && this.state.floor2.stage === 2 && Date.now() >= this.state.floor2.readyAt) {
+      this.state.floor2.stage = 3;
+      this.save();
+    }
+    const f2 = this.view.floor2;
     if (f2.stage === 2) {
       const left = this.floor2Remaining();
-      if (left <= 0) this.finishFloor2();
+      if (left <= 0 && !this.shared) this.finishFloor2();
       else if (this.scaffoldSign && Math.floor(left) !== this._signSec) {
         this._signSec = Math.floor(left);
         this.scaffoldSign.material.map.dispose();

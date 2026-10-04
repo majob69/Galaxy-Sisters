@@ -4,10 +4,13 @@
 // The bosses are kept inside their arena as well (see clampToArena).
 // Every arena gets the same magic: a turning rune ring on the ground, an aurora wall with
 // rising light streaks and glowing glyphs that circle above it while the boss is awake.
+// Emergency exit: at the wall press F twice - you are outside, but the boss heals up again
+// (unless a friend is still fighting inside).
 // ==========================================
 import * as THREE from 'three';
 import { sfx } from './game/shared.js';
-import { FOREST_ARENA, inForestArea } from './forest.js';
+import { FOREST_ARENA } from './forest.js';
+import { CASTLE } from './castle.js';
 
 export const VORTOX_ARENA = { x: 32, z: 30, r: 19 };
 const GLYPHS = ['✦', '☾', '✧', '☀', '❄', '✶', '◈', '❋'];
@@ -110,10 +113,25 @@ export class ArenaLock {
     this.locked = null;
     const g = game;
     this.arenas = [
-      { name: 'Vortox', x: VORTOX_ARENA.x, z: VORTOX_ARENA.z, r: VORTOX_ARENA.r, color: 0x7fe0ff, active: () => g.bossData.alive },
-      { name: 'Morvanta', x: FOREST_ARENA.x, z: FOREST_ARENA.z, r: FOREST_ARENA.r, color: 0xff7ee3, forest: true, active: () => g.morvanta.d.alive && g.morvanta.d.awake },
-      { name: 'Glaciel', x: g.glaciel.center.x, z: g.glaciel.center.z, r: 14, color: 0x9fe8ff, active: () => g.glaciel.d.alive && g.glaciel.d.awake }
+      {
+        name: 'Vortox', x: VORTOX_ARENA.x, z: VORTOX_ARENA.z, r: VORTOX_ARENA.r, color: 0x7fe0ff, active: () => g.bossData.alive,
+        heal: () => { g.bossData.hp = g.bossData.maxHp; g.updateBossBar(); }
+      },
+      {
+        name: 'Morvanta', x: FOREST_ARENA.x, z: FOREST_ARENA.z, r: FOREST_ARENA.r, color: 0xff7ee3, world: 'forest', active: () => g.morvanta.d.alive && g.morvanta.d.awake,
+        heal: () => { g.morvanta.d.hp = g.morvanta.d.maxHp; }
+      },
+      {
+        name: 'Glaciel', x: g.glaciel.center.x, z: g.glaciel.center.z, r: 14, color: 0x9fe8ff, active: () => g.glaciel.d.alive && g.glaciel.d.awake,
+        heal: () => { const d = g.glaciel.d; d.hp = d.maxHp; d.cr = this.glacielCrystals.slice(); }
+      },
+      {
+        name: 'Umbra', x: CASTLE.x, z: CASTLE.z, r: 20, color: 0xffd36e, world: 'castle', active: () => g.castle && g.castle.d.alive && g.castle.d.awake,
+        heal: () => { const d = g.castle.d; d.hp = d.maxHp; d.seals = [0, 0, 0, 0]; }
+      }
     ];
+    this.glacielCrystals = g.glaciel.d.cr.slice();
+    this.exitArmed = 0;
     const ringTex = runeRingTexture();
     this.arenas.forEach(a => {
       const y = g.getTerrainHeight(a.x, a.z);
@@ -154,15 +172,53 @@ export class ArenaLock {
     }
   }
 
+  // ---------- Emergency exit ----------
+  getInteraction() {
+    const a = this.locked;
+    if (!a || this.game.isDowned) return null;
+    const pp = this.game.playerGroup.position;
+    const d = Math.hypot(pp.x - a.x, pp.z - a.z);
+    if (d < a.r - 3.2) return null;
+    const armed = performance.now() - this.exitArmed < 4000;
+    return { dist: 0.5, label: armed ? '🚪 Nochmal F: Arena wirklich verlassen' : '🚪 Arena verlassen (2× F)', action: () => this.tryExit(a) };
+  }
+
+  tryExit(a) {
+    const g = this.game;
+    if (performance.now() - this.exitArmed > 4000) {
+      this.exitArmed = performance.now();
+      g.showToast(`🚪 Noch einmal F, um die Arena zu verlassen. ${a.name} heilt sich dann wieder ganz!`, 4000);
+      return;
+    }
+    this.exitArmed = 0;
+    const pp = g.playerGroup.position;
+    const d = Math.max(0.01, Math.hypot(pp.x - a.x, pp.z - a.z));
+    const nx = (pp.x - a.x) / d;
+    const nz = (pp.z - a.z) / d;
+    const x = a.x + nx * (a.r + 2.5);
+    const z = a.z + nz * (a.r + 2.5);
+    pp.set(x, g.getTerrainHeight(x, z), z);
+    g.playerVelY = 0;
+    if (g.moveVel) g.moveVel.set(0, 0, 0);
+    this.locked = null;
+    // the boss only recovers if nobody else is still fighting in there (the host decides)
+    const friendInside = g.remotes.list.some(r => r.hasState && Math.hypot(r.group.position.x - a.x, r.group.position.z - a.z) < a.r);
+    if (!friendInside && g.coop.isHost) a.heal();
+    g.fx.ringWave(pp.clone(), new THREE.Color(a.color).multiplyScalar(1.6), 4, 0.6);
+    sfx.magicSkill(3);
+    g.showToast(friendInside ? `🚪 Du bist draußen – deine Freundinnen kämpfen weiter gegen ${a.name}!` : `🚪 Du bist draußen. ${a.name} hat sich wieder ganz erholt.`, 4500);
+  }
+
   update(delta) {
     const g = this.game;
     const pp = g.playerGroup.position;
     const t = g.clock.elapsedTime;
-    const inForest = inForestArea(g.camera.position.x);
+    const cx = g.camera.position.x;
+    const world = cx > 300 ? 'forest' : cx < -300 ? 'castle' : 'valley';
     this.arenas.forEach(a => {
       const active = a.active();
       const d = Math.hypot(pp.x - a.x, pp.z - a.z);
-      const sameWorld = !!a.forest === inForest;
+      const sameWorld = (a.world || 'valley') === world;
       const near = active && d < a.r + 18;
       const isLocked = this.locked === a;
       a.wall.visible = sameWorld && (near || isLocked);

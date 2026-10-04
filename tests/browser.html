@@ -342,7 +342,7 @@ test('Steuerung: Doppelsprung springt höher, Shift sprintet', async () => {
   g.keys['ShiftLeft'] = true; await sleep(500); a = g.playerGroup.position.clone(); await sleep(800);
   const run = a.distanceTo(g.playerGroup.position);
   g.keys['KeyW'] = false; g.keys['ShiftLeft'] = false;
-  assert(run > walk * 1.25, `Sprint nicht schneller (${walk.toFixed(1)} / ${run.toFixed(1)})`);
+  assert(run > walk * 1.25, `Sprint nicht schneller (${walk.toFixed(1)} / ${run.toFixed(1)}) – KO ${g.isDowned}, gepackt ${g.isGrabbed}, Arena ${g.arenaLock.locked && g.arenaLock.locked.name}, Pos ${g.playerGroup.position.toArray().map(v => v.toFixed(1))}`);
 });
 
 test('Kürzere Abklingzeiten', async () => {
@@ -590,7 +590,7 @@ test('Tiere im Schnee und im Zauberwald, Dornwichtel lassen sich verscheuchen', 
   const a = wl.animals.find(x => x.zone === 'snow');
   stand(a.mesh.position.x + 1, a.mesh.position.z); await sleep(300);
   const it = wl.getInteraction();
-  assert(it && /streicheln/.test(it.label), 'Streicheln fehlt');
+  assert(it && /streicheln|füttern/.test(it.label), 'Streicheln fehlt');
   const f = wl.foes[0];
   stand(f.home.x + 3, f.home.z);
   assert(await until(() => f.mesh.visible, 4000), 'Dornwichtel unsichtbar');
@@ -640,11 +640,123 @@ test('Schnee-Obbys und schwere Rätsel: Eis-Schieben, Nordlicht, Laternen, brüc
   stand(0, 8);
 });
 
+test('Neue Quests je Welt; Portal und Outfits hängen weiter an den alten 11', async () => {
+  const { QUEST_DEFS, WORLD_NAMES } = await gameImport('./src/quests.js');
+  const { FOREST_QUESTS } = await gameImport('./src/forest.js');
+  assert(QUEST_DEFS.filter(q => q.core).length === 11, 'Kern-Quests verändert');
+  assert(FOREST_QUESTS.length === 10 && !FOREST_QUESTS.some(q => q.id === 'morvanta'), 'Portal-Bedingung verändert');
+  assert([2, 3, 4].every(wd => QUEST_DEFS.some(q => q.world === wd && !q.core)), 'neue Quests fehlen');
+  g.quests.dirtyUI = true; g.quests.update(0.01);
+  assert(w.document.querySelectorAll('.quest-world').length === Object.keys(WORLD_NAMES).length, 'Welt-Überschriften fehlen');
+});
+
+test('Arena-Notausgang: zweimal F, Boss heilt sich', async () => {
+  heal(); g.maxPlayerHP = 9999; g.playerHP = 9999;
+  g.bossData.alive = true; g.bossData.hp = 40; g.bossGroup.visible = true;
+  stand(32 + 17, 30);
+  assert(await until(() => g.arenaLock.locked && g.arenaLock.locked.name === 'Vortox', 2000), 'Arena nicht versiegelt');
+  const it = g.arenaLock.getInteraction();
+  assert(it && /verlassen/.test(it.label), 'Notausgang fehlt');
+  it.action();
+  assert(g.arenaLock.locked, 'schon nach einem F draußen');
+  g.arenaLock.getInteraction().action();
+  assert(!g.arenaLock.locked && Math.hypot(g.playerGroup.position.x - 32, g.playerGroup.position.z - 30) > 19, 'nicht draußen');
+  assert(g.bossData.hp === g.bossData.maxHp, 'Boss nicht geheilt');
+  g.bossData.alive = false; g.bossGroup.visible = false;
+  g.maxPlayerHP = 100; heal(); stand(0, 8);
+});
+
+test('Haustier: dreimal Lieblingsessen füttern, es folgt und hilft beim Angeln', async () => {
+  const wl = g.wildlife; const pet = g.pet;
+  if (pet.active) pet.release();
+  const a = wl.animals.find(x => x.key === 'snow-bunny');
+  g.inventory.add('apple', 3, true);
+  stand(a.mesh.position.x + 1, a.mesh.position.z); await sleep(400);
+  for (let i = 0; i < 3; i++) {
+    const it = wl.getInteraction();
+    assert(it && /füttern/.test(it.label), `kein Füttern (${it && it.label})`);
+    it.action();
+  }
+  assert(pet.active && pet.state.key === 'snow-bunny' && a.tamed, 'nicht gezähmt');
+  assert(g.quests.state.done.pet, 'Quest fehlt');
+  stand(10, 30); await sleep(1500);
+  // it stays close - unless it is sniffing at a hidden chest nearby
+  const pd = pet.mesh.position.distanceTo(g.playerGroup.position);
+  assert(pd < 6 || (pet.nearestChest() && pd < 25), `Begleiter folgt nicht (${pd.toFixed(1)} m)`);
+  stand(0, 8); await sleep(200);
+  pet.mesh.position.copy(g.playerGroup.position).x += 1;
+  g.collectibles.startCast(new V(0, 0, 4));
+  assert(g.collectibles.fish.timer < 4, 'Begleiter hilft nicht beim Angeln');
+  g.collectibles.endFishing(null);
+});
+
+test('Koop: Gäste sehen die Bauten der Gastgeberin, Rätselzüge und Dornwichtel werden geteilt', async () => {
+  const hs = g.houses;
+  const mine = Object.keys(hs.state.structures).length;
+  hs.applyShared({ b: 1, f2: 3, rs: 0, st: { 4: 'tower' }, fu: [['sofa', hs.area.x, g.getTerrainHeight(hs.area.x, hs.area.z), hs.area.z, 0]] });
+  assert(hs.plots[4].built && hs.plots[4].built.id === 'tower' && hs.furniture.length === 1, 'Welt der Gastgeberin fehlt');
+  assert(hs.ownHouse && hs.ownHouse.floors === 2, 'Haus der Gastgeberin fehlt');
+  assert(!hs.build(0, 'gazebo'), 'Gast darf bauen');
+  hs.restoreLocal();
+  assert(Object.keys(hs.state.structures).length === mine && hs.plots.filter(p => p.built).length === mine, 'eigene Bauten nicht zurück');
+  const snap = hs.snapshot();
+  assert(snap.t === 'build' && Array.isArray(snap.fu), 'Snapshot-Format');
+  const f = g.wildlife.foes.find(x => x.alive) || g.wildlife.foes[0];
+  f.alive = true;
+  g.onWorldEvent({ k: 'foe', i: g.wildlife.foes.indexOf(f) });
+  assert(!f.alive, 'Dornwichtel nicht geteilt');
+  const c = g.challenges;
+  c.state.lanterns = false; c.resetLanterns(true);
+  const before = c.lanterns.map(l => l.on);
+  g.onWorldEvent({ k: 'lan', i: 2 });
+  assert(c.lanterns[2].on !== before[2] && c.lanterns[1].on !== before[1], 'Laterne nicht geteilt');
+});
+
+test('Sternenschloss: Portal nach Morvanta, Umbra braucht alle vier Siegel', async () => {
+  const c = g.castle;
+  assert(c.unlocked, 'Portal nach Morvantas Sieg zu');
+  c.travel(true);
+  assert(await until(() => c.inCastle && !c.travelling, 4000), 'keine Reise ins Schloss');
+  heal(); g.maxPlayerHP = 9999; g.playerHP = 9999;
+  stand(-600, 10);
+  assert(await until(() => c.d.st === 'idle', 9000), 'Umbra erwacht nicht');
+  assert(await until(() => g.arenaLock.locked && g.arenaLock.locked.name === 'Umbra', 2000), 'Arena nicht versiegelt');
+  const hp0 = c.d.hp; c.applyHit(80);
+  assert(c.d.hp === hp0, 'Schild hält nicht');
+  [0, 1, 2].forEach(i => c.onCast(i, new V(c.seals[i].x, 30, c.seals[i].z)));
+  c.onCast(0, new V(c.seals[3].x, 30, c.seals[3].z));
+  assert(c.d.st !== 'stunned', 'falsche Schwester zündet ein Siegel');
+  c.onCast(3, new V(c.seals[3].x, 30, c.seals[3].z));
+  assert(c.d.st === 'stunned', 'Schild bricht nicht');
+  c.applyHit(80);
+  assert(hp0 - c.d.hp === 80, 'kein Schaden');
+  c.applyHit(99999);
+  assert(!c.d.alive && g.quests.state.done.umbra, 'Sieg zählt nicht');
+  assert(await until(() => !g.arenaLock.locked, 2000), 'Arena bleibt zu');
+  g.maxPlayerHP = 100; heal();
+  c.travel(false);
+  assert(await until(() => !c.inCastle && !c.travelling, 4000), 'kein Rückweg');
+  stand(0, 8);
+});
+
+test('Leistung: Lavendel und Tempel sind zusammengefasst, ferne Dinge werden nicht gezeichnet', async () => {
+  let temple = null;
+  g.scene.children.forEach(o => { if (!temple && o.isGroup && Math.abs(o.position.x - 22) < 1 && Math.abs(o.position.z + 20) < 3) temple = o; });
+  let n = 0; temple.traverse(o => { if (o.isMesh) n++; });
+  assert(n < 60, `Tempel hat noch ${n} Meshes`);
+  stand(-80, -80); await sleep(500);
+  const farSlime = g.slimes.find(s => s.userData.alive && s.position.distanceTo(g.playerGroup.position) > 80);
+  assert(!farSlime || !farSlime.visible, 'ferner Slime wird gezeichnet');
+  stand(0, 8);
+});
+
 test('Server-Nachrichten: Boss-3-Zustand hat das erwartete Format', async () => {
   const st = g.glaciel.netState();
   assert(st.t === 'boss3' && Array.isArray(st.cr) && st.cr.length === 3 && Array.isArray(st.zs), 'boss3-Format');
   const st2 = g.morvanta.netState();
   assert(st2.t === 'boss2' && Array.isArray(st2.zs), 'boss2-Format');
+  const st4 = g.castle.netState();
+  assert(st4.t === 'boss4' && st4.sl.length === 4 && Array.isArray(st4.ob), 'boss4-Format');
 });
 
 // ---------- run ----------

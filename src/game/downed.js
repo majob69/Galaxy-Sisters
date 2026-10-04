@@ -41,9 +41,12 @@ export const downedMethods = {
 
   respawnAtStart() {
     const p = this.playerGroup.position;
-    p.set(SPAWN.x, this.getTerrainHeight(SPAWN.x, SPAWN.z), SPAWN.z);
+    // in the star castle you wake up at the castle's arrival point
+    const inCastle = this.castle && p.x < -300;
+    const spawn = inCastle ? this.castle.arrival : SPAWN;
+    p.set(spawn.x, this.getTerrainHeight(spawn.x, spawn.z), spawn.z);
     this.revive(0.6);
-    this.showToast('✨ Du bist am Startpunkt wieder aufgewacht');
+    this.showToast(inCastle ? '✨ Du bist am Schlosstor wieder aufgewacht' : '✨ Du bist am Startpunkt wieder aufgewacht');
   },
 
   updateDowned(delta) {

@@ -327,6 +327,7 @@ export const creatureMethods = {
     this.dayNight.update(delta);
     this.weather.update(delta);
     if (this.forest) this.forest.applyAtmosphere();
+    if (this.castle) this.castle.applyAtmosphere();
     this.quests.update(delta);
     this.compass.update(delta);
     const pp = this.playerGroup.position;
@@ -528,8 +529,9 @@ export const creatureMethods = {
 
 
   updateLavender() {
-    if (!this.lavenderStems || this.lavenderStems.length === 0) return;
     const windTime = Date.now() * 0.0028;
+    if (this.lavenderWind) this.lavenderWind.value = windTime;
+    if (!this.lavenderStems || this.lavenderStems.length === 0) return;
     for (let i = 0; i < this.lavenderStems.length; i++) {
       const stem = this.lavenderStems[i];
       stem.rotation.z = Math.sin(windTime + stem.userData.phase) * 0.08;

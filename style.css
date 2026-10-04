@@ -160,6 +160,16 @@ body, html {
   margin: 8px 0 4px;
 }
 
+.quest-world {
+  color: #ffd6f5;
+  font-weight: 900;
+  font-size: 0.74rem;
+  letter-spacing: 0.4px;
+  margin: 8px 0 3px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  padding-bottom: 2px;
+}
+
 .quest-row .quest-progress {
   color: #ffde59;
   font-weight: bold;

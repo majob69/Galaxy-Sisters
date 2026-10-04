@@ -29,6 +29,8 @@ import { EnchantedForest, forestHeight, FOREST } from './forest.js';
 import { findFlatSpot } from './spots.js';
 import { Wildlife } from './wildlife.js';
 import { Challenges } from './challenges.js';
+import { Pet } from './pet.js';
+import { StarCastle, castleHeight, CASTLE } from './castle.js';
 import { WORLD_SEED, mulberry32, sfx } from './game/shared.js';
 import { worldTerrainMethods } from './game/world-terrain.js';
 import { worldPropsMethods } from './game/world-props.js';
@@ -159,6 +161,7 @@ class GalaxySistersGame {
     this.interactions.register(() => this.collectibles.getInteraction());
     this.interactions.register(() => this.market.getInteraction());
     this.interactions.register(() => this.houses.getInteraction());
+    this.interactions.register(() => this.arenaLock.getInteraction());
     this.npcs = new Npcs(this);
     this.interactions.register(() => this.npcs.getInteraction());
     // the third world: unlocked when every quest is done
@@ -169,8 +172,14 @@ class GalaxySistersGame {
     // animals in the snow and the forest (plus the prickly Dornwichtel), obbys and harder puzzles
     this.wildlife = new Wildlife(this);
     this.interactions.register(() => this.wildlife.getInteraction());
+    this.pet = new Pet(this);
+    this.wildlife.refreshTamed();
+    this.interactions.register(() => this.pet.getInteraction());
     this.challenges = new Challenges(this);
     this.interactions.register(() => this.challenges.getInteraction());
+    // the fourth world: the star castle (portal in the forest after Morvanta)
+    this.castle = new StarCastle(this);
+    this.interactions.register(() => this.castle.getInteraction());
 
     // Day & night: sun/moon arc, palettes, night glow, fireflies
     this.dayNight = new DayNightCycle(this, {
@@ -188,7 +197,8 @@ class GalaxySistersGame {
 
     // Compass with open quest goals (and the boss while he is alive)
     this.compass = new Compass(this, () => {
-      if (this.forest && this.forest.inForest) return [...this.forest.getTargets(), ...this.challenges.getTargets(true)];
+      if (this.castle && this.castle.inCastle) return this.castle.getTargets();
+      if (this.forest && this.forest.inForest) return [...this.forest.getTargets(), ...this.challenges.getTargets(true), ...this.castle.getPortalTargets()];
       const targets = this.quests.getTargets();
       if (this.bossData && this.bossData.alive) {
         targets.push({ id: 'boss', icon: '👾', label: 'Vortox', x: this.bossGroup.position.x, z: this.bossGroup.position.z });
@@ -221,12 +231,14 @@ class GalaxySistersGame {
   // ==========================================
   getTerrainHeight(x, z) {
     if (x > 300) return forestHeight(x, z); // the enchanted forest lies far to the east
+    if (x < -300) return castleHeight(x, z); // the star castle floats far to the west
     return this.heightfield.height(x, z);
   }
 
   // Walkable area: the valley, or the bowl of the enchanted forest
   inWorldBounds(x, z) {
     if (x > 300) return Math.hypot(x - FOREST.x, z - FOREST.z) < FOREST.r + 2;
+    if (x < -300) return Math.hypot(x - CASTLE.x, z - CASTLE.z) < CASTLE.r - 1;
     return Math.abs(x) <= 96 && Math.abs(z) <= 96;
   }
 
@@ -237,6 +249,14 @@ class GalaxySistersGame {
       const d = Math.hypot(dx, dz);
       const r = FOREST.r + 2;
       if (d > r) { pos.x = FOREST.x + (dx / d) * r; pos.z = FOREST.z + (dz / d) * r; }
+      return;
+    }
+    if (pos.x < -300) {
+      const dx = pos.x - CASTLE.x;
+      const dz = pos.z - CASTLE.z;
+      const d = Math.hypot(dx, dz);
+      const r = CASTLE.r - 1;
+      if (d > r) { pos.x = CASTLE.x + (dx / d) * r; pos.z = CASTLE.z + (dz / d) * r; }
       return;
     }
     pos.x = Math.max(-96, Math.min(96, pos.x));
@@ -363,8 +383,11 @@ class GalaxySistersGame {
     this.forest.update(delta);
     this.riverFish.update(delta);
     this.wildlife.update(delta);
+    this.pet.update(delta);
+    this.castle.update(delta);
     this.challenges.update(delta);
     if (this.frostWard > 0) this.frostWard = Math.max(0, this.frostWard - delta);
+    this.updateShadowCasters(delta);
     this.interactions.update();
     this.collectibles.update(delta);
     if (this.slowTimer > 0) this.slowTimer = Math.max(0, this.slowTimer - delta);
@@ -384,7 +407,9 @@ class GalaxySistersGame {
     this.updateWorldAmbience(delta);
 
     // Dynamic BGM based on distance to boss
-    if (this.bossData && this.bossData.alive) {
+    if (this.castle && this.castle.inCastle) {
+      sfx.setBGMMode(this.castle.wantsBossMusic ? 'boss' : 'peaceful');
+    } else if (this.bossData && this.bossData.alive) {
       const dist = this.bossGroup.position.distanceTo(this.playerGroup.position);
       sfx.setBGMMode(dist < 28 ? 'boss' : 'peaceful');
     }
@@ -418,6 +443,47 @@ class GalaxySistersGame {
     } else {
       this.renderer.render(this.scene, this.camera);
     }
+  }
+
+
+  // Only meshes near the player cast shadows: the shadow pass draws every caster a second time,
+  // and far away shadows are hardly visible anyway. The list is refreshed now and then.
+  updateShadowCasters(delta) {
+    this.shadowClock = (this.shadowClock || 0) - delta;
+    if (this.shadowClock > 0) return;
+    this.shadowClock = 0.5;
+    this.shadowScan = (this.shadowScan || 0) - 1;
+    if (!this.shadowCasters || this.shadowScan <= 0) {
+      this.shadowScan = 20;
+      const list = [];
+      this.scene.traverse(o => {
+        if (!o.isMesh || o.isInstancedMesh) return;
+        if (o.userData.castsShadow === undefined) {
+          if (!o.castShadow) return;
+          o.userData.castsShadow = true;
+        }
+        list.push(o);
+      });
+      this.shadowCasters = list;
+    }
+    const pp = this.playerGroup.position;
+    const v = this._shadowV || (this._shadowV = new THREE.Vector3());
+    const R = 45;
+    this.shadowCasters.forEach(o => {
+      // merged (baked) meshes sit at the origin: use the middle and size of their geometry
+      const geo = o.geometry;
+      if (!geo.boundingSphere) geo.computeBoundingSphere();
+      v.copy(geo.boundingSphere.center).applyMatrix4(o.matrixWorld);
+      const r = R + geo.boundingSphere.radius * o.matrixWorld.getMaxScaleOnAxis();
+      o.castShadow = Math.abs(v.x - pp.x) < r && Math.abs(v.z - pp.z) < r;
+    });
+  }
+
+
+  // Co-op world events from friends (puzzle moves, chased-off foes ...)
+  onWorldEvent(m) {
+    this.challenges.onRemote(m);
+    this.wildlife.onRemote(m);
   }
 
 

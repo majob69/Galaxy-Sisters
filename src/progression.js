@@ -174,7 +174,7 @@ export class Progression {
   // ---------- Outfits ----------
   finishedQuests() {
     const q = this.game.quests;
-    return q ? QUEST_DEFS.filter(d => q.state.done[d.id]).length : 0;
+    return q ? QUEST_DEFS.filter(d => d.core && q.state.done[d.id]).length : 0;
   }
 
   isSkinUnlocked(variant) {

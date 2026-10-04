@@ -8,19 +8,32 @@ import { createSoftSpriteTexture } from './water.js';
 
 const STORAGE_KEY = 'gs-quests-v1';
 
+// world: 1 Himmelsgebirge, 2 Schneewelt, 3 Zauberwald, 4 Sternenschloss.
+// core = the original quests: they open the forest portal and unlock the outfits.
 export const QUEST_DEFS = [
-  { id: 'shards', icon: '💎', name: 'Sternensplitter im Wasser', hint: 'Schwimm über die leuchtenden Splitter', total: 5 },
-  { id: 'spring', icon: '⛲', name: 'Finde die Kristallquelle', hint: 'Folge dem Fluss hinauf zum Wasserfall', total: 1 },
-  { id: 'bridges', icon: '🌉', name: 'Überquere alle Brücken', hint: 'Mond-, Römer-, Hänge- & Sternenbrücke', total: 4 },
-  { id: 'fireflies', icon: '✨', name: 'Fange Sternenglühwürmchen', hint: 'Die goldenen fliegen nachts über der Wiese – manche hoch, spring!', total: 8, night: true },
-  { id: 'moonflowers', icon: '🌸', name: 'Pflücke Mondblumen', hint: 'Sie blühen am Flussufer', total: 5, night: true },
-  { id: 'gate', icon: '⭐', name: 'Öffne das Sternen-Tor', hint: 'Beide Platten gleichzeitig – zu zweit oder mit Stellas Pfeil', total: 1 },
-  { id: 'morvanta', icon: '🦋', name: 'Besiege Morvanta', hint: 'Sie schläft im Zauberwald – das Portal öffnet sich nach allen anderen Aufgaben', total: 1 },
-  { id: 'elements', icon: '🔮', name: 'Vier-Elemente-Schrein', hint: 'Jede Schwester entzündet ihren Altar – alle vier gleichzeitig', total: 1 },
-  { id: 'glaciel', icon: '❄️', name: 'Besiege Glaciel', hint: 'Der Frostgolem erwacht, sobald Vortox besiegt ist', total: 1 },
-  { id: 'chests', icon: '🧰', name: 'Verborgene Truhen', hint: 'Es funkelt, wenn du in der Nähe bist', total: 6 },
-  { id: 'album', icon: '📖', name: 'Sammelalbum', hint: 'Blumen, Leuchtpilze und Fische (Album im Quest-Feld, Angeln mit F)', total: 17 }
+  { id: 'shards', icon: '💎', name: 'Sternensplitter im Wasser', hint: 'Schwimm über die leuchtenden Splitter', total: 5, world: 1, core: true },
+  { id: 'spring', icon: '⛲', name: 'Finde die Kristallquelle', hint: 'Folge dem Fluss hinauf zum Wasserfall', total: 1, world: 1, core: true },
+  { id: 'bridges', icon: '🌉', name: 'Überquere alle Brücken', hint: 'Mond-, Römer-, Hänge- & Sternenbrücke', total: 4, world: 1, core: true },
+  { id: 'fireflies', icon: '✨', name: 'Fange Sternenglühwürmchen', hint: 'Die goldenen fliegen nachts über der Wiese – manche hoch, spring!', total: 8, night: true, world: 1, core: true },
+  { id: 'moonflowers', icon: '🌸', name: 'Pflücke Mondblumen', hint: 'Sie blühen am Flussufer', total: 5, night: true, world: 1, core: true },
+  { id: 'gate', icon: '⭐', name: 'Öffne das Sternen-Tor', hint: 'Beide Platten gleichzeitig – zu zweit oder mit Stellas Pfeil', total: 1, world: 1, core: true },
+  { id: 'elements', icon: '🔮', name: 'Vier-Elemente-Schrein', hint: 'Jede Schwester entzündet ihren Altar – alle vier gleichzeitig', total: 1, world: 1, core: true },
+  { id: 'chests', icon: '🧰', name: 'Verborgene Truhen', hint: 'Es funkelt, wenn du in der Nähe bist', total: 6, world: 1, core: true },
+  { id: 'album', icon: '📖', name: 'Sammelalbum', hint: 'Blumen, Leuchtpilze und Fische (Album im Quest-Feld, Angeln mit F)', total: 17, world: 1, core: true },
+  { id: 'builder', icon: '🏗️', name: 'Baumeisterin', hint: 'Baue das Obergeschoss und drei Gebäude auf dem Bauland', total: 4, world: 1 },
+  { id: 'cook', icon: '🍳', name: 'Meisterköchin', hint: 'Entdecke alle Rezepte in der Pfanne (Inventar → Kochen)', total: 8, world: 1 },
+  { id: 'glaciel', icon: '❄️', name: 'Besiege Glaciel', hint: 'Der Frostgolem erwacht, sobald Vortox besiegt ist', total: 1, world: 2, core: true },
+  { id: 'obbys', icon: '🧗', name: 'Schnee-Obbys', hint: 'Klettere auf die Frost-Spirale und die Gletscher-Sprünge', total: 2, world: 2 },
+  { id: 'snowpuzzles', icon: '🧊', name: 'Rätsel im Schnee', hint: 'Löse das Nordlicht- und das Eisschiebe-Rätsel oben auf den Obbys', total: 2, world: 2 },
+  { id: 'animals', icon: '🐾', name: 'Tierfreundin', hint: 'Streichle jede Tierart im Schnee und im Zauberwald', total: 9, world: 2 },
+  { id: 'pet', icon: '🦊', name: 'Ein treuer Begleiter', hint: 'Füttere ein Tier mit seinem Lieblingsessen, bis es mitkommt', total: 1, world: 2 },
+  { id: 'morvanta', icon: '🦋', name: 'Besiege Morvanta', hint: 'Sie schläft im Zauberwald – das Portal öffnet sich nach allen Aufgaben im Himmelsgebirge', total: 1, world: 3, core: true },
+  { id: 'lanterns', icon: '🏮', name: 'Laternen-Rätsel', hint: 'Bring alle sieben Laternen im Zauberwald zum Leuchten', total: 1, world: 3 },
+  { id: 'foes', icon: '🌿', name: 'Dornwichtel verscheuchen', hint: 'Vertreibe jeden Dornwichtel im Zauberwald einmal', total: 6, world: 3 },
+  { id: 'umbra', icon: '🏰', name: 'Befreie das Sternenschloss', hint: 'Besiege Umbra – alle vier Schwestern müssen ihre Siegel entzünden', total: 1, world: 4 }
 ];
+
+export const WORLD_NAMES = { 1: '🏔️ Himmelsgebirge', 2: '❄️ Schneewelt', 3: '🌲 Zauberwald', 4: '🏰 Sternenschloss' };
 
 const BRIDGE_NAMES = { moon: 'Mondbrücke', roman: 'Römerbrücke', rope: 'Hängebrücke', star: 'Sternenbrücke' };
 
@@ -69,6 +82,16 @@ export class QuestSystem {
     const def = QUEST_DEFS.find(q => q.id === questId);
     const n = Object.keys(this.state.items).filter(k => k.startsWith(questId + ':')).length;
     return Math.min(def.total, n);
+  }
+
+  // Count something that already happened (older save games) without fanfare
+  markQuiet(questId, itemId) {
+    const key = `${questId}:${itemId}`;
+    if (this.state.items[key]) return;
+    this.state.items[key] = true;
+    if (this.progress(questId) >= QUEST_DEFS.find(q => q.id === questId).total) this.state.done[questId] = true;
+    this.save();
+    this.dirtyUI = true;
   }
 
   mark(questId, itemId, label) {
@@ -347,12 +370,18 @@ export class QuestSystem {
     this.dirtyUI = false;
     const el = document.getElementById('quest-list');
     if (!el) return;
-    const rows = QUEST_DEFS.map(q => {
+    const rows = [];
+    let world = 0;
+    QUEST_DEFS.slice().sort((a, b) => a.world - b.world).forEach(q => {
+      if (q.world !== world) {
+        world = q.world;
+        rows.push(`<div class="quest-world">${WORLD_NAMES[world]}</div>`);
+      }
       const n = this.progress(q.id);
       const done = !!this.state.done[q.id];
       const nightTag = q.night && !done && !isNight ? ' <span class="quest-tag">🌙 nur nachts</span>' : '';
-      return `<div class="quest-item quest-row${done ? ' done' : ''}" title="${q.hint}">` +
-        `${done ? '✅' : q.icon} <b>${q.name}</b> <span class="quest-progress">${n}/${q.total}</span>${nightTag}</div>`;
+      rows.push(`<div class="quest-item quest-row${done ? ' done' : ''}" title="${q.hint}">` +
+        `${done ? '✅' : q.icon} <b>${q.name}</b> <span class="quest-progress">${n}/${q.total}</span>${nightTag}</div>`);
     });
     const any = Object.keys(this.state.items).length > 0;
     if (any) rows.push('<button class="quest-reset clickable" id="btn-quest-reset" type="button">↺ Quests neu starten</button>');

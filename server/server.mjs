@@ -176,8 +176,8 @@ function cleanRoom(raw) {
 }
 
 const num = (v, lim = 400) => (Number.isFinite(v) ? Math.max(-lim, Math.min(lim, v)) : 0);
-// Player positions stay inside the valley (+ its mountains); anything else is clamped
-const pos = (v) => num(v, 110);
+// Player positions: the valley (about +-100), the enchanted forest (x ~ 600) and the star castle (x ~ -600)
+const pos = (v) => num(v, 720);
 const height = (v) => (Number.isFinite(v) ? Math.max(-30, Math.min(90, v)) : 0);
 
 // Chat text: no control characters or angle brackets, trimmed and short
@@ -224,7 +224,7 @@ function handleMessage(room, player, msg) {
         x: pos(msg.x), y: height(msg.y), z: pos(msg.z), ry: num(msg.ry, 10),
         si: player.sister, mv: msg.mv ? 1 : 0, gr: msg.gr ? 1 : 0, sw: msg.sw ? 1 : 0,
         vy: num(msg.vy, 5), inv: msg.inv ? 1 : 0, hp: num(msg.hp, 1000), mhp: num(msg.mhp, 1000),
-        dn: msg.dn ? 1 : 0, vr: Math.max(0, Math.min(2, msg.vr | 0))
+        dn: msg.dn ? 1 : 0, vr: Math.max(0, Math.min(2, msg.vr | 0)), pk: Math.max(0, Math.min(20, msg.pk | 0))
       }, player.id);
       break;
     case 'cast': // ability visuals
@@ -305,9 +305,34 @@ function handleMessage(room, player, msg) {
     case 'emote':
       broadcast(room, { t: 'emote', id: player.id, e: String(msg.e).slice(0, 4) }, player.id);
       break;
+    case 'wev': // shared world events: puzzle moves, chased-off foes ...
+      broadcast(room, { ...clean(msg), t: 'wev', id: player.id }, player.id);
+      break;
+    case 'build': // the host's houses, building land and furniture (guests see the host's world)
+      if (hostOf(room) === player) broadcast(room, cleanBuild(msg), player.id);
+      break;
+    case 'boss4': // host-authoritative state of the final boss
+      if (hostOf(room) === player) broadcast(room, { ...clean(msg), t: 'boss4' }, player.id);
+      break;
+    case 'boss4Hit': {
+      const host = hostOf(room);
+      if (host && host !== player) host.conn.send(JSON.stringify({ ...clean(msg), t: 'boss4Hit', id: player.id }));
+      break;
+    }
     default:
       break;
   }
+}
+
+// Building snapshot: a few flags, up to five buildings and up to 40 pieces of furniture
+function cleanBuild(msg) {
+  const id = (v) => String(v || '').replace(/[^a-z_]/g, '').slice(0, 12);
+  const st = {};
+  Object.keys(msg.st || {}).slice(0, 5).forEach((k) => { if (/^[0-4]$/.test(k)) st[k] = id(msg.st[k]); });
+  const fu = (Array.isArray(msg.fu) ? msg.fu : []).slice(0, 40)
+    .filter((f) => Array.isArray(f) && f.length === 5)
+    .map((f) => [id(f[0]), pos(f[1]), height(f[2]), pos(f[3]), num(f[4], 20)]);
+  return { t: 'build', b: msg.b ? 1 : 0, f2: Math.max(0, Math.min(3, msg.f2 | 0)), rs: num(msg.rs, 600), st, fu };
 }
 
 function onUpgrade(req, socket) {

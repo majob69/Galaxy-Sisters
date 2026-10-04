@@ -5,6 +5,8 @@
 import * as THREE from 'three';
 import { ChibiRig } from './characters.js';
 import { createShieldMaterial } from './magicfx.js';
+import { buildPetMesh } from './pet.js';
+import { animateCritter } from './critters.js';
 
 const SISTER_ICONS = ['🌙', '⭐', '☀️', '🪐'];
 const SISTER_COLORS = ['#90e0ef', '#ffe066', '#ff9f43', '#c77dff'];
@@ -137,6 +139,7 @@ class RemotePlayer {
     this.hp = m.hp;
     this.maxHp = m.mhp || 100;
     this.setSister(m.si | 0, m.vr | 0);
+    this.setPet(m.pk | 0);
     const inv = !!m.inv;
     if (inv !== this.invisible) {
       this.invisible = inv;
@@ -149,6 +152,35 @@ class RemotePlayer {
       this.group.rotation.y = this.targetRy;
       this.group.visible = true;
     }
+  }
+
+  // the friend's companion animal walks along behind her
+  setPet(pk) {
+    if (pk === (this.petKind || 0)) return;
+    this.petKind = pk;
+    if (this.pet) this.game.scene.remove(this.pet);
+    this.pet = pk > 0 ? buildPetMesh(this.game, pk - 1) : null;
+    if (this.pet) {
+      this.pet.position.copy(this.group.position);
+      this.game.scene.add(this.pet);
+    }
+  }
+
+  updatePet(delta) {
+    const p = this.pet;
+    if (!p) return;
+    const ry = this.group.rotation.y;
+    const want = this.group.position.clone().add(new THREE.Vector3(-Math.sin(ry) * 1.6 + Math.cos(ry) * 0.7, 0, -Math.cos(ry) * 1.6 - Math.sin(ry) * 0.7));
+    if (p.position.distanceTo(want) > 20) p.position.copy(want);
+    const k = 1 - Math.exp(-5 * delta);
+    p.position.x += (want.x - p.position.x) * k;
+    p.position.z += (want.z - p.position.z) * k;
+    p.position.y = this.game.getTerrainHeight(p.position.x, p.position.z);
+    if (this.group.position.y > p.position.y && p.position.distanceTo(this.group.position) < 4) p.position.y = this.group.position.y;
+    p.rotation.y = Math.atan2(this.group.position.x - p.position.x, this.group.position.z - p.position.z);
+    p.userData.baseY = p.position.y;
+    animateCritter(p, performance.now() / 1000, this.id);
+    p.visible = this.group.visible;
   }
 
   showShield(seconds) {
@@ -206,6 +238,7 @@ class RemotePlayer {
       }
     }
     this.rig.update(delta, this.flags);
+    this.updatePet(delta);
     if (this.shieldTimer > 0) {
       this.shieldTimer -= delta;
       if (this.shieldTimer <= 0) this.shield.material.opacity = 0;
@@ -214,6 +247,7 @@ class RemotePlayer {
 
   dispose() {
     this.game.scene.remove(this.group);
+    if (this.pet) this.game.scene.remove(this.pet);
     this.tag.material.map.dispose();
     this.tag.material.dispose();
     this.shield.geometry.dispose();

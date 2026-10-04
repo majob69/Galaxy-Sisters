@@ -97,6 +97,12 @@ Ein farbenfrohes 3D-Action-Adventure / Platformer im Kawaii-Anime-Stil, direkt i
 * **🧱 Bauland:** Fünf Bauplätze für Sternenbrunnen (heilt), Gartenlaube, Aussichtsturm, Beerenbeet (tägliche Ernte), Werkstatt (Werkbank + tägliches Holz) und Gästehaus.
 * **❄️ Schnee-Obbys & schwere Rätsel:** Frost-Spirale mit dem Nordlicht-Rätsel (Merk-Reihenfolge, 3 Runden mit 4/6/8 Lichtern) und Gletscher-Sprünge mit dem Eisschiebe-Rätsel (Eis rutscht bis zum Hindernis). Manche Eisschollen brechen unter den Füßen. Im Zauberwald: das Laternen-Rätsel (jede Laterne schaltet auch ihre Nachbarn).
 * **🐧 Tiere:** Pinguine, Schneehasen, Polarfüchse und eine Schneeeule im Schnee; Glitzerhasen, Sternfüchse, Mondkatzen, Eulen und Glühfrösche im Zauberwald (mit F streicheln). Nur wenige **Dornwichtel** im Wald greifen an.
+* **🏰 Sternenschloss (vierte Welt):** Nach Morvantas Sieg öffnet sich mitten im Zauberwald ein Sternenportal zu einer schwebenden Wolkeninsel mit Schloss, Regenbogenweg und ewiger goldener Dämmerung. Im Thronhof wartet der Endboss **Umbra, die Sternenfresserin**: Ihr Schattenschild bricht nur, wenn alle vier Siegel gleichzeitig leuchten – jedes Siegel entzündet nur die passende Schwester mit einem Zauber daneben (allein mit 1–4 wechseln). Angriffe: Sternenregen (Kreise), Schattenkugeln (abschießen) und der Finsterring (drüberspringen). Im Koop steuert die Gastgeberin den Boss.
+* **🦊 Begleiter:** Ein Tier dreimal mit seinem Lieblingsessen füttern (z. B. Schneehase: Apfel, Pinguin: kleiner Fisch) – dann folgt es dir in jede Welt, spürt versteckte Truhen auf, bringt ab und zu etwas mit und lässt Fische schneller beißen. Freundinnen sehen dein Tier. Freilassen im Inventar.
+* **📜 Neue Quests:** Das Quest-Feld ist nach Welten geordnet (Himmelsgebirge, Schneewelt, Zauberwald, Sternenschloss) – u. a. Baumeisterin, Meisterköchin, Schnee-Obbys, Rätsel im Schnee, Tierfreundin, Begleiter, Laternen, Dornwichtel und Umbra. Portal und Outfits hängen weiter nur an den ursprünglichen Quests.
+* **🚪 Arena-Notausgang:** An der Arenawand zweimal F – du bist draußen, der Boss heilt sich dann aber wieder (außer Freundinnen kämpfen noch drin).
+* **👭 Koop für die neuen Welten:** Gäste sehen Haus, Bauland und Möbel der Gastgeberin; Eisblöcke, Laternen, Nordlicht-Lösung und verscheuchte Dornwichtel werden geteilt; Positionen im Zauberwald und im Schloss werden richtig übertragen.
+* **⚡ Schneller:** Lavendelbüsche, Tempel, Hütte und Häuser sind zu wenigen Meshes zusammengefasst, ferne Sammelstücke, Slimes, Häuser und Stände werden nicht gezeichnet und nur Dinge in der Nähe werfen Schatten – rund 45 % weniger Draw-Calls. Auf der niedrigsten Grafikstufe gibt es keine Schatten.
 * **🏟️ Magischere Arenen:** Vortox' Arena ist größer (mit schwebenden Eiskristallen); alle Arenen haben einen leuchtenden Runenring, eine Aurora-Wand und kreisende Glyphen.
 * **🎵 Musik:** vier Tageslieder zur Wahl (🎵-Knopf), nachts spielt die Musik leiser.
 * **🌀 Zauberwald:** Sind alle Aufgaben erfüllt, öffnet sich ein Portal in eine dritte Welt mit lila, pinken und blauen Bäumen, ewiger Dämmerung und einem Geheimnis aus drei Mondsteinen.
@@ -152,6 +158,7 @@ Im Dokument [GDD_Galaxy_Sisters.md](file:///c:/Users/Mario/Coding/Galaxy-Sisters
 | `biome.js`, `snowbiome.js`, `arenas.js`, `riverfish.js`, `forest.js`, `intro.js` | Schneebiom, Arena-Siegel, Fische, Zauberwald, Intro-Bild |
 | `showcase.js` | 3D-Figurenseite `figuren.html` (Inspektor & Spiel-Modus) |
 | `buildings.js`, `wildlife.js`, `challenges.js` | Gebäude- und Möbelmodelle, Tiere & Dornwichtel, Schnee-Obbys und schwere Rätsel |
+| `pet.js`, `castle.js` | Begleiter-Tier, Sternenschloss mit Endboss Umbra |
 | `progression.js` | Stern-Level, XP, Outfits |
 | `coop.js`, `network.js`, `remote.js` | Koop-Sitzung, WebSocket-Client, Fremdspieler |
 | `landscape.js`, `atmosphere.js`, `water.js`, `bridges.js` | Gelände, Himmel, Wasser, Brücken |

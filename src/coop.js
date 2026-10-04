@@ -4,6 +4,7 @@
 //  - the host (lowest player id) runs the boss brain and broadcasts it (~10 Hz);
 //    everybody else shows the boss as a puppet and reports their hits to the host
 //  - the host also shares the time of day; ability casts are relayed so all see the spells
+//  - world events (puzzle moves, chased-off foes ...) go to everybody; guests see the host's buildings
 // ==========================================
 import * as THREE from 'three';
 import { NetClient } from './network.js';
@@ -79,6 +80,8 @@ export class CoopSession {
         g.remotes.add(m.player);
         this.rosterDirty = true;
         g.showToast(`👭 ${m.player.name} ist beigetreten`);
+        // the newcomer gets to see the host's houses and buildings
+        if (this.net.isHost) this.sendBuild();
       },
       leave: (m) => {
         const p = g.remotes.remove(m.id);
@@ -87,7 +90,11 @@ export class CoopSession {
       },
       host: () => {
         this.rosterDirty = true;
-        if (this.net.isHost) g.showToast('👑 Du bist jetzt Gastgeber (der Boss läuft bei dir)');
+        if (this.net.isHost) {
+          g.showToast('👑 Du bist jetzt Gastgeber (der Boss läuft bei dir)');
+          g.houses.restoreLocal();
+          this.sendBuild();
+        }
       },
       s: (m) => {
         const p = g.remotes.get(m.id);
@@ -139,6 +146,10 @@ export class CoopSession {
         if (m.dmg) g.morvanta.applyHit(m.dmg);
       },
       boss2Free: (m) => g.morvanta.applyFree(m.n || 1),
+      wev: (m) => g.onWorldEvent(m),
+      build: (m) => g.houses.applyShared(m),
+      boss4: (m) => { if (g.castle) g.castle.onNetState(m); },
+      boss4Hit: (m) => { if (g.castle) g.castle.onRemoteHit(m); },
       close: () => {
         g.remotes.clear();
         this.wheel.classList.remove('open');
@@ -146,6 +157,7 @@ export class CoopSession {
         this.net = null;
         this.bossMsg = null;
         this.rosterDirty = true;
+        g.houses.restoreLocal();
         g.showToast('📡 Verbindung verloren – du spielst jetzt allein weiter', 6000);
       }
     };
@@ -158,6 +170,15 @@ export class CoopSession {
     const p = g.playerGroup.position;
     const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(g.playerGroup.quaternion);
     this.net.send({ t: 'cast', a, si: g.activeSisterIdx, x: r2(p.x), y: r2(p.y), z: r2(p.z), dx: r2(fwd.x), dz: r2(fwd.z) });
+  }
+
+  // Shared world events (see main.js onWorldEvent)
+  sendWorld(obj) {
+    this.send({ ...obj, t: 'wev' });
+  }
+
+  sendBuild() {
+    if (this.active && this.net.isHost) this.net.send(this.game.houses.snapshot());
   }
 
   sendEmote(e) {
@@ -359,6 +380,7 @@ export class CoopSession {
     const pos = new THREE.Vector3(m.x, m.y, m.z);
     const fwd = new THREE.Vector3(m.dx, 0, m.dz);
     g.shrine.onCast(m.si, m.a, pos);
+    if (g.castle && !g.castle.puppet) g.castle.onCast(m.si, pos);
     if (m.a === 1) {
       g.sfxCast(m.si, pos);
       if (m.si === 0) {
@@ -413,7 +435,7 @@ export class CoopSession {
         t: 's', x: r2(p.x), y: r2(p.y), z: r2(p.z), ry: r2(g.playerGroup.rotation.y),
         si: g.activeSisterIdx, mv: g.playerIsMoving ? 1 : 0, gr: g.isGrounded ? 1 : 0, sw: g.isSwimming ? 1 : 0,
         vy: r2(g.playerVelY), inv: g.isPlayerInvisible ? 1 : 0, hp: Math.round(g.playerHP), mhp: g.maxPlayerHP,
-        dn: g.isDowned ? 1 : 0, vr: g.progression.getSkin(g.activeSisterIdx)
+        dn: g.isDowned ? 1 : 0, vr: g.progression.getSkin(g.activeSisterIdx), pk: g.pet && g.pet.active ? g.pet.speciesIndex + 1 : 0
       });
     }
 
@@ -432,6 +454,11 @@ export class CoopSession {
       if (t.boss2 <= 0) {
         t.boss2 = BOSS_INTERVAL;
         this.net.send(g.morvanta.netState());
+      }
+      t.boss4 = (t.boss4 || 0) - delta;
+      if (t.boss4 <= 0 && g.castle) {
+        t.boss4 = BOSS_INTERVAL;
+        this.net.send(g.castle.netState());
       }
       t.boss3 = (t.boss3 || 0) - delta;
       if (t.boss3 <= 0) {

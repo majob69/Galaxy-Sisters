@@ -81,12 +81,15 @@ export const enemyMethods = {
         if (u.deadAt && t - u.deadAt > SLIME_RESPAWN && s.position.distanceTo(pp) > 25) this.respawnSlime(s);
         return;
       }
-      if (u.petrifiedTimer > 0) return;
-      u.attackCd = Math.max(0, u.attackCd - delta);
-
       const dx = pp.x - s.position.x;
       const dz = pp.z - s.position.z;
       const d = Math.hypot(dx, dz);
+      // far away slimes are not drawn and simply wait at home
+      s.visible = d < 65;
+      if (!s.visible) return;
+      if (u.petrifiedTimer > 0) return;
+      u.attackCd = Math.max(0, u.attackCd - delta);
+
       const chase = !this.isPlayerInvisible && !this.isDowned && d < SLIME_AGGRO && Math.abs(pp.y - s.position.y) < 4;
       let tx = u.basePos.x;
       let tz = u.basePos.z;

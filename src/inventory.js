@@ -82,6 +82,7 @@ export class Inventory {
     this.cook = [null, null];
     this.buildUI();
     this.renderCoins();
+    if (game.quests) this.state.recipes.forEach(id => game.quests.markQuiet('cook', id));
   }
 
   load() {
@@ -236,6 +237,7 @@ export class Inventory {
     const out = ITEMS[r.out];
     g.showToast(`🍳 ${out.icon} ${out.name} gekocht! Heilt +${out.heal} HP.${isNew ? ' Neues Rezept entdeckt!' : ''}`, 3500);
     if (isNew && g.progression) g.progression.addXp(15, 'Rezept');
+    if (g.quests) g.quests.mark('cook', r.out, `Rezept: ${out.name}`);
     this.cook = [null, null];
     this.render();
     return r.out;
@@ -326,6 +328,22 @@ export class Inventory {
 
   renderBag() {
     const card = this.card;
+    const pet = this.game.pet;
+    if (pet && pet.active) {
+      this.section(`🐾 Dein Begleiter: ${pet.name}`);
+      const row = document.createElement('div');
+      row.className = 'shop-row';
+      const info = document.createElement('div');
+      info.className = 'shop-info';
+      info.textContent = 'Folgt dir überall hin, spürt versteckte Truhen auf, bringt dir ab und zu etwas mit und hilft beim Angeln.';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'shop-buy clickable';
+      btn.textContent = 'Freilassen';
+      btn.addEventListener('click', () => pet.release());
+      row.append(info, btn);
+      card.appendChild(row);
+    }
     const groups = [
       ['food', '🍎 Essen (antippen zum Essen)'],
       ['tool', '🧩 Rätsel-Helfer (antippen zum Benutzen)'],

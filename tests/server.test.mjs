@@ -58,18 +58,42 @@ test('state and casts are relayed to the others with positions clamped', async (
   const a = await open('room=SRV3&name=A');
   const b = await open('room=SRV3&name=B');
   await wait(100);
-  a.send({ t: 's', x: 1.5, y: 2, z: -3, ry: 1, si: 1, dn: 1, vr: 2, hp: 50, mhp: 100 });
+  a.send({ t: 's', x: 1.5, y: 2, z: -3, ry: 1, si: 1, dn: 1, vr: 2, hp: 50, mhp: 100, pk: 3 });
   a.send({ t: 's', x: 99999, y: 99999, z: -99999, ry: 0, si: 0 });
   a.send({ t: 'cast', a: 1, si: 1, x: 5, y: 1, z: 5, dx: 0, dz: 1 });
   await wait(150);
   const states = b.of('s');
   assert.equal(states[0].dn, 1);
   assert.equal(states[0].vr, 2);
-  assert.equal(states[1].x, 110);
-  assert.equal(states[1].z, -110);
+  assert.equal(states[0].pk, 3);
+  assert.equal(states[1].x, 720);
+  assert.equal(states[1].z, -720);
   assert.equal(states[1].y, 90);
   assert.equal(b.of('cast').length, 1);
   a.ws.close(); b.ws.close();
+});
+
+test('world events reach everyone; only the host shares buildings (sanitized)', async () => {
+  const host = await open('room=SRV9&name=Host');
+  const guest = await open('room=SRV9&name=Guest');
+  await wait(100);
+  guest.send({ t: 'wev', k: 'slide', b: 1, dc: -1, dr: 0, evil: '<script>alert(1)</script>' });
+  guest.send({ t: 'build', b: 1, f2: 3 });
+  host.send({ t: 'build', b: 1, f2: 9, rs: 99999, st: { 1: 'fountain', 9: 'x', 2: '<b>' }, fu: [['chair', 1, 2, 3, 0.5], ['bad'], ...Array(60).fill(['lamp', 0, 0, 0, 0])] });
+  await wait(150);
+  const ev = host.of('wev');
+  assert.equal(ev.length, 1);
+  assert.equal(ev[0].k, 'slide');
+  assert.ok(ev[0].evil.length <= 12);
+  assert.equal(guest.of('build').length, 1);
+  assert.equal(host.of('build').length, 0);
+  const b = guest.of('build')[0];
+  assert.equal(b.f2, 3);
+  assert.equal(b.rs, 600);
+  assert.deepEqual(Object.keys(b.st), ['1', '2']);
+  assert.equal(b.st[2], 'b');
+  assert.ok(b.fu.length <= 40 && b.fu[0][0] === 'chair');
+  host.ws.close(); guest.ws.close();
 });
 
 test('only the host may send boss and world state; hits go to the host only', async () => {

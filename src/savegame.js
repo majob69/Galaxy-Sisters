@@ -32,7 +32,7 @@ export class SaveGame {
       v: 1,
       savedAt: Date.now(),
       sister: g.activeSisterIdx,
-      pos: g.playerGroup.position.x > 300 ? { x: g.forest.portal.x, z: g.forest.portal.z + 3.5 } : { x: g.playerGroup.position.x, z: g.playerGroup.position.z },
+      pos: Math.abs(g.playerGroup.position.x) > 300 ? { x: g.forest.portal.x, z: g.forest.portal.z + 3.5 } : { x: g.playerGroup.position.x, z: g.playerGroup.position.z },
       dayP: g.dayNight.p,
       vortox: !g.bossData.alive,
       gate: g.stargate.open,

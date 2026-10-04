@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { sfx } from './game/shared.js';
 import { ITEMS, recipeText } from './inventory.js';
 import { findFlatSpot } from './spots.js';
-import { createCritter, animateCritter } from './critters.js';
+import { createCritterLite as createCritter, animateCritter } from './critters.js';
 import { blinkFace } from './characters.js';
 
 export const STALLS = [
@@ -119,6 +119,7 @@ export class Market {
     const t = this.game.clock.elapsedTime;
     const pp = this.game.playerGroup.position;
     this.stalls.forEach((s, i) => {
+      s.group.visible = Math.hypot(pp.x - s.x, pp.z - s.z) < 110;
       s.keeper.visible = Math.hypot(pp.x - s.x, pp.z - s.z) < 60;
       if (!s.keeper.visible) return;
       animateCritter(s.keeper, t, i * 2);

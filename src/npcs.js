@@ -4,7 +4,7 @@
 // ==========================================
 import * as THREE from 'three';
 import { sfx } from './game/shared.js';
-import { createCritter, animateCritter } from './critters.js';
+import { createCritterLite as createCritter, animateCritter } from './critters.js';
 import { blinkFace } from './characters.js';
 import { SNOW_BIOME } from './biome.js';
 import { LILLI_SPOT } from './forest.js';

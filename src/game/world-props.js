@@ -1,6 +1,7 @@
 // Foliage, grass, flowers, village, temple and obby parkour. Methods are mixed into the game class (see main.js), so `this` is the game.
 import * as THREE from 'three';
-import { bakeStaticGroup } from '../bake.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { bakeStaticGroup, bakeChildren } from '../bake.js';
 import { addAnimeFace } from '../characters.js';
 import { snowAt } from '../biome.js';
 
@@ -663,6 +664,7 @@ export const worldPropsMethods = {
     npc.position.set(pos.x + 3.2, 0, pos.z + 2.5);
     this.scene.add(npc);
 
+    bakeChildren(hutGroup);
     this.scene.add(hutGroup);
 
     // Register wooden hut as solid obstacle box
@@ -809,57 +811,64 @@ export const worldPropsMethods = {
   },
 
 
+  // One lavender bush = ONE mesh (stems and blossoms merged, coloured per vertex).
+  // The wind sways every stem in the vertex shader. (The random numbers are drawn in exactly
+  // the same order as before, so the seeded world stays identical.)
   createLavenderBush() {
-    const bushGroup = new THREE.Group();
-    const stemMat = new THREE.MeshLambertMaterial({ color: 0x4a7c59 });
-    const flowerMats = [
-      new THREE.MeshLambertMaterial({ color: 0x7b2cbf }),
-      new THREE.MeshLambertMaterial({ color: 0x9d4edd }),
-      new THREE.MeshLambertMaterial({ color: 0x8338ec }),
-      new THREE.MeshLambertMaterial({ color: 0xc77dff }),
-      new THREE.MeshLambertMaterial({ color: 0x6a0dad })
-    ];
+    if (!this.lavenderMat) {
+      this.lavenderWind = { value: 0 };
+      const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+      mat.onBeforeCompile = (shader) => {
+        shader.uniforms.uWind = this.lavenderWind;
+        shader.vertexShader = 'attribute float aPhase;\nuniform float uWind;\n' + shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+          transformed.x += sin(uWind + aPhase) * 0.08 * position.y;
+          transformed.z += cos(uWind * 0.85 + aPhase) * 0.05 * position.y;`
+        );
+      };
+      this.lavenderMat = mat;
+    }
+    const stemColor = new THREE.Color(0x4a7c59);
+    const flowerColors = [0x7b2cbf, 0x9d4edd, 0x8338ec, 0xc77dff, 0x6a0dad].map(c => new THREE.Color(c));
+    const parts = [];
+    const paint = (geo, color, phase) => {
+      const n = geo.attributes.position.count;
+      const cols = new Float32Array(n * 3);
+      for (let k = 0; k < n; k++) cols.set([color.r, color.g, color.b], k * 3);
+      geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+      geo.setAttribute('aPhase', new THREE.BufferAttribute(new Float32Array(n).fill(phase), 1));
+      return geo;
+    };
+    const m = new THREE.Matrix4();
 
     const stemCount = 14 + Math.floor(Math.random() * 6);
     for (let i = 0; i < stemCount; i++) {
-      const stemGroup = new THREE.Group();
       const spreadAng = Math.random() * Math.PI * 2;
       const spreadDist = Math.random() * 0.45;
       const stemH = 1.0 + Math.random() * 0.45;
-
-      const stem = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.02, 0.028, stemH, 4),
-        stemMat
-      );
-      stem.position.y = stemH / 2;
-      stemGroup.add(stem);
-
+      const stemParts = [new THREE.CylinderGeometry(0.02, 0.028, stemH, 4).translate(0, stemH / 2, 0)];
       const spikeH = stemH * 0.45;
       const tipCount = 5;
       for (let t = 0; t < tipCount; t++) {
-        const mat = flowerMats[(i + t) % flowerMats.length];
-        const fl = new THREE.Mesh(
-          new THREE.ConeGeometry(0.08 - t * 0.009, 0.12, 5),
-          mat
-        );
-        fl.position.y = stemH - spikeH + t * (spikeH / tipCount);
-        stemGroup.add(fl);
+        stemParts.push(new THREE.ConeGeometry(0.08 - t * 0.009, 0.12, 5).translate(0, stemH - spikeH + t * (spikeH / tipCount), 0));
       }
-
-      stemGroup.position.set(
-        Math.cos(spreadAng) * spreadDist,
-        0,
-        Math.sin(spreadAng) * spreadDist
+      const rz = (Math.random() - 0.5) * 0.25;
+      const rx = (Math.random() - 0.5) * 0.25;
+      const phase = Math.random() * 10;
+      m.compose(
+        new THREE.Vector3(Math.cos(spreadAng) * spreadDist, 0, Math.sin(spreadAng) * spreadDist),
+        new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, 0, rz)),
+        new THREE.Vector3(1, 1, 1)
       );
-      stemGroup.rotation.z = (Math.random() - 0.5) * 0.25;
-      stemGroup.rotation.x = (Math.random() - 0.5) * 0.25;
-      stemGroup.userData = { phase: Math.random() * 10 };
-
-      this.lavenderStems.push(stemGroup);
-      bushGroup.add(stemGroup);
+      stemParts.forEach((geo, k) => {
+        geo.applyMatrix4(m);
+        parts.push(paint(geo, k === 0 ? stemColor : flowerColors[(i + k - 1) % flowerColors.length], phase));
+      });
     }
-
-    return bushGroup;
+    const merged = mergeGeometries(parts, false);
+    parts.forEach(p => p.dispose());
+    return new THREE.Mesh(merged, this.lavenderMat);
   },
 
 
@@ -1211,6 +1220,8 @@ export const worldPropsMethods = {
       templeGroup.add(lavBush);
     });
 
+    // ~100 columns, steps and trims become a handful of meshes (the crystal keeps turning)
+    bakeChildren(templeGroup, c => c === this.templeCrystal);
     this.scene.add(templeGroup);
   },
 

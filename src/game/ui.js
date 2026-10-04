@@ -36,6 +36,8 @@ export const uiMethods = {
       shadow.dispose();
       shadow.map = null;
     }
+    // the lowest tier draws no shadows at all (saves a whole extra pass)
+    if (this.dirLight) this.dirLight.castShadow = tier < PERF_TIERS.length - 1;
     if (t.bloom && !this.postFX) {
       this.postFX = new PostFX(this.renderer, this.scene, this.camera);
     }

@@ -8,7 +8,7 @@
 //                        it hits something!
 //   🏮 Laternen-Rätsel   in the enchanted forest: seven lanterns in a ring. Touching one switches it
 //                        and both neighbours. Light all seven.
-// Progress is saved in localStorage.
+// Progress is saved in localStorage. In co-op every push, lantern and solved puzzle is shared.
 // ==========================================
 import * as THREE from 'three';
 import { sfx } from './game/shared.js';
@@ -43,6 +43,13 @@ export class Challenges {
     this.buildFrostSpiral();
     this.buildGlacierHops();
     this.buildLanterns();
+    // older save games: count what was already done for the new quests
+    const q = game.quests;
+    if (this.state.obby1) q.markQuiet('obbys', 'spiral');
+    if (this.state.obby2) q.markQuiet('obbys', 'glacier');
+    if (this.state.memory) q.markQuiet('snowpuzzles', 'memory');
+    if (this.state.slide) q.markQuiet('snowpuzzles', 'slide');
+    if (this.state.lanterns) q.markQuiet('lanterns', 0);
   }
 
   load() {
@@ -228,6 +235,8 @@ export class Challenges {
           g.fx.burst(pos, m.plates.map(q => q.color), 120, { speed: 7, up: 5, size: 0.5, life: 1.4, gravity: 3 });
           g.showToast('🌌 Das Nordlicht leuchtet! Rätsel gelöst – in der Eistruhe lagen 60 Sterntaler, Glas und Seil.', 7000);
           this.reward(60, 100, 'Nordlicht-Rätsel', { glass: 3, rope: 2 });
+          g.quests.mark('snowpuzzles', 'memory', 'Nordlicht-Rätsel gelöst');
+          g.coop.sendWorld({ k: 'mem' });
           return;
         }
         m.phase = 'pause';
@@ -384,7 +393,8 @@ export class Challenges {
   }
 
   // Push block b one way: it slides until something stops it. Returns true if it moved.
-  pushBlock(b, dc, dr) {
+  pushBlock(b, dc, dr, remote = false) {
+    if (!remote) this.game.coop.sendWorld({ k: 'slide', b: this.slide.blocks.indexOf(b), dc, dr });
     let c = b.c;
     let r = b.r;
     while (!this.slideOccupied(c + dc, r + dr, b)) { c += dc; r += dr; }
@@ -416,10 +426,12 @@ export class Challenges {
       g.fx.burst(new THREE.Vector3(this.glacier.x, s.y + 2, this.glacier.z), [new THREE.Color(0.8, 1.8, 2.8), new THREE.Color(2.4, 2.6, 2.8)], 120, { speed: 7, up: 5, size: 0.5, life: 1.4, gravity: 3 });
       g.showToast('🧊 Beide Eisblöcke stehen auf den Runen! Rätsel gelöst – 70 Sterntaler, Holz und Stoff gehören dir.', 7000);
       this.reward(70, 120, 'Eis-Rätsel', { wood: 4, cloth: 2 });
+      g.quests.mark('snowpuzzles', 'slide', 'Eisschiebe-Rätsel gelöst');
     }, 500);
   }
 
-  resetSlide() {
+  resetSlide(remote = false) {
+    if (!remote) this.game.coop.sendWorld({ k: 'slreset' });
     const s = this.slide;
     s.blocks.forEach((b, i) => { b.c = SLIDE_BLOCKS[i][0]; b.r = SLIDE_BLOCKS[i][1]; b.from = null; b.t = 1; this.placeBlock(b); });
     sfx.playTone(440, 'sine', 0.15, 0.05);
@@ -500,8 +512,9 @@ export class Challenges {
     });
   }
 
-  touchLantern(i) {
+  touchLantern(i, remote = false) {
     if (this.state.lanterns) return;
+    if (!remote) this.game.coop.sendWorld({ k: 'lan', i });
     [i - 1, i, i + 1].forEach(k => {
       const l = this.lanterns[(k + LANTERNS) % LANTERNS];
       l.on = !l.on;
@@ -516,14 +529,44 @@ export class Challenges {
       g.fx.burst(new THREE.Vector3(c.x, this.lanternHeart.position.y, c.z), [new THREE.Color(2.6, 1.8, 0.8), new THREE.Color(2.0, 1.2, 2.6)], 140, { speed: 6, up: 5, size: 0.45, life: 1.6, gravity: 1 });
       g.showToast('🏮 Alle sieben Laternen leuchten! Das Waldherz schenkt dir 80 Sterntaler und zwei Lampen.', 7000);
       this.reward(80, 140, 'Laternen-Rätsel', { lamp: 2, glass: 2 });
+      g.quests.mark('lanterns', 0, 'Laternen-Rätsel gelöst');
     }
   }
 
-  resetLanterns() {
+  resetLanterns(remote = false) {
     if (this.state.lanterns) return;
+    if (!remote) this.game.coop.sendWorld({ k: 'lanreset' });
     this.lanterns.forEach((l, i) => { l.on = LANTERN_START[i] === 1; });
     this.refreshLanterns();
     this.game.showToast('↺ Die Laternen sind wieder wie am Anfang.', 2500);
+  }
+
+  // ---------- Co-op: what a friend did ----------
+  onRemote(m) {
+    const g = this.game;
+    if (m.k === 'slide') {
+      const b = this.slide.blocks[m.b | 0];
+      if (b && !this.slide.solved) {
+        if (b.t < 1) { b.t = 1; this.placeBlock(b); }
+        this.pushBlock(b, Math.sign(m.dc | 0), Math.sign(m.dr | 0), true);
+      }
+    } else if (m.k === 'slreset') {
+      if (!this.slide.solved) this.resetSlide(true);
+    } else if (m.k === 'lan') {
+      const i = m.i | 0;
+      if (i >= 0 && i < LANTERNS) this.touchLantern(i, true);
+    } else if (m.k === 'lanreset') {
+      this.resetLanterns(true);
+    } else if (m.k === 'mem' && !this.state.memory) {
+      const mem = this.memory;
+      mem.phase = 'done';
+      this.state.memory = true;
+      this.save();
+      mem.chest.visible = false;
+      g.showToast('🌌 Eine Freundin hat das Nordlicht-Rätsel gelöst! Die Eistruhe teilt sie mit dir.', 6000);
+      this.reward(60, 100, 'Nordlicht-Rätsel', { glass: 3, rope: 2 });
+      g.quests.mark('snowpuzzles', 'memory', 'Nordlicht-Rätsel gelöst');
+    }
   }
 
   // ---------- Compass ----------
@@ -583,8 +626,9 @@ export class Challenges {
     const t = g.clock.elapsedTime;
     const pp = g.playerGroup.position;
     const inForest = pp.x > 300;
-    this.spiralGroup.visible = !inForest;
-    this.glacierGroup.visible = !inForest;
+    const inValley = Math.abs(pp.x) < 300;
+    this.spiralGroup.visible = inValley;
+    this.glacierGroup.visible = inValley;
     this.lanternGroup.visible = inForest;
 
     // cracking ice floes: stand on them too long and they break (and come back a moment later)
@@ -610,7 +654,7 @@ export class Challenges {
       }
     });
 
-    if (!inForest) {
+    if (inValley) {
       this.updateMemory(delta, t);
       // reaching the tops
       if (!this.state.obby1 && Math.abs(pp.y - this.memory.topY) < 0.5 && Math.hypot(pp.x - this.spiral.x, pp.z - this.spiral.z) < 4.6) {
@@ -618,6 +662,7 @@ export class Challenges {
         this.save();
         g.showToast('❄️ Frost-Spirale geschafft! Hier oben wartet das Nordlicht-Rätsel (F am Lichtkristall in der Mitte).', 6000);
         this.reward(20, 40, 'Frost-Spirale');
+        g.quests.mark('obbys', 'spiral', 'Frost-Spirale erklommen');
       }
       const s = this.slide;
       if (!this.state.obby2 && Math.abs(pp.y - s.y) < 0.5 && Math.abs(pp.x - this.glacier.x) < (SLIDE_N + 2) * SLIDE_CELL / 2 && Math.abs(pp.z - this.glacier.z) < (SLIDE_N + 2) * SLIDE_CELL / 2) {
@@ -625,6 +670,7 @@ export class Challenges {
         this.save();
         g.showToast('🧊 Gletscher-Sprünge geschafft! Schieb die Eisblöcke (F) auf die leuchtenden Runen – Eis rutscht, bis es anstößt!', 7000);
         this.reward(20, 40, 'Gletscher-Sprünge');
+        g.quests.mark('obbys', 'glacier', 'Gletscher-Sprünge geschafft');
       }
       s.blocks.forEach(b => {
         if (b.t < 1) {
@@ -633,7 +679,7 @@ export class Challenges {
         }
       });
       s.reset.rotation.y += delta * 1.5;
-    } else {
+    } else if (inForest) {
       this.lanternHeart.rotation.y += delta;
       this.lanternHeart.material.color.setRGB(this.state.lanterns ? 2.4 : 0.6, this.state.lanterns ? 1.6 : 0.4, this.state.lanterns ? 2.6 : 0.9);
       this.lanterns.forEach((l, i) => { l.lamp.rotation.y += delta * (l.on ? 1.2 : 0.2); l.lamp.position.y = l.y + 1.9 + (l.on ? Math.sin(t * 2 + i) * 0.06 : 0); });

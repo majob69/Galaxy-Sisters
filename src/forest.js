@@ -9,7 +9,7 @@ import { sfx } from './game/shared.js';
 import { simplex2, smoothstep } from './landscape.js';
 import { QUEST_DEFS } from './quests.js';
 import { findFlatSpot } from './spots.js';
-import { createCritter, animateCritter } from './critters.js';
+import { createCritterLite as createCritter, animateCritter } from './critters.js';
 import { blinkFace } from './characters.js';
 import { createSoftSpriteTexture } from './water.js';
 import { bakeStaticGroup } from './bake.js';
@@ -19,8 +19,10 @@ export const FOREST = { x: 600, z: 0, r: 64 };
 export const FOREST_ARENA = { x: FOREST.x - 24, z: FOREST.z - 22, r: 22 };
 // a quiet clearing next to the arena where Lilli the bunny waits
 export const LILLI_SPOT = { x: FOREST_ARENA.x + 4, z: FOREST_ARENA.z + FOREST_ARENA.r + 5 };
-// every quest except Morvanta herself (she lives in the forest) opens the portal
-export const FOREST_QUESTS = QUEST_DEFS.filter(d => d.id !== 'morvanta');
+// the star portal to the fourth world appears here once Morvanta is beaten (see castle.js)
+export const CASTLE_PORTAL = { x: FOREST.x, z: FOREST.z - 14 };
+// the original quests of the valley and the snow (Glaciel) open the portal; Morvanta lives in the forest
+export const FOREST_QUESTS = QUEST_DEFS.filter(d => d.core && d.world < 3);
 const STORAGE_KEY = 'gs-forest-v1';
 const STONES = 3;
 
@@ -45,7 +47,8 @@ export function forestHeight(x, z) {
 // keeps trees and mushrooms out of the arena and Lilli's clearing
 function inClearing(x, z, pad = 0) {
   return Math.hypot(x - FOREST_ARENA.x, z - FOREST_ARENA.z) < FOREST_ARENA.r + 3 + pad ||
-    Math.hypot(x - LILLI_SPOT.x, z - LILLI_SPOT.z) < 4 + pad;
+    Math.hypot(x - LILLI_SPOT.x, z - LILLI_SPOT.z) < 4 + pad ||
+    Math.hypot(x - CASTLE_PORTAL.x, z - CASTLE_PORTAL.z) < 4 + pad;
 }
 
 export function inForestArea(x) {
@@ -326,7 +329,8 @@ export class EnchantedForest {
       'Im Westen liegt eine große Lichtung voller Runen. Dort schläft Morvanta, der Totenkopf-Falter, in ihrem Kokon …',
       'Nimm dich vor den Dornwichteln in Acht – sie beißen! Die anderen Tiere hier sind lieb.',
       'Bringst du alle drei, erwacht das Herz des Waldes in der Mitte.',
-      'Das Tor hinter mir bringt dich zurück ins Himmelsgebirge.'
+      'Das Tor hinter mir bringt dich zurück ins Himmelsgebirge.',
+      'Ist Morvanta besiegt, erwacht in der Mitte des Waldes ein Sternenportal. Es führt hinauf zum Sternenschloss, wo Umbra wartet …'
     ];
     this.guideLine = -1;
 

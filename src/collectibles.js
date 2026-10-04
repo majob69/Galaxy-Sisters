@@ -171,7 +171,9 @@ export class Collectibles {
     this.items.forEach(it => {
       const found = this.isFound(it);
       const d = Math.hypot(pp.x - it.spot.x, pp.z - it.spot.z);
+      // far away pieces are not drawn (a few hundred small meshes in total)
       if (it.kind === 'chest') {
+        it.group.visible = d < 70;
         it.open += ((found ? 1 : 0) - it.open) * Math.min(1, delta * 5);
         it.lidPivot.rotation.x = -1.9 * it.open;
         // A faint glimmer draws you in when you are near, and stops once the chest is open
@@ -179,8 +181,8 @@ export class Collectibles {
         it.glow.material.opacity = near * (0.35 + Math.sin(t * 3 + it.spot.x) * 0.2);
         if (!found && !g.isDowned && d < it.radius) this.openChest(it);
       } else {
-        it.group.visible = !found;
-        if (found) return;
+        it.group.visible = !found && d < 55;
+        if (found || d > 55) return;
         it.glow.material.opacity = 0.35 + Math.sin(t * 2 + it.spot.z) * 0.15;
         it.group.rotation.y += delta * 0.5;
         if (!g.isDowned && d < it.radius && Math.abs(pp.y - it.group.position.y) < 2.2) this.pick(it);
@@ -283,13 +285,15 @@ export class Collectibles {
   startCast(spot) {
     const g = this.game;
     const rain = g.weather ? g.weather.rain : 0;
-    this.fish = { state: 'wait', spot, timer: (2 + Math.random() * 4) * (1 - 0.3 * rain), from: g.playerGroup.position.clone(), t: 0 };
+    // a pet sitting next to you shows where the fish are: they bite sooner
+    const helper = g.pet && g.pet.mesh && g.pet.mesh.position.distanceTo(g.playerGroup.position) < 6;
+    this.fish = { state: 'wait', spot, timer: (2 + Math.random() * 4) * (1 - 0.3 * rain) * (helper ? 0.55 : 1), from: g.playerGroup.position.clone(), t: 0 };
     this.bobber.position.copy(spot);
     this.bobber.visible = true;
     this.line.visible = true;
     sfx.splash();
     g.fx.ringWave(spot.clone(), new THREE.Color(0.8, 1.4, 2.0), 1.6, 0.7);
-    g.showToast('🎣 Angel ausgeworfen … warte, bis der Schwimmer taucht, dann F!', 3500);
+    g.showToast(helper ? `🎣 ${g.pet.name} schaut gespannt aufs Wasser – gleich beißt einer an!` : '🎣 Angel ausgeworfen … warte, bis der Schwimmer taucht, dann F!', 3500);
   }
 
   updateFishing(delta) {

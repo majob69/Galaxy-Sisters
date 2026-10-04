@@ -34,3 +34,20 @@ export function bakeStaticGroup(group, { castShadow = true, receiveShadow = true
   });
   return baked;
 }
+
+// Bake the static children of a group in place. Children that move, light up the scene or need
+// their own attributes stay as they are: lights, sprites, points, vertex-coloured or custom-shader
+// meshes, and whatever keep(child) returns true for.
+export function bakeChildren(group, keep = () => false) {
+  const special = (c) => {
+    let found = false;
+    c.traverse(o => {
+      if (o.isLight || o.isSprite || o.isPoints || o.isLine) found = true;
+      else if (o.isMesh && (Array.isArray(o.material) || o.material.vertexColors || o.material.isShaderMaterial || o.material.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile)) found = true;
+    });
+    return found;
+  };
+  const statics = new THREE.Group();
+  [...group.children].forEach(c => { if (!keep(c) && !special(c)) statics.add(c); });
+  if (statics.children.length) group.add(bakeStaticGroup(statics));
+}

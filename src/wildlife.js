@@ -1,7 +1,8 @@
 // ==========================================
 // WILDLIFE: animals that roam the snow biome (penguins, snow hares, arctic foxes, a snowy owl)
 // and the enchanted forest (glowing bunnies, foxes, cats, owls and frogs). Walk up and press F
-// to pet them. In the forest live a few DORNWICHTEL as well - prickly little imps that chase
+// to pet them - or feed one its favourite food three times and it becomes your companion (pet.js).
+// In the forest live a few DORNWICHTEL as well - prickly little imps that chase
 // and bite. Spells and arrows drive them off; they come back after a while.
 // Everything here is simulated per client (like the slimes).
 // ==========================================
@@ -13,6 +14,8 @@ import { SNOW_BIOME, snowAt } from './biome.js';
 import { FOREST, FOREST_ARENA, LILLI_SPOT, inForestArea } from './forest.js';
 import { VORTOX_ARENA } from './arenas.js';
 import { bakeStaticGroup } from './bake.js';
+import { ITEMS } from './inventory.js';
+import { Pet, FEEDS_NEEDED } from './pet.js';
 
 const SHOW_DIST = 48;
 const PET_RANGE = 2.2;
@@ -108,9 +111,42 @@ export class Wildlife {
         mesh.rotation.y = this.rng() * Math.PI * 2;
         mesh.visible = false;
         g.scene.add(mesh);
-        this.animals.push({ def, zone, mesh, home, target: null, wait: this.rng() * 4, seed: this.rng() * 10, petAt: -999, hop: 0 });
+        this.animals.push({ def, zone, key: `${zone}-${def.kind}`, mesh, home, target: null, wait: this.rng() * 4, seed: this.rng() * 10, petAt: -999, hop: 0, feeds: 0, tamed: false });
       }
     });
+  }
+
+  defFor(key) {
+    const [zone, kind] = key.split('-');
+    return (zone === 'snow' ? SNOW_ANIMALS : FOREST_ANIMALS).find(d => d.kind === kind) || null;
+  }
+
+  // the animal that became your pet is not roaming around any more
+  refreshTamed() {
+    const pet = this.game.pet;
+    this.animals.forEach(a => { a.tamed = false; });
+    if (pet && pet.active) {
+      const a = this.animals.find(x => x.key === pet.state.key);
+      if (a) { a.tamed = true; a.mesh.visible = false; }
+    }
+  }
+
+  feed(a) {
+    const g = this.game;
+    const sp = Pet.species(a.key);
+    if (!sp || !g.inventory.remove(sp.food, 1)) return;
+    a.feeds++;
+    this.pet(a);
+    sfx.playTone(660 + a.feeds * 110, 'sine', 0.12, 0.05);
+    if (a.feeds >= FEEDS_NEEDED) {
+      a.feeds = 0;
+      const name = sp.names[Math.floor(Math.random() * sp.names.length)];
+      if (g.pet.active) g.pet.release();
+      g.pet.adopt(a.key, name);
+      this.refreshTamed();
+    } else {
+      g.showToast(`${ITEMS[sp.food].icon} ${a.def.name} mampft glücklich (${a.feeds}/${FEEDS_NEEDED}) – noch ${FEEDS_NEEDED - a.feeds}× füttern, dann kommt es mit!`, 3500);
+    }
   }
 
   updateAnimals(delta, t, inForest) {
@@ -119,7 +155,7 @@ export class Wildlife {
     this.animals.forEach(a => {
       const m = a.mesh;
       const d = Math.hypot(pp.x - m.position.x, pp.z - m.position.z);
-      m.visible = (a.zone === 'forest') === inForest && d < SHOW_DIST;
+      m.visible = !a.tamed && (a.zone === 'forest') === inForest && d < SHOW_DIST;
       if (!m.visible) return;
       blinkFace(m.userData.face, t);
       if (d < 5) {
@@ -180,6 +216,7 @@ export class Wildlife {
     g.showToast(`💗 ${a.def.name}: ${a.def.say}!`, 2500);
     if (t - a.petAt > PET_COOLDOWN) g.progression.addXp(3, 'Streicheln');
     a.petAt = t;
+    g.quests.mark('animals', `${a.zone}-${a.def.kind}`, `${a.def.name} gestreichelt`);
   }
 
   // ---------- Dornwichtel (forest foes) ----------
@@ -299,12 +336,25 @@ export class Wildlife {
         g.fx.burst(c, [new THREE.Color(1.6, 0.5, 2.4), new THREE.Color(2.4, 1.6, 2.6)], 34, { speed: 4, up: 2, size: 0.4 });
         g.fx.ringWave(c.clone().setY(c.y - 0.5), new THREE.Color(1.2, 0.4, 2.0), 3, 0.5);
         g.showFloatingText('🌿 Dornwichtel verscheucht!', c, '#c77dff');
+        g.quests.mark('foes', this.foes.indexOf(f), 'Dornwichtel verscheucht');
+        g.coop.sendWorld({ k: 'foe', i: this.foes.indexOf(f) });
         g.progression.addXp(15, 'Dornwichtel');
         g.inventory.addCoins(2);
         g.dropLoot(c, { dust: 0.9, heart: 0.3 });
       }
     });
     return hit;
+  }
+
+  // co-op: a friend chased this one off
+  onRemote(m) {
+    if (m.k !== 'foe') return;
+    const f = this.foes[m.i | 0];
+    if (!f || !f.alive) return;
+    f.alive = false;
+    f.deadAt = this.game.clock.elapsedTime;
+    f.mesh.visible = false;
+    this.game.fx.burst(f.mesh.position.clone().setY(f.mesh.position.y + 0.6), [new THREE.Color(1.6, 0.5, 2.4)], 24, { speed: 3, up: 2, size: 0.35 });
   }
 
   petrify(duration) {
@@ -322,7 +372,14 @@ export class Wildlife {
       const d = Math.hypot(pp.x - a.mesh.position.x, pp.z - a.mesh.position.z);
       if (d < bd) { bd = d; best = a; }
     });
-    return best ? { dist: bd + 0.6, label: `💗 ${best.def.name} streicheln`, action: () => this.pet(best) } : null;
+    if (!best) return null;
+    const sp = Pet.species(best.key);
+    const isMine = this.game.pet.active && this.game.pet.state.key === best.key;
+    if (sp && !isMine && this.game.inventory.count(sp.food) > 0) {
+      const food = ITEMS[sp.food];
+      return { dist: bd + 0.6, label: `${food.icon} ${food.name} füttern (${best.feeds}/${FEEDS_NEEDED})`, action: () => this.feed(best) };
+    }
+    return { dist: bd + 0.6, label: `💗 ${best.def.name} streicheln`, action: () => this.pet(best) };
   }
 
   update(delta) {
